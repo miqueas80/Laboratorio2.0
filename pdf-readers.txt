@@ -1,0 +1,2 @@
+{"file":"Unidad 4 - Formulacion y nomenclatura.pdf","pages":20,"chars":31498,"elapsedMs":318,"reader":"local PDF.js 4.10.38"}
+{"file":"QUÍMICA (1) (1).pdf","pages":13,"chars":11,"elapsedMs":64,"reader":"local PDF.js 4.10.38"}

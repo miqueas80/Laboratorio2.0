@@ -1,0 +1,207 @@
+npm warn Unknown env config "http-proxy". This will stop working in the next major version of npm.
+
+> nexus-x-laboratorio@1.0.0 test
+> node validate.mjs && node agent-regression.mjs && node final-audit.mjs && node qr-vision-regression.mjs && node --test tests/*.test.mjs
+
+{
+  "ok": true,
+  "root": "/workspace/scratch/45e1481d573f/laboratorio",
+  "records": 111,
+  "uniqueIds": 111,
+  "first": "NEXUS-X-0001",
+  "last": "NEXUS-X-0111",
+  "htmlIds": 164,
+  "errors": []
+}
+PASS JavaScript syntax
+PASS inventory records array
+PASS inventory has 111 baseline records
+PASS inventory IDs unique
+PASS inventory IDs canonical
+PASS agent action registry found
+PASS no stale chat action
+PASS executor branch open_view
+PASS executor branch search_inventory
+PASS executor branch open_item
+PASS executor branch search_documents
+PASS executor branch open_document
+PASS executor branch research
+PASS executor branch open_qr
+PASS executor branch start_camera
+PASS executor branch stop_camera
+PASS executor branch analyze_camera
+PASS executor branch open_vision
+PASS executor branch start_vision_camera
+PASS executor branch stop_vision_camera
+PASS executor branch analyze_vision_camera
+PASS executor branch open_calendar
+PASS executor branch create_calendar_event
+PASS executor branch delete_calendar_event
+PASS executor branch sync_repository
+PASS executor branch export_inventory
+PASS executor branch export_report
+PASS executor branch toggle_web
+PASS executor branch clear_chat
+PASS executor branch start_voice
+PASS executor branch stop_voice
+PASS executor branch web_search
+PASS executor branch create_inventory_item
+PASS executor branch update_inventory_item
+PASS executor branch delete_inventory_item
+PASS tool registered open_view
+PASS tool registered search_inventory
+PASS tool registered open_item
+PASS tool registered search_documents
+PASS tool registered open_document
+PASS tool registered research
+PASS tool registered open_qr
+PASS tool registered start_camera
+PASS tool registered stop_camera
+PASS tool registered analyze_camera
+PASS tool registered open_vision
+PASS tool registered start_vision_camera
+PASS tool registered stop_vision_camera
+PASS tool registered analyze_vision_camera
+PASS tool registered open_calendar
+PASS tool registered create_calendar_event
+PASS tool registered delete_calendar_event
+PASS tool registered sync_repository
+PASS tool registered export_inventory
+PASS tool registered export_report
+PASS tool registered toggle_web
+PASS tool registered web_search
+PASS tool registered get_inventory
+PASS tool registered create_inventory_item
+PASS tool registered update_inventory_item
+PASS tool registered delete_inventory_item
+PASS tool registered get_documents
+PASS tool registered get_activity
+PASS tool registered get_state
+PASS tool registered status
+PASS tool registered diagnostics
+PASS tool registered clear_chat
+PASS tool registered start_voice
+PASS tool registered stop_voice
+PASS sequence executor requires all steps
+PASS destructive inventory delete requires confirmation
+PASS destructive calendar delete requires confirmation
+PASS inventory integrity is not hard-coded to 111
+PASS camera auto-selection penalizes ultra-wide
+PASS camera auto-selection prefers telephoto
+PASS voice wake word exists
+PASS voice auto-restart exists
+PASS voice barge-in exists
+PASS parser abre inventario
+PASS parser abrí documentos
+PASS parser mostrame qr
+PASS parser buscá en inventario alcohol
+PASS parser dónde está ácido nítrico
+PASS parser abrí la ficha alcohol
+PASS parser abrí el documento química
+PASS parser prendé la cámara
+PASS parser analizá lo que ves
+PASS parser activá la voz
+PASS parser confirmo eliminar alcohol
+
+ALL REGRESSION CHECKS PASSED (35 actions, 34 tools)
+PASS validate.mjs
+PASS agent-regression.mjs
+PASS app.js syntax
+PASS inventory 111 baseline — 111
+PASS inventory IDs unique
+PASS inventory IDs canonical
+PASS no legacy document.createElement bug
+PASS DOM createElement shim present
+PASS single central executor
+PASS sequence all-steps semantics
+PASS destructive inventory confirmation schema
+PASS destructive calendar confirmation schema
+PASS agent audit ring
+PASS local chained commands
+PASS calendar local command
+PASS repository result propagated
+PASS OCR confidence gate
+PASS camera avoids ultra-wide
+PASS voice wake word
+PASS voice auto restart
+PASS voice barge-in
+PASS service worker core cache
+PASS manifest present
+PASS no demo mode added
+
+FINAL AUDIT: 24 checks passed, 0 failed
+PASS QR view exists
+PASS Independent Vision view exists
+PASS Vision camera has dedicated video element
+PASS Vision camera has explicit permission control
+PASS QR has dedicated stream state
+PASS Vision has independent stream state
+PASS QR stop stops every track
+PASS QR detection calls processQr
+PASS QR result stops camera
+PASS QR result contains no captured image
+PASS BarcodeDetector failure falls back to jsQR
+PASS QR image decode falls back to jsQR when BarcodeDetector misses
+PASS OCR no longer binds to QR camera button
+PASS Vision camera requests camera permission
+PASS Vision camera start is separate from QR start
+PASS Vision analysis uses vision video
+PASS Agent can open Vision module
+PASS Agent can start Vision camera
+PASS Agent can stop Vision camera
+PASS Agent can analyze Vision camera
+PASS Generic analyze_camera is routed to Vision, not QR
+PASS QR has no OCR UI block
+PASS Vision view contains OCR UI
+
+QR/VISION REGRESSION: 23 passed, 0 failed
+✔ registro rechaza acciones, parámetros, fechas y secuencias inválidos antes de ejecutar (840.865422ms)
+✔ una respuesta remota no obtiene permisos locales aunque declare confirm=true (366.37163ms)
+✔ el boolean confirm no reemplaza la confirmación real del usuario (622.932099ms)
+✔ una secuencia válida conserva orden y un fallo de guardado detiene el resto (694.039711ms)
+✔ diagnóstico usa almacenamiento y datos reales sin afirmar offline ni revelar clave (1003.658838ms)
+✔ fallos de almacenamiento y APIs opcionales quedan visibles sin perder navegación (468.789723ms)
+✔ rechaza vacío, formato no permitido, PDF falso y tamaño excesivo (929.759717ms)
+✔ un archivo dañado no bloquea la siguiente carga y los homónimos no se sobrescriben (239.448103ms)
+✔ Word maestro real se lee con JSZip local, conserva 111 IDs y separa observaciones (1379.461149ms)
+✔ Excel original se lee con SheetJS local e importa nombres no vacíos (790.469876ms)
+✔ router: controles de Internet son locales y el híbrido busca antes de consultar fuera (1634.669617ms)
+✔ Gemini: no configurado, offline, 403, 500, timeout, JSON y respuesta inválidos no dañan el núcleo (2778.654883ms)
+✔ documento: sólo extractos limitados, sin subir binario ni ejecutar salida remota (41.792999ms)
+✔ cambio entre pestañas actualiza lecturas y protege un formulario en edición (1473.085561ms)
+✔ offline/cuota: investigación no depende de guardar historial ni puede mentir sobre favoritos (578.343782ms)
+✔ órdenes rápidas y repetidas no acumulan listeners ni activan Internet al desactivarlo (1657.400579ms)
+✔ cargas concurrentes homónimas no sobrescriben y persisten ambas (113.591678ms)
+✔ dos pestañas con índice obsoleto no sobrescriben un documento local (109.759729ms)
+✔ quota: sólo se eliminan cachés derivadas propias (137.415948ms)
+✔ arranque idempotente con IndexedDB caída conserva inventario y navegación (301.102605ms)
+✔ actualización IndexedDB de v2 a v3 preserva documentos preexistentes (390.378712ms)
+✔ el arranque conserva altas y ediciones locales antes de consultar red (667.996047ms)
+✔ inventario vacío guardado es un estado válido, no reinstala 111 filas (175.898573ms)
+✔ quota: no se publica un alta ni se cierra el formulario si el guardado falla (443.376406ms)
+✔ IndexedDB fallida no se anuncia como documento persistido (84.9248ms)
+✔ texto del chat ejecuta navegación local sin API key (711.970312ms)
+✔ datos corruptos se preservan y bloquean sobrescrituras (282.851456ms)
+✔ conflicto entre pestañas no sobrescribe una versión más nueva (212.98502ms)
+✔ un alta con ID existente no modifica ese registro (279.460738ms)
+✔ guardar edición crea una copia anterior y sobrevive a reapertura (452.145053ms)
+✔ una transacción documental confirmada se recupera de IndexedDB (62.867828ms)
+✔ restauración: fallo de la segunda copia no deja memoria divergente ni pierde la versión previa (651.542923ms)
+✔ restauración: no reemplaza inventario si no puede proteger la versión actual (381.098113ms)
+✔ CSV neutraliza fórmulas ejecutables; entradas HTML siguen siendo texto (666.992274ms)
+✔ modales asocian títulos, mantienen foco y restauran el control de origen (556.558786ms)
+✔ visor: apertura antigua de PDF no reemplaza el documento elegido después (57.908164ms)
+✔ inventario: acentos, palabras parciales y plural conservan el resultado real (581.049616ms)
+✔ documentos: nombre, contenido y plural; relaciones no inventan coincidencias (91.233116ms)
+✔ las tres órdenes exigidas se resuelven localmente y abren la vista real (621.052912ms)
+✔ PWA: instalación local completa, navegación /laboratorio/ y lectores disponibles sin red (53.749197ms)
+✔ PWA: activación sólo retira cachés del ámbito propio (6.323783ms)
+✔ PWA: actualización incompleta conserva versión anterior y no fuerza activación (6.956486ms)
+ℹ tests 42
+ℹ suites 0
+ℹ pass 42
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 5302.980189

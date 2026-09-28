@@ -1,0 +1,10 @@
+{
+  "name": "nexus-x-laboratorio",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Pruebas de NEXUS-X; la aplicación sigue siendo HTML/JS estático sin build",
+  "scripts": {
+    "test": "node validate.mjs && node agent-regression.mjs && node final-audit.mjs && node qr-vision-regression.mjs && node --test tests/*.test.mjs"
+  },
+  "devDependencies": { "fake-indexeddb": "6.2.4", "jsdom": "26.1.0" }
+}

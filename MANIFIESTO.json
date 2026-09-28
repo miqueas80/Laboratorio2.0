@@ -1,0 +1,14 @@
+{
+  "repository": "miqueas80/laboratorio",
+  "base": "67e6a80e03b040951903d85b9646c493717a1723",
+  "candidate": "bf4f0cd813616f2d089c45bc6bcc7b5147b34a28",
+  "branch": "consolidate/local-first",
+  "productionDeployed": false,
+  "behaviorTestsPassed": 43,
+  "patchApplyCheck": true,
+  "bundleVerify": true,
+  "artifacts": {
+    "continuidad.bundle": "7e8072a8fe6e4ca76c094f64f842bb47bafcea7832423c942746423507e9810e",
+    "consolidacion.patch": "0515cb17c7382cfc0adb83cd4eb1a986d44d0a37d9c675001ce15778d63674b0"
+  }
+}
