@@ -1,0 +1,48 @@
+# Corrección puntual QR local + aviso Gemini 503
+
+Destino: https://miqueas80.github.io/Laboratorio2.0/ · versión 2026.09.28-r3.
+
+## Causa comprobada
+
+Árbol GitHub observado: `508d51bd6935ee85de84327d190f3f415361963d`.
+Los archivos fueron subidos a la raíz: `jsQR.js`, JSZip, SheetJS, PDF.js,
+worker PDF e iconos. app.js/SW/manifest todavía apuntaban a `vendor/` e `icons/`.
+Los hashes de las fuentes desplegadas coinciden con la entrega previa; no se
+reemplazan cambios nuevos del usuario. jsQR ya era local, pero su URL era errónea.
+
+## Corrección
+
+- `loadQrFallback` usa `./jsQR.js`, incluida íntegra (jsQR 1.4.0, licencia adjunta).
+- Lectores, worker, iconos y diagnóstico usan las rutas reales de la raíz.
+- SW r3 precachea jsQR y los restantes recursos locales bajo el scope real;
+  conserva el aislamiento de cachés y la política de actualización coherente.
+- HTTP 503 se muestra como aviso inline `role=status`, sin modal ni reintentos.
+  No deshabilita controles. Se retira tras una respuesta exitosa.
+- Se confirma continuidad local sólo con inventario/documentos disponibles;
+  un fallo simultáneo de almacenamiento se informa por separado, sin éxito falso.
+- No cambia inventario, esquema IndexedDB, Action Registry ni almacenamiento.
+
+## Pruebas
+
+14 casos focalizados aprobados: decoder jsQR real con QR conocido, carga única
+local bajo /Laboratorio2.0/, 503 en modelos y generación, recuperación, almacenamiento
+simultáneamente fallido, aislamiento Gemini, Word/Excel reales y ciclo SW.
+Validación original y 23 comprobaciones QR/Visión aprobadas. Evidencia:
+`docs/evidence/qr-gemini503-tests.txt`. El ciclo SW usa simulador Node; no se
+realizó prueba con la cámara física del usuario.
+
+## Aplicación
+
+Descomprimir el paquete y reemplazar app.js, index.html, sw.js,
+document-worker.js y manifest.webmanifest EN LA RAÍZ de Laboratorio2.0.
+Dejar allí también jsQR.js y LICENSE-jsqr.txt. Los demás lectores e iconos ya
+están en esa raíz según el árbol comprobado; conservarlos, junto con los datos.
+No subir el ZIP como si fuera el código; subir sus archivos sin carpetas extra.
+
+Abrir online, comprobar actualización en Ajustes, cerrar todas las pestañas de
+NEXUS-X y volver a abrir. Confirmar versión r3 y caché completa en Diagnóstico.
+Después probar la cámara y el mismo QR sin conexión. No borrar datos del sitio.
+
+El parche incluido es una alternativa a reemplazar los archivos, no un paso
+adicional obligatorio. Esta corrección se entrega para aplicar; no se publicó
+por herramientas en esta intervención.

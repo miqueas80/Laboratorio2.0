@@ -1,0 +1,204 @@
+diff --git a/app.js b/app.js
+index d33cba2..ad8f9b1 100644
+--- a/app.js
++++ b/app.js
+@@ -16,7 +16,7 @@ const REPO_OWNER='miqueas80';
+ const REPO_NAME='';
+ const REPO_BRANCH='';
+ const DOC_MAX_BYTES=16*1024*1024;
+-const APP_VERSION='2026.09.28-r2';
++const APP_VERSION='2026.09.28-r3';
+ const INVENTORY_RECOVERY_KEY='nexus_x_inventory_recovery_v1';
+ const health={storage:'sin comprobar',documents:'sin comprobar',errors:[],boot:'BOOT'};
+ const OCR_ENGINE_URL='https://cdn.jsdelivr.net/npm/tesseract.js@6.0.0/dist/tesseract.min.js';
+@@ -189,7 +189,7 @@ async function parseOfficeInWorker(file,kind){
+ }
+ async function JSZipReady(blob){
+  let parsed=await parseOfficeInWorker(blob,'docx');let xml=parsed?.xml;
+- if(!xml){await loadScript('./vendor/jszip.min.js','JSZip');const zip=await JSZip.loadAsync(new Uint8Array(await blob.arrayBuffer()));const entry=zip.file('word/document.xml');if(!entry)throw new Error('DOCX dañado: falta word/document.xml');if(entry._data?.uncompressedSize>12*1024*1024)throw new Error('Word descomprimido demasiado grande.');xml=await entry.async('text')}
++ if(!xml){await loadScript('./jszip.min.js','JSZip');const zip=await JSZip.loadAsync(new Uint8Array(await blob.arrayBuffer()));const entry=zip.file('word/document.xml');if(!entry)throw new Error('DOCX dañado: falta word/document.xml');if(entry._data?.uncompressedSize>12*1024*1024)throw new Error('Word descomprimido demasiado grande.');xml=await entry.async('text')}
+  if(xml.length>12*1024*1024)throw new Error('Word descomprimido demasiado grande.');
+  const doc=new DOMParser().parseFromString(xml,'application/xml');if(doc.getElementsByTagName('parsererror').length)throw new Error('XML de Word dañado.');
+  const paragraphs=[...doc.getElementsByTagName('w:p')];const out=[];
+@@ -197,7 +197,7 @@ async function JSZipReady(blob){
+  return {text:out.join('\n')};
+ }
+ async function extractPdfText(file){
+- await loadScript('./vendor/pdf.mjs','pdfjsLib');
++ await loadScript('./pdf.mjs','pdfjsLib');
+  const task=pdfjsLib.getDocument({isEvalSupported:false,data:await file.arrayBuffer()});let pdf;
+  try{pdf=await task.promise;const pages=[];let chars=0;
+  for(let n=1;n<=pdf.numPages;n++){
+@@ -210,7 +210,7 @@ async function extractPdfText(file){
+ }
+ async function extractSpreadsheet(file){
+  const parsed=await parseOfficeInWorker(file,'spreadsheet');if(parsed)return parsed;
+- await loadScript('./vendor/xlsx.full.min.js','XLSX');await yieldToUI();
++ await loadScript('./xlsx.full.min.js','XLSX');await yieldToUI();
+  const wb=XLSX.read(new Uint8Array(await file.arrayBuffer()),{type:'array',cellDates:true,raw:false,defval:''});
+  const sheets=wb.SheetNames.map(name=>({name,rows:XLSX.utils.sheet_to_json(wb.Sheets[name],{header:1,defval:''}),csv:XLSX.utils.sheet_to_csv(wb.Sheets[name])}));
+  return {sheets,text:sheets.map(x=>`HOJA: ${x.name}\n${x.csv}`).join('\n\n')};
+@@ -382,8 +382,8 @@ async function loadScript(url,globalName){
+  if(scriptPromises.has(url))return scriptPromises.get(url);
+  const promise=(async()=>{
+   if(globalName==='pdfjsLib'){
+-   const lib=await import('./vendor/pdf.mjs');
+-   lib.GlobalWorkerOptions.workerSrc=new URL('./vendor/pdf.worker.mjs',location.href).href;
++   const lib=await import('./pdf.mjs');
++   lib.GlobalWorkerOptions.workerSrc=new URL('./pdf.worker.mjs',location.href).href;
+    globalThis.pdfjsLib=lib;return lib;
+   }
+   return new Promise((resolve,reject)=>{
+@@ -397,7 +397,7 @@ async function loadScript(url,globalName){
+ async function importExcel(file){try{await validateDocumentFile(file);const parsed=await extractSpreadsheet(file);const rows=[];for(const sheet of parsed.sheets){const data=sheet.rows;if(!data.length)continue;const hi=data.slice(0,12).findIndex(row=>row.some(value=>/^(nombre|descripcion|sustancia|sustancia mezcla material|material)$/.test(norm(value).replace(/[^a-z0-9]+/g,' ').trim())));if(hi<0)continue;const headers=data[hi].map((x,i)=>String(x||`Campo ${i+1}`).trim());for(let i=hi+1;i<data.length;i++){const raw={};headers.forEach((h,j)=>raw[h]=data[i][j]??'');if(Object.values(raw).some(v=>String(v).trim()))rows.push(raw)}}if(!rows.length)throw new Error('No se encontraron filas.');const mapped=rows.map((r,i)=>{const keys=Object.keys(r);const pick=(...names)=>{const k=keys.find(k=>names.includes(norm(k).replace(/[^a-z0-9]+/g,' ').trim())||(names.includes('presentacion')&&norm(k).startsWith('presentacion ')));return k?r[k]:''};return normalizeRecord({id:pick('id nexus x','id_nexus_x','id','codigo nexus','codigo'),originalNumber:pick('nº original','n° original','numero original','nro original','n','no'),name:pick('sustancia mezcla material','sustancia','mezcla','material','nombre','descripcion'),formula:pick('formula','fórmula','formula quimica','fórmula química'),physicalState:pick('estado fisico','estado físico'),presentation:pick('presentacion','presentación'),originalPackage:pick('envase original'),expiry:pick('fecha envasado vencimiento','vencimiento','fecha vencimiento','fecha de envasado o vencimiento'),location:pick('ubicacion armario','ubicación armario','ubicacion','ubicación','estante','ubicacionen el armario','ubicacion en el armario'),notes:pick('observaciones','notas','comments')},i+1)});let generated=0;const used=new Set(mapped.filter(r=>validId(r.id)).map(r=>r.id));let next=1;mapped.forEach(r=>{if(!validId(r.id)){while(used.has(`NEXUS-X-${String(next).padStart(4,'0')}`))next++;r.id=`NEXUS-X-${String(next).padStart(4,'0')}`;used.add(r.id);next++;generated++}});validateInventory(mapped,null);if(!confirm(`¿Reemplazar el inventario por ${mapped.length} registros de Excel? Se guardará una copia anterior.`))return;await indexLocalFile(file,parsed.text);if(!saveInventory(mapped,{backup:true}))return;saveActivity(`Excel importado: ${mapped.length} filas · ${generated} IDs normalizados`);renderAll();toast(`Excel cargado: ${mapped.length} registros.`)}catch(e){console.error(e);toast('No se importó el Excel: '+e.message)}}
+ async function importWord(file){try{await validateDocumentFile(file);const {text}=await JSZipReady(file);const blocks=text.split(/(?=REGISTRO\s+\d+)/).slice(1);const labels=['ID_NEXUS_X','Nº_Original','Sustancia_Mezcla_Material','Formula','Estado_Fisico','Presentacion','Envase_Original','Fecha_Envasado_Vencimiento','Ubicacion_Armario','Observaciones'];const re=new RegExp('('+labels.map(x=>x.replace(/[.*+?^${}()|[\\]\\]/g,'\\$&')).join('|')+')\\s*:\\s*([\\s\\S]*?)(?=\\s+(?:'+labels.join('|')+')\\s*:|$)','g');const records=[];for(const b of blocks){const mm=b.match(/^REGISTRO\s+(\d+)/);if(!mm)continue;const o={record:Number(mm[1])};let m;while((m=re.exec(b))){o[m[1]]=(m[2]||'').replace(/\s+/g,' ').trim()}re.lastIndex=0;records.push(normalizeRecord(o,records.length+1))}validateInventory(records,111);if(!confirm('¿Reemplazar el inventario por el Word maestro validado? Se guardará una copia anterior.'))return;await indexLocalFile(file,text);if(!saveInventory(records,{backup:true}))return;saveActivity('Word maestro validado; inventario guardado e índice persistido');renderAll();toast('Word maestro validado e indexado: 111 registros.')}catch(e){console.error(e);toast('Word rechazado; se conservó la base anterior. '+e.message)}}
+ function qrExtractId(raw){const text=String(raw??'').trim();const m=text.match(/(?:NEXUS[-_:]?X|NX)[-_: ]*(\d{1,6})/i);return m?`NEXUS-X-${String(Number(m[1])).padStart(4,'0')}`:canonicalId(text.replace(/[?#].*$/,'').replace(/\/+$/,''));}
+-async function loadQrFallback(){await loadScript('./vendor/jsQR.js','jsQR');}
++async function loadQrFallback(){await loadScript('./jsQR.js','jsQR');}
+ async function decodeQrImage(file){try{const bitmap=await createImageBitmap(file);if('BarcodeDetector' in window){try{const detector=new BarcodeDetector({formats:['qr_code']});const codes=await detector.detect(bitmap);if(codes[0]?.rawValue){bitmap.close();processQr(codes[0].rawValue);return}}catch(e){console.warn('BarcodeDetector imagen; se usa jsQR',e)}}await loadQrFallback();const canvas=DOM.createElement('canvas');const scale=Math.min(1,1600/Math.max(bitmap.width,bitmap.height));canvas.width=Math.max(1,Math.round(bitmap.width*scale));canvas.height=Math.max(1,Math.round(bitmap.height*scale));const ctx=canvas.getContext('2d',{willReadFrequently:true});ctx.drawImage(bitmap,0,0,canvas.width,canvas.height);bitmap.close();const img=ctx.getImageData(0,0,canvas.width,canvas.height);const code=window.jsQR(img.data,img.width,img.height,{inversionAttempts:'attemptBoth'});if(!code?.data)throw new Error('No se detectó un QR en la imagen.');processQr(code.data)}catch(e){console.error(e);toast('No se pudo leer el QR: '+e.message)}}
+ function cameraLabelScore(device){const label=String(device?.label||'').toLowerCase();let score=0;if(/back|rear|trasera|posterior|environment/.test(label))score+=40;if(/main|principal|primary/.test(label))score+=80;if(/tele|telephoto|zoom|periscope/.test(label))score+=95;if(/ultra.?wide|ultrawide|ultra gran|gran angular|wide angle/.test(label))score-=140;if(/front|frontal|user|selfie/.test(label))score-=220;if(/depth|macro/.test(label))score-=30;return score}
+ async function listCameraDevices(){if(!navigator.mediaDevices?.enumerateDevices)return[];const devices=await navigator.mediaDevices.enumerateDevices();return devices.filter(d=>d.kind==='videoinput')}
+@@ -452,7 +452,13 @@ function importDocumentFile(file){
+ }
+ let sessionGeminiKey='',geminiModelCache=null;
+ function getGeminiKey(){return sessionGeminiKey||readStorage(GEMINI_KEY)||''}
+-function geminiError(message){health.gemini={status:'error',message,checkedAt:new Date().toISOString()};return new Error(message)}
++function localAvailabilityMessage(){
++ return state.docIndexReady&&health.documents==='disponible'&&!state.inventoryError&&!state.inventoryReadOnly
++ ?'NEXUS sigue en modo local: inventario, documentos guardados y comandos disponibles.'
++ :'Las funciones locales no dependen de Gemini. Consultá Diagnóstico para comprobar el almacenamiento.';
++}
++function renderGeminiNotice(){const el=$('#geminiNotice');if(!el)return;const unavailable=health.gemini?.httpStatus===503;el.hidden=!unavailable;el.textContent=unavailable?'Gemini temporalmente no disponible (HTTP 503). '+localAvailabilityMessage()+' Podés reintentar más tarde.':''}
++function geminiError(message){const httpStatus=Number(String(message).match(/HTTP\s+(\d{3})/i)?.[1])||null;if(httpStatus===503)message='Gemini está temporalmente no disponible (HTTP 503).';health.gemini={status:httpStatus===503?'temporalmente no disponible':'error',httpStatus,message,checkedAt:new Date().toISOString()};if(diagnosticSnapshot)diagnosticSnapshot.gemini={...diagnosticSnapshot.gemini,...health.gemini};renderDiagnostics();return new Error(message)}
+ async function resolveGeminiModel(key){
+  if(!key)throw geminiError('API de Gemini no configurada. El núcleo local sigue disponible.');
+  if(!navigator.onLine)throw geminiError('Sin conexión. El núcleo local sigue disponible.');
+@@ -482,7 +488,7 @@ async function geminiGenerate({question,context='',useSearch=false,currentDocume
+   const answer=(candidate?.content?.parts||[]).filter(p=>typeof p.text==='string').map(p=>p.text).join('').trim();
+   if(!answer)throw geminiError('Gemini devolvió una respuesta vacía o inválida.');
+   const sources=(candidate.groundingMetadata?.groundingChunks||[]).map(x=>x.web).filter(x=>x&&safeExternalUrl(x.uri)).map(x=>({title:String(x.title||'Fuente externa'),url:safeExternalUrl(x.uri)}));
+-  health.gemini={status:'respuesta recibida',model,checkedAt:new Date().toISOString(),grounded:sources.length>0};
++  health.gemini={status:'respuesta recibida',model,checkedAt:new Date().toISOString(),grounded:sources.length>0};if(diagnosticSnapshot)diagnosticSnapshot.gemini={configured:true,...health.gemini};renderDiagnostics();
+   return {answer,model,grounded:sources.length>0,sources};
+  }catch(e){throw geminiError(e.name==='AbortError'?'Gemini agotó el tiempo de espera.':e.message||'Gemini no disponible.')}
+ }
+@@ -514,7 +520,7 @@ async function collectDiagnostics(){
+   try{
+    if(!globalThis.caches)checks.offlineCache={supported:false,complete:false};
+    else{const scope=new URL(registration?.scope||'./',location.href),name='nexus-x-shell:'+encodeURIComponent(scope.pathname)+':'+APP_VERSION;
+-    const required=['./','index.html','app.js','manifest.webmanifest','icon.svg','icons/icon-192.png','icons/icon-512.png','inventory.json','document-worker.js','vendor/jszip.min.js','vendor/xlsx.full.min.js','vendor/jsQR.js','vendor/pdf.mjs','vendor/pdf.worker.mjs'];
++    const required=['./','index.html','app.js','manifest.webmanifest','icon.svg','icon-192.png','icon-512.png','inventory.json','document-worker.js','jszip.min.js','xlsx.full.min.js','jsQR.js','pdf.mjs','pdf.worker.mjs'];
+     const exists=(await caches.keys()).includes(name),missing=[];if(exists){const cache=await caches.open(name);for(const path of required)if(!await cache.match(new URL(path,scope).href))missing.push(path)}else missing.push(...required);
+     checks.offlineCache={supported:true,cache:name,complete:exists&&!missing.length,missing};
+    }
+@@ -581,7 +587,7 @@ async function syncRepository(){
+   state.docSyncing=false;renderDocuments();status.textContent=`${githubLabel()} · ${ok}/${files.length} documentos indexados${failed.length?` · ${failed.length} con error`:''}`;if(failed.length)status.title=failed.join('\n');saveActivity(`Repositorio indexado: ${ok}/${files.length} documentos`);renderDashboard();if(failed.length)toast(`GitHub conectado. ${ok}/${files.length} documentos; ${failed.length} con error.`);else toast(`GitHub conectado: ${ok} documento(s) indexado(s).`);return {ok:failed.length===0,owner:detected.owner,repo:detected.repo,branch:found.branch,files:files.length,indexed:ok,failed};
+  }catch(e){state.docSyncing=false;renderDocuments();status.textContent='Error de sincronización';status.title=e.message||String(e);saveActivity(`Error GitHub: ${e.message||e}`);toast(`GitHub: ${e.message||'no se pudo sincronizar'}`);return {ok:false,error:e.message||String(e)}}}
+ 
+-let activeDocument=null,documentViewEpoch=0,documentLoadingTask=null;async function openDocumentViewer(path){const epoch=++documentViewEpoch;documentLoadingTask?.destroy().catch(()=>{});documentLoadingTask=null;const d=state.docs.find(x=>x.path===path)||await getCachedDocs().then(a=>a.find(x=>x.path===path));if(epoch!==documentViewEpoch)return;if(!d){toast('Documento no disponible en el caché local.');return}activeDocument=d;$('#documentAIChat').textContent='';$('#downloadDocumentBtn').disabled=!d.blob;$('#documentViewerTitle').textContent=d.name;$('#documentViewerMeta').textContent=`${d.type} · ${d.source||'local'} · ${d.chunks?.length||0} fragmentos`;$('#documentViewerAI').classList.remove('open');$('#documentViewerBody').innerHTML='<div class="notice">Abriendo documento…</div>';showModal('documentViewerModal');if(d.type==='PDF'&&d.blob){await renderPdfViewer(d,$('#documentViewerBody'),epoch)}else{$('#documentViewerBody').innerHTML=`<pre class="doc-text">${escapeHtml(d.text||'Sin texto extraído.')}</pre>`}}function closeDocumentViewer(){hideModal('documentViewerModal');activeDocument=null}async function renderPdfViewer(d,body,epoch=documentViewEpoch){try{await loadScript('./vendor/pdf.mjs','pdfjsLib');const bytes=await d.blob.arrayBuffer();if(epoch!==documentViewEpoch)return;documentLoadingTask=pdfjsLib.getDocument({isEvalSupported:false,data:bytes});const pdf=await documentLoadingTask.promise;if(epoch!==documentViewEpoch)return;body.innerHTML='';for(let n=1;n<=pdf.numPages;n++){if(epoch!==documentViewEpoch)return;const page=await pdf.getPage(n),vp=page.getViewport({scale:1.15}),wrap=DOM.createElement('div');wrap.className='pdf-page';const canvas=DOM.createElement('canvas');canvas.width=Math.ceil(vp.width);canvas.height=Math.ceil(vp.height);if(epoch!==documentViewEpoch)return;wrap.appendChild(canvas);body.appendChild(wrap);await page.render({canvasContext:canvas.getContext('2d'),viewport:vp}).promise;page.cleanup();await new Promise(resolve=>setTimeout(resolve,0))}}catch(e){if(epoch!==documentViewEpoch)return;body.innerHTML=`<div class="notice error">No se pudo renderizar el PDF dentro de NEXUS-X: ${escapeHtml(e.message)}</div><pre class="doc-text">${escapeHtml(d.text||'')}</pre>`}}let documentAIBusy=false;
++let activeDocument=null,documentViewEpoch=0,documentLoadingTask=null;async function openDocumentViewer(path){const epoch=++documentViewEpoch;documentLoadingTask?.destroy().catch(()=>{});documentLoadingTask=null;const d=state.docs.find(x=>x.path===path)||await getCachedDocs().then(a=>a.find(x=>x.path===path));if(epoch!==documentViewEpoch)return;if(!d){toast('Documento no disponible en el caché local.');return}activeDocument=d;$('#documentAIChat').textContent='';$('#downloadDocumentBtn').disabled=!d.blob;$('#documentViewerTitle').textContent=d.name;$('#documentViewerMeta').textContent=`${d.type} · ${d.source||'local'} · ${d.chunks?.length||0} fragmentos`;$('#documentViewerAI').classList.remove('open');$('#documentViewerBody').innerHTML='<div class="notice">Abriendo documento…</div>';showModal('documentViewerModal');if(d.type==='PDF'&&d.blob){await renderPdfViewer(d,$('#documentViewerBody'),epoch)}else{$('#documentViewerBody').innerHTML=`<pre class="doc-text">${escapeHtml(d.text||'Sin texto extraído.')}</pre>`}}function closeDocumentViewer(){hideModal('documentViewerModal');activeDocument=null}async function renderPdfViewer(d,body,epoch=documentViewEpoch){try{await loadScript('./pdf.mjs','pdfjsLib');const bytes=await d.blob.arrayBuffer();if(epoch!==documentViewEpoch)return;documentLoadingTask=pdfjsLib.getDocument({isEvalSupported:false,data:bytes});const pdf=await documentLoadingTask.promise;if(epoch!==documentViewEpoch)return;body.innerHTML='';for(let n=1;n<=pdf.numPages;n++){if(epoch!==documentViewEpoch)return;const page=await pdf.getPage(n),vp=page.getViewport({scale:1.15}),wrap=DOM.createElement('div');wrap.className='pdf-page';const canvas=DOM.createElement('canvas');canvas.width=Math.ceil(vp.width);canvas.height=Math.ceil(vp.height);if(epoch!==documentViewEpoch)return;wrap.appendChild(canvas);body.appendChild(wrap);await page.render({canvasContext:canvas.getContext('2d'),viewport:vp}).promise;page.cleanup();await new Promise(resolve=>setTimeout(resolve,0))}}catch(e){if(epoch!==documentViewEpoch)return;body.innerHTML=`<div class="notice error">No se pudo renderizar el PDF dentro de NEXUS-X: ${escapeHtml(e.message)}</div><pre class="doc-text">${escapeHtml(d.text||'')}</pre>`}}let documentAIBusy=false;
+ async function askDocumentAI(){
+  const q=$('#documentAIInput').value.trim(),selected=activeDocument,epoch=documentViewEpoch;if(!q||!selected||documentAIBusy)return;
+  documentAIBusy=true;$('#documentAIAsk').disabled=true;const chat=$('#documentAIChat');chat.insertAdjacentHTML('beforeend',`<div class="msg user">${escapeHtml(q)}</div>`);$('#documentAIInput').value='';
+@@ -591,7 +597,7 @@ async function askDocumentAI(){
+  }catch(e){if(epoch===documentViewEpoch)chat.insertAdjacentHTML('beforeend',`<div class="msg bot">No se pudo consultar Gemini: ${escapeHtml(e.message)}. El documento sigue disponible para lectura local.</div>`)}
+  finally{documentAIBusy=false;$('#documentAIAsk').disabled=false;chat.scrollTop=chat.scrollHeight}
+ }
+-function renderGeminiSettings(){const key=getGeminiKey()||'';const model=readStorage(GEMINI_MODEL_KEY)||'detección automática';const input=$('#aiKey');if(input)input.value=key;if($('#rememberAiKey'))$('#rememberAiKey').checked=Boolean(readStorage(GEMINI_KEY));const status=$('#geminiStatus');if(status)status.innerHTML=key?`<span class="status-dot"></span>${readStorage(GEMINI_KEY)?'Clave guardada':'Clave en sesión'} · ${escapeHtml(health.gemini?.status||'sin comprobar')} · ${escapeHtml(health.gemini?.model||model)}`:'<span class="status-dot" style="background:#d89632"></span>Sin clave configurada'}
++function renderGeminiSettings(){renderGeminiNotice();const key=getGeminiKey()||'';const model=readStorage(GEMINI_MODEL_KEY)||'detección automática';const input=$('#aiKey');if(input)input.value=key;if($('#rememberAiKey'))$('#rememberAiKey').checked=Boolean(readStorage(GEMINI_KEY));const status=$('#geminiStatus');if(status)status.innerHTML=key?`<span class="status-dot" style="background:${health.gemini?.status==='respuesta recibida'?'var(--ok)':'#b27b26'}"></span>${readStorage(GEMINI_KEY)?'Clave guardada':'Clave en sesión'} · ${escapeHtml(health.gemini?.status||'sin comprobar')} · ${escapeHtml(health.gemini?.model||model)}`:'<span class="status-dot" style="background:#d89632"></span>Sin clave configurada'}
+ const CAL_KEY='nexus_x_calendar_v1';let calCursor=new Date();
+ function isValidCalendarDate(date){return /^\d{4}-\d{2}-\d{2}$/.test(String(date))&&!Number.isNaN(Date.parse(date))&&new Date(date+'T12:00:00Z').toISOString().slice(0,10)===date}
+ function calendarEvents(){const rows=readJsonStorage(CAL_KEY,[]);return Array.isArray(rows)?rows.filter(e=>e&&typeof e.text==='string'&&isValidCalendarDate(e.date)):[]}
+@@ -726,7 +732,7 @@ async function analyzeSubstance(text,{canvas=null,imageDataUrl=null,source='OCR'
+ }
+ async function analyzeCurrentQrCamera(){const v=$('#qrVideo');if(!v||!state.stream||v.readyState<2){toast('Primero iniciá la cámara y apuntá al envase.');return {ok:false,error:'Cámara no iniciada'}}try{const c=DOM.createElement('canvas');c.width=Math.min(v.videoWidth||1280,2200);c.height=Math.min(v.videoHeight||720,2200);const ctx=c.getContext('2d',{willReadFrequently:true});ctx.drawImage(v,0,0,c.width,c.height);const imageDataUrl=canvasToDataUrl(c);const r=await ocrImageSource(c,'captura de cámara');const analysis=await analyzeSubstance(r.text,{canvas:c,imageDataUrl,source:'cámara',ocrQualityScore:r.quality});saveActivity('Análisis visual de sustancia realizado desde cámara');return {ok:true,ocr:{text:r.text,quality:r.quality},analysis:{local:analysis?.local?{id:analysis.local.r?.id,name:analysis.local.r?.name,formula:analysis.local.r?.formula}:null,vision:analysis?.vision||null,web:analysis?.web||{results:[]}}};}catch(e){console.error(e);toast('No se pudo analizar la cámara: '+(e.message||e));return {ok:false,error:e.message||String(e)}}}
+ async function ocrImageFile(file){if(!file)return;try{const img=new Image();const url=URL.createObjectURL(file);img.onload=async()=>{try{const r=await ocrImageSource(img,file.name);await analyzeSubstance(r.text,{canvas:r.canvas,imageDataUrl:canvasToDataUrl(r.canvas),source:'imagen',ocrQualityScore:r.quality})}catch(e){$('#ocrStatus').textContent='Error OCR: '+(e.message||e);toast('OCR: '+(e.message||e))}finally{URL.revokeObjectURL(url)}};img.onerror=()=>{URL.revokeObjectURL(url);throw new Error('No se pudo abrir la imagen.')};img.src=url}catch(e){$('#ocrStatus').textContent='Error OCR: '+(e.message||e);toast('OCR: '+(e.message||e))}}
+-async function ocrPdfFile(file){if(!file)return;try{await loadScript('./vendor/pdf.mjs','pdfjsLib');const pdf=await pdfjsLib.getDocument({isEvalSupported:false,data:await file.arrayBuffer()}).promise;const maxPages=Math.min(pdf.numPages,30),pages=[];const status=$('#ocrStatus');for(let n=1;n<=maxPages;n++){status.textContent=`OCR PDF: página ${n}/${maxPages}`;const page=await pdf.getPage(n),vp=page.getViewport({scale:2});const canvas=DOM.createElement('canvas');canvas.width=Math.ceil(vp.width);canvas.height=Math.ceil(vp.height);await page.render({canvasContext:canvas.getContext('2d'),viewport:vp}).promise;const r=await ocrImageSource(canvas,`${file.name} · página ${n}`);if(r.text)pages.push(`PÁGINA ${n}\n${r.text}`)}const text=pages.join('\n\n').trim();$('#ocrOutput').textContent=text||'No se reconoció texto en el PDF.';$('#ocrStatus').textContent=`OCR PDF terminado · ${maxPages} página(s) procesada(s).${pdf.numPages>maxPages?' Se limitó a 30 páginas para evitar bloquear el navegador.':''}`;return text}catch(e){$('#ocrStatus').textContent='Error OCR PDF: '+(e.message||e);toast('OCR PDF: '+(e.message||e))}}
++async function ocrPdfFile(file){if(!file)return;try{await loadScript('./pdf.mjs','pdfjsLib');const pdf=await pdfjsLib.getDocument({isEvalSupported:false,data:await file.arrayBuffer()}).promise;const maxPages=Math.min(pdf.numPages,30),pages=[];const status=$('#ocrStatus');for(let n=1;n<=maxPages;n++){status.textContent=`OCR PDF: página ${n}/${maxPages}`;const page=await pdf.getPage(n),vp=page.getViewport({scale:2});const canvas=DOM.createElement('canvas');canvas.width=Math.ceil(vp.width);canvas.height=Math.ceil(vp.height);await page.render({canvasContext:canvas.getContext('2d'),viewport:vp}).promise;const r=await ocrImageSource(canvas,`${file.name} · página ${n}`);if(r.text)pages.push(`PÁGINA ${n}\n${r.text}`)}const text=pages.join('\n\n').trim();$('#ocrOutput').textContent=text||'No se reconoció texto en el PDF.';$('#ocrStatus').textContent=`OCR PDF terminado · ${maxPages} página(s) procesada(s).${pdf.numPages>maxPages?' Se limitó a 30 páginas para evitar bloquear el navegador.':''}`;return text}catch(e){$('#ocrStatus').textContent='Error OCR PDF: '+(e.message||e);toast('OCR PDF: '+(e.message||e))}}
+ async function indexOcrText(){const text=$('#ocrOutput')?.textContent?.trim()||'';if(!text||text==='El texto reconocido aparecerá aquí.')return toast('Primero ejecutá un OCR.');const name=`OCR-${new Date().toISOString().replace(/[:.]/g,'-')}.txt`;await indexDocument({name,path:'ocr:'+name,type:'TXT',size:text.length,text,source:'OCR local',mime:'text/plain'});saveActivity(`OCR indexado: ${name}`);toast('Texto OCR incorporado a la fabric documental.');}
+ async function copyOcrText(){const text=$('#ocrOutput')?.textContent||'';if(!text.trim())return;try{await navigator.clipboard.writeText(text);toast('Texto OCR copiado.')}catch{toast('No se pudo copiar automáticamente; seleccioná el texto manualmente.')}}
+ function localAssistantResponse(q){const n=norm(q);if(/\b(hola|buenas|hey|hola nexus)\b/.test(n))return'Hola. Soy NEXUS-X. Puedo buscar en el inventario, abrir módulos, analizar documentos y conversar cuando Gemini está conectado.';if(/quien eres|que eres|como te llamas/.test(n))return'Soy NEXUS-X, el asistente del sistema de gestión e investigación del laboratorio.';if(/cuantos registros|cantidad de registros|inventario/.test(n)&&!/buscar|investigar/.test(n))return`El inventario cargado contiene ${state.inventory.length} registros.`;if(/estado|diagnostico|integridad/.test(n)){const x=runIntegrity();return`Integridad local: ${x.ok?'correcta':'requiere revisión'}. Registros: ${x.recordCount}. IDs únicos: ${x.uniqueIds}.`;}return'Puedo ejecutar comandos locales como “Nexus, abrir inventario” o “Nexus, investigar ácido nítrico”. Para conversación libre y análisis profundo, conectá Gemini en Ajustes.';}
+@@ -1032,7 +1038,7 @@ async function nexusAgentTurn(userText,{speak=false}={}){
+     const context=route.kind==='HÍBRIDO'?(localResult?.data?.results||[]).slice(0,3).map(x=>[x.name,x.formula].filter(Boolean).join(' · ')).join('\n'):'';
+     const out=await geminiGenerate({question:route.externalQuery,context,useSearch:true});
+     answer+=(answer?'\n\n':'')+'EXTERNA · '+out.answer+'\n'+(out.grounded?'Fuentes: '+out.sources.map(x=>x.title+' — '+x.url).join(' | '):'Sin fuentes web verificables en la respuesta; no se confirma actualidad.');
+-   }catch(e){answer+=(answer?'\n\n':'')+'EXTERNA NO DISPONIBLE · '+e.message+' El núcleo local continúa operativo.'}
++   }catch(e){answer+=(answer?'\n\n':'')+'EXTERNA NO DISPONIBLE · '+e.message+' '+localAvailabilityMessage()}
+   }
+  }
+  state.agentHistory.push({role:'user',text:q},{role:'assistant',text:answer});state.agentHistory=state.agentHistory.slice(-12);
+diff --git a/document-worker.js b/document-worker.js
+index 0c55889..a3894dc 100644
+--- a/document-worker.js
++++ b/document-worker.js
+@@ -5,14 +5,14 @@ self.onmessage=async ({data})=>{
+   const {kind,buffer}=data;
+   if(!(buffer instanceof ArrayBuffer)||buffer.byteLength>16*1024*1024)throw new Error('Archivo demasiado grande o inválido.');
+   if(kind==='docx'){
+-   importScripts('./vendor/jszip.min.js');
++   importScripts('./jszip.min.js');
+    const zip=await JSZip.loadAsync(buffer),entry=zip.file('word/document.xml');
+    if(!entry)throw new Error('DOCX dañado: falta word/document.xml');
+    if(entry._data?.uncompressedSize>12*1024*1024)throw new Error('Word descomprimido demasiado grande.');
+    const xml=await entry.async('text');if(xml.length>12*1024*1024)throw new Error('Word demasiado grande.');
+    self.postMessage({xml});
+   }else if(kind==='spreadsheet'){
+-   importScripts('./vendor/xlsx.full.min.js');
++   importScripts('./xlsx.full.min.js');
+    const wb=XLSX.read(buffer,{type:'array',cellDates:true,raw:false,defval:''});
+    const sheets=[];let chars=0;
+    for(const name of wb.SheetNames){
+diff --git a/index.html b/index.html
+index 62a0652..e867375 100644
+--- a/index.html
++++ b/index.html
+@@ -52,6 +52,7 @@ button:focus-visible,a:focus-visible{outline:3px solid #157d93;outline-offset:3p
+   <button class="nav-btn" data-view="settings"><span>⚙</span><span>Ajustes</span></button>
+ </aside>
+ <main class="main">
++<div id="geminiNotice" class="notice" role="status" aria-live="polite" hidden style="max-width:1180px;margin:0 auto 12px"></div>
+ <section id="view-dashboard" class="view active">
+   <div class="page-head"><div><h1>Dashboard</h1><p>Estado general de NEXUS-X y del laboratorio.</p></div><div class="toolbar"><button class="btn" id="calendarBtn">▣ Calendario</button></div></div>
+   <div class="grid stats">
+diff --git a/manifest.webmanifest b/manifest.webmanifest
+index b66683a..85ba86b 100644
+--- a/manifest.webmanifest
++++ b/manifest.webmanifest
+@@ -8,13 +8,13 @@
+   "lang": "es",
+   "icons": [
+     {
+-      "src": "icons/icon-192.png",
++      "src": "icon-192.png",
+       "sizes": "192x192",
+       "type": "image/png",
+       "purpose": "any"
+     },
+     {
+-      "src": "icons/icon-512.png",
++      "src": "icon-512.png",
+       "sizes": "512x512",
+       "type": "image/png",
+       "purpose": "any"
+diff --git a/sw.js b/sw.js
+index c11c70c..9434bf7 100644
+--- a/sw.js
++++ b/sw.js
+@@ -1,13 +1,13 @@
+ 'use strict';
+ // Incrementar VERSION junto con APP_VERSION cuando cambie cualquier recurso CORE.
+-const VERSION='2026.09.28-r2';
++const VERSION='2026.09.28-r3';
+ const SCOPE=new URL(self.registration.scope);
+ const PREFIX='nexus-x-shell:'+encodeURIComponent(SCOPE.pathname)+':';
+ const CACHE=PREFIX+VERSION;
+ const CORE=['./','./index.html','./app.js','./manifest.webmanifest','./icon.svg',
+- './icons/icon-192.png','./icons/icon-512.png','./inventory.json','./document-worker.js',
+- './vendor/jszip.min.js','./vendor/xlsx.full.min.js','./vendor/jsQR.js',
+- './vendor/pdf.mjs','./vendor/pdf.worker.mjs'];
++ './icon-192.png','./icon-512.png','./inventory.json','./document-worker.js',
++ './jszip.min.js','./xlsx.full.min.js','./jsQR.js',
++ './pdf.mjs','./pdf.worker.mjs'];
+ const URLS=new Set(CORE.map(path=>new URL(path,SCOPE).href));
+ 
+ self.addEventListener('install',event=>{

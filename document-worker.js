@@ -5,14 +5,14 @@ self.onmessage=async ({data})=>{
   const {kind,buffer}=data;
   if(!(buffer instanceof ArrayBuffer)||buffer.byteLength>16*1024*1024)throw new Error('Archivo demasiado grande o inválido.');
   if(kind==='docx'){
-   importScripts('./vendor/jszip.min.js');
+   importScripts('./jszip.min.js');
    const zip=await JSZip.loadAsync(buffer),entry=zip.file('word/document.xml');
    if(!entry)throw new Error('DOCX dañado: falta word/document.xml');
    if(entry._data?.uncompressedSize>12*1024*1024)throw new Error('Word descomprimido demasiado grande.');
    const xml=await entry.async('text');if(xml.length>12*1024*1024)throw new Error('Word demasiado grande.');
    self.postMessage({xml});
   }else if(kind==='spreadsheet'){
-   importScripts('./vendor/xlsx.full.min.js');
+   importScripts('./xlsx.full.min.js');
    const wb=XLSX.read(buffer,{type:'array',cellDates:true,raw:false,defval:''});
    const sheets=[];let chars=0;
    for(const name of wb.SheetNames){

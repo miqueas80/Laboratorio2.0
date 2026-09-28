@@ -1,0 +1,16 @@
+{
+  "version": "2026.09.28-r3",
+  "target": "https://miqueas80.github.io/Laboratorio2.0/",
+  "commit": "7f9bc3e00e1fbcb8ca69c973f684002696163e7b",
+  "focusedTestsPassed": 14,
+  "qrVisionChecksPassed": 23,
+  "physicalCameraTested": false,
+  "files": {
+    "app.js": "0997b42b4371bf25d2c6d24930afa45f678563a7ea45adaa7a57cc8abffa3421",
+    "index.html": "0d1f65e5fd456c6a98671fe46fafb5f579755a48c17b48e2a0b72aef879f70f9",
+    "sw.js": "55ebf0d72c3cb53d2d10086f27e44871280146f0d904d18a91220f437b89c8f4",
+    "document-worker.js": "c14d987850e538bd19c1e5dc1805b1bfe670b7da143b8b0a173b71238405f399",
+    "manifest.webmanifest": "f86a67ac489faba770df38499cfd07c53319ca16205a210bc1416256f7b69aa0",
+    "jsQR.js": "bc40c8a15196236b2314db0856f72ca0b49980cd5413b8c852a7349f5fee0859"
+  }
+}

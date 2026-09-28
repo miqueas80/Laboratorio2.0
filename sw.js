@@ -1,13 +1,13 @@
 'use strict';
 // Incrementar VERSION junto con APP_VERSION cuando cambie cualquier recurso CORE.
-const VERSION='2026.09.28-r2';
+const VERSION='2026.09.28-r3';
 const SCOPE=new URL(self.registration.scope);
 const PREFIX='nexus-x-shell:'+encodeURIComponent(SCOPE.pathname)+':';
 const CACHE=PREFIX+VERSION;
 const CORE=['./','./index.html','./app.js','./manifest.webmanifest','./icon.svg',
- './icons/icon-192.png','./icons/icon-512.png','./inventory.json','./document-worker.js',
- './vendor/jszip.min.js','./vendor/xlsx.full.min.js','./vendor/jsQR.js',
- './vendor/pdf.mjs','./vendor/pdf.worker.mjs'];
+ './icon-192.png','./icon-512.png','./inventory.json','./document-worker.js',
+ './jszip.min.js','./xlsx.full.min.js','./jsQR.js',
+ './pdf.mjs','./pdf.worker.mjs'];
 const URLS=new Set(CORE.map(path=>new URL(path,SCOPE).href));
 
 self.addEventListener('install',event=>{
