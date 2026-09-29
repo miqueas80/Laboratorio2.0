@@ -13,14 +13,14 @@ const GEMINI_FALLBACK_MODEL='gemini-3.7-flash';
 const GEMINI_MODEL_CHAIN=[GEMINI_MODEL,GEMINI_FALLBACK_MODEL,'gemini-3.6-flash'];
 const GEMINI_MODEL_KEY='nexus_gemini_model_v1';
 const GEMINI_ENDPOINT='https://generativelanguage.googleapis.com/v1beta/models';
- const XKIRO_API='https://api.xkiro.com/v1';
+ const XKIRO_API='https://nexus-xkiro-gateway.proyectomj11.workers.dev';
 const XKIRO_KEY='nexus_xkiro_api_key_v1';
 const XKIRO_MODEL_CACHE_MS=10*60*1000;
 const REPO_OWNER='miqueas80';
 const REPO_NAME='';
 const REPO_BRANCH='';
 const DOC_MAX_BYTES=16*1024*1024;
-const APP_VERSION='2026.09.29-r13';
+const APP_VERSION='2026.09.29-r14';
 const INVENTORY_RECOVERY_KEY='nexus_x_inventory_recovery_v1';
 const health={storage:'sin comprobar',documents:'sin comprobar',errors:[],boot:'BOOT'};
 const LENS_EXTERNAL_CACHE_TTL=30*60*1000;
@@ -580,8 +580,7 @@ async function loadXKiroModels({force=false}={}){
 }
 
 async function testXKiroKey(key){
- if(!key)return {ok:false,message:'Pegá una API Key de xKiro.'};
-
+// La API key ya está protegida en Cloudflare; el navegador no necesita enviarla.
  try{
   const catalog=await loadXKiroModels({force:true});
   const candidates=catalog.text.slice(0,6);
@@ -594,9 +593,8 @@ async function testXKiroKey(key){
     `${XKIRO_API}/chat/completions`,
     {
      method:'POST',
-     headers:{
-      'Content-Type':'application/json',
-      'Authorization':'Bearer '+key
+          headers:{
+       'Content-Type':'application/json'
      },
      body:JSON.stringify({
       model:entry.id,
