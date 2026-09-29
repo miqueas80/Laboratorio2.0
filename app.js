@@ -690,7 +690,6 @@ function bindXKiroSettings(){
   }
  };
 }
-}
 async function aiQuery(){return assistantAsk($('#aiInput').value.trim());}
 
 function csvCell(value){const s=String(value??'');return /^[\s]*[=+@-]|^[\t\r\n]/.test(s)?"'"+s:s}
