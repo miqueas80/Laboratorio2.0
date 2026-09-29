@@ -1713,12 +1713,12 @@ async function nexusAgentTurn(userText,{speak=false}={}){
  if(route.local){localResult=await executeAssistantAction(route.local,{speak:false});actions.push({name:route.local.action,args:route.local,result:localResult});answer='LOCAL · '+fastAgentAnswer(route.local,localResult)}
  if(route.kind==='LOCAL'&&!route.local)answer='LOCAL · '+localAssistantResponse(q);
  if(route.kind!=='LOCAL'){
-  if(!state.web)answer+=(answer?'\n\n':'')+'EXTERNA · Activá Internet para consultar Gemini. Los resultados locales ya están disponibles.';
+  if(!state.web)answer+=(answer?'\n\n':'')+'EXTERNA · Activá Internet para consultar xKiro. Los resultados locales ya están disponibles.';
   else{
    try{
     // El híbrido sólo comparte nombres/fórmulas relevantes; nunca notas, ubicaciones ni el inventario completo.
     const context=route.kind==='HÍBRIDO'?(localResult?.data?.results||[]).slice(0,3).map(x=>[x.name,x.formula].filter(Boolean).join(' · ')).join('\n'):'';
-    const out=await geminiGenerate({question:route.externalQuery,context,useSearch:true});
+   const out=await xkiroGenerate({question:route.externalQuery,context,useSearch:true});
     answer+=(answer?'\n\n':'')+'EXTERNA · '+out.answer+'\n'+(out.grounded?'Fuentes: '+out.sources.map(x=>x.title+' — '+x.url).join(' | '):'Sin fuentes web verificables en la respuesta; no se confirma actualidad.');
    }catch(e){answer+=(answer?'\n\n':'')+'EXTERNA NO DISPONIBLE · '+e.message+' '+localAvailabilityMessage()}
   }
