@@ -1200,7 +1200,7 @@ async function runNexusLensPipeline(source,label='imagen',{expand=false}={}){
    try{
     const result=await cachedLensExternal('vision',provider.id+':'+fingerprint,()=>provider.analyze({imageDataUrl,context:lensContextForProvider(context)}));
     analysis=parseLensVisionPayload(result.analysis);
-    if(lensVisionQuery(analysis))context=fuseLensVisualContext(context,{...result,analysis,provider:provider.id},{expanded:expand});
+if(lensVisionQuery(analysis))context=fuseLensVisualContext(context,{...result,analysis,provider:result.provider||provider.id},{expanded:expand});
    }catch(e){context=buildNexusLensContext([...context.evidences,createLensEvidence({source:provider.id,type:'provider-status',value:'unavailable',confidence:0,local:false,metadata:{error:e.message||String(e)}})],{expanded:expand})}
   }
   const externalQuery=buildLensExternalQuery(context,analysis);
