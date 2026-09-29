@@ -1,6 +1,6 @@
 'use strict';
 // Incrementar VERSION junto con APP_VERSION cuando cambie cualquier recurso CORE.
-const VERSION='2026.09.29-r11';
+const VERSION='2026.09.29-r12';
 const SCOPE=new URL(self.registration.scope);
 const PREFIX='nexus-x-shell:'+encodeURIComponent(SCOPE.pathname)+':';
 const CACHE=PREFIX+VERSION;
@@ -15,8 +15,8 @@ self.addEventListener('install',event=>{
  event.waitUntil((async()=>{
   try{const cache=await caches.open(CACHE);await cache.addAll([...URLS].map(url=>new Request(url,{cache:'reload'})))}
   catch(error){await caches.delete(CACHE);throw error}
+  await self.skipWaiting();
  })());
- // Sin skipWaiting: todas las pestañas de la versión anterior deben cerrarse.
 });
 self.addEventListener('activate',event=>{
  event.waitUntil((async()=>{
