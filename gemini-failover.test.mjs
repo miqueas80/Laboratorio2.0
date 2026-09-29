@@ -23,5 +23,20 @@ test('sólo modelos disponibles, preferencia exitosa y abort sin failover',async
   if(String(url).includes('3.7'))return new Response('',{status:429});
   return Response.json({candidates:[{content:{parts:[{text:'OK'}]}}]});
  }});
- try{h.window.localStorage.setItem('nexus_gemini_api_key_v1','key');await h.api.geminiGenerate({question:'test'});await h.api.geminiGenerate({question:'test'});assert.equal(attempts.length,3);assert.match(attempts[2],/3.6/);abort=true;await assert.rejects(h.api.geminiGenerate({question:'test'}));assert.equal(attempts.length,4)}finally{h.close()}
+ try{h.window.localStorage.setItem('nexus_gemini_api_key_v1','key');await h.api.geminiGenerate({question:'test'});await h.api.geminiGenerate({question:'test'});assert.equal(attempts.length,4);assert.match(attempts[3],/3.6/);abort=true;await assert.rejects(h.api.geminiGenerate({question:'test'}));assert.equal(attempts.length,5)}finally{h.close()}
+});
+test('503 en dos modelos: siguiente consulta usa el último modelo válido',async()=>{
+ const attempts=[];const h=harness({fetcher:(url,opts)=>{
+  if(!opts?.body)return Response.json({models:chain.map(name=>({name:'models/'+name,supportedGenerationMethods:['generateContent']}))});
+  const model=String(url).match(/models\/(.*):generateContent/)[1];attempts.push(model);
+  return model===chain[2]?Response.json({candidates:[{content:{parts:[{text:'OK'}]}}]}):new Response('',{status:503});
+ }});
+ try{h.window.localStorage.setItem('nexus_gemini_api_key_v1','key');await h.api.geminiGenerate({question:'test'});await h.api.geminiGenerate({question:'test'});assert.deepEqual(attempts,[...chain,chain[2]])}finally{h.close()}
+});
+test('HTTP 200 sin texto continúa al siguiente modelo y concatena partes',async()=>{
+ const attempts=[];const h=harness({fetcher:(url,opts)=>{
+  if(!opts?.body)return Response.json({models:chain.slice(0,2).map(name=>({name:'models/'+name,supportedGenerationMethods:['generateContent']}))});
+  attempts.push(url);return Response.json(attempts.length===1?{candidates:[{finishReason:'SAFETY',content:{parts:[]}}]}:{candidates:[{content:{parts:[{inlineData:{}},{text:'O'},{text:'K'}]}}]});
+ }});
+ try{h.window.localStorage.setItem('nexus_gemini_api_key_v1','key');const out=await h.api.geminiGenerate({question:'test'});assert.equal(out.answer,'OK');assert.equal(out.model,chain[1]);assert.equal(attempts.length,2)}finally{h.close()}
 });
