@@ -1369,31 +1369,9 @@ function getLensVisionProvider(){
      provider:'xkiro-gateway'
     };
 
-   }catch(xkiroError){
-
-    // Gemini queda únicamente como respaldo.
-    if(!getGeminiKey()){
-     throw xkiroError;
-    }
-
-    const result=await geminiGenerate({
-     question:lensVisionPrompt(),
-     context,
-     imageDataUrl,
-     temperature:0.05,
-     maxOutputTokens:1600,
-     thinkingLevel:'low'
-    });
-
-    return {
-     analysis:parseLensVisionPayload(result.answer),
-     model:result.model,
-     provider:'gemini-byok',
-     fallbackFrom:'xkiro-gateway',
-     xkiroError:xkiroError.message||String(xkiroError)
-    };
-   }
-  }
+ }catch(xkiroError){
+ throw xkiroError;
+}
  };
 }
 function lensVisionEvidence(providerResult){
