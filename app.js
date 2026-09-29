@@ -651,22 +651,8 @@ async function testXKiroKey(key){
 }
 
 function renderXKiroSettings(){
- const input=$('#xkiroKey');
- if(!input)return;
-
- const key=getXKiroKey();
- input.value=key;
-
- const remember=$('#rememberXKiroKey');
- if(remember)remember.checked=Boolean(readStorage(XKIRO_KEY));
-
  const status=$('#xkiroStatus');
  if(!status)return;
-
- if(!key){
-  status.textContent='Sin clave configurada';
-  return;
- }
 
  if(health.xkiro?.status==='conectado'){
   status.textContent=
@@ -675,8 +661,7 @@ function renderXKiroSettings(){
    `${health.xkiro.visionModels} con visión`;
  }else{
   status.textContent=
-   `${readStorage(XKIRO_KEY)?'Clave guardada':'Clave en sesión'} · `+
-   `${health.xkiro?.status||'sin comprobar'}`;
+   `Gateway seguro · ${health.xkiro?.status||'sin comprobar'}`;
  }
 }
 
@@ -687,28 +672,13 @@ function bindXKiroSettings(){
  renderXKiroSettings();
 
  btn.onclick=async()=>{
-  const key=$('#xkiroKey').value.trim();
-
-  sessionXKiroKey=key;
   xkiroModelCache=null;
 
   try{
-   if($('#rememberXKiroKey').checked&&key){
-    writeStorage(XKIRO_KEY,key);
-   }else{
-    removeStorage(XKIRO_KEY);
-   }
-
-   if(!key){
-    health.xkiro={status:'no configurada'};
-    renderXKiroSettings();
-    return toast('Clave xKiro eliminada.');
-   }
-
    btn.disabled=true;
    toast('Comprobando xKiro…');
 
-   const result=await testXKiroKey(key);
+   const result=await testXKiroKey('');
 
    renderXKiroSettings();
    toast(result.message);
@@ -719,6 +689,7 @@ function bindXKiroSettings(){
    btn.disabled=false;
   }
  };
+}
 }
 async function aiQuery(){return assistantAsk($('#aiInput').value.trim());}
 
