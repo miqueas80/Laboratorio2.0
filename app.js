@@ -496,7 +496,7 @@ async function resolveGeminiModel(key){
  geminiModelCache={key,model,availableModelChain,expiresAt:Date.now()+15*60*1000,unavailableUntil:{},lastKnownGoodModel:null};return model;
 }
 function safeExternalUrl(value){try{const url=new URL(value);return ['https:','http:'].includes(url.protocol)?url.href:''}catch{return ''}}
-async function geminiGenerate({question,context='',useSearch=false,currentDocument=null,imageDataUrl=null,temperature=0.15,maxOutputTokens=1600}){
+ async function geminiGenerate({question,context='',useSearch=false,currentDocument=null,imageDataUrl=null,temperature=0.15,maxOutputTokens=1600,thinkingLevel=null}){
  const key=getGeminiKey();if(!key)throw geminiError('Gemini no configurado.');
  if(!navigator.onLine)throw geminiError('Sin conexión; datos locales disponibles.');
  const parts=[];
@@ -536,7 +536,7 @@ async function geminiGenerate({question,context='',useSearch=false,currentDocume
 }
 async function testGeminiKey(key){
  if(!key)return {ok:false,message:'Pegá una API Key.'};
- try{const previous=sessionGeminiKey;sessionGeminiKey=key;let out;try{out=await geminiGenerate({question:'Respondé solamente: OK',maxOutputTokens:16})}finally{sessionGeminiKey=previous}return {ok:true,message:'Respuesta comprobada · '+out.model}}
+ try{const previous=sessionGeminiKey;sessionGeminiKey=key;let out;try{out=await geminiGenerate({question:'Respondé solamente: OK',maxOutputTokens:256,thinkingLevel:'low'})}finally{sessionGeminiKey=previous}return {ok:true,message:'Respuesta comprobada · '+out.model}}
  catch(e){return {ok:false,message:e.message}}
 }
 
