@@ -1,0 +1,45 @@
+name: Gemini - diagnostico temporal
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gemini-diagnostic
+  cancel-in-progress: false
+
+jobs:
+  diagnostic:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Prueba REST minima autenticada
+        id: probe
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: node gemini-probe.mjs
+
+      - name: Dependencias del harness y tests
+        id: dependencies
+        if: ${{ !cancelled() }}
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Consulta desde la capa Gemini de NEXUS
+        if: ${{ !cancelled() && steps.probe.outcome == 'success' && steps.dependencies.outcome == 'success' }}
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: node gemini-probe.mjs --nexus
+
+      - name: Regresion Gemini sin credenciales reales
+        if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}
+        run: node --test gemini-probe.test.mjs gemini-failover.test.mjs gemini.test.mjs
