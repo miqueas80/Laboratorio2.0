@@ -197,25 +197,41 @@ button:focus-visible,a:focus-visible{outline:3px solid #157d93;outline-offset:3p
 
   </div>
 
-  <!-- XKIRO -->
-  <div class="card section">
+<!-- XKIRO -->
+<div class="card section">
 
-    <h2>xKiro AI Gateway</h2>
+  <h2>xKiro AI Gateway</h2>
 
-    <p class="muted">
-      Motor externo multi-modelo para NEXUS-X.
-      El catálogo de modelos gratuitos se detecta automáticamente.
-    </p>
+  <p class="muted">
+    Motor externo multi-modelo de NEXUS-X.
+    La conexión se realiza mediante el Gateway seguro de Cloudflare.
+  </p>
 
-    <div class="field">
-      <label>API Key de xKiro</label>
-      <input
-        id="xkiroKey"
-        type="password"
-        autocomplete="off"
-        placeholder="Pegá tu clave de xKiro aquí"
-      >
-    </div>
+  <div class="notice">
+    <strong>🔐 Gateway seguro</strong><br>
+    La API Key de xKiro está protegida fuera del navegador
+    y nunca se publica en GitHub ni se envía al cliente.<br><br>
+
+    <strong>Selección dinámica de modelos</strong><br>
+    NEXUS-X detecta automáticamente los modelos gratuitos
+    y sus capacidades disponibles.<br>
+
+    <span id="xkiroStatus">Gateway seguro · sin comprobar</span>
+  </div>
+
+  <p class="footer-note">
+    NEXUS-X utiliza xKiro para NEXUS IA, Investigación,
+    análisis de documentos y NEXUS Lens.
+    Las funciones locales siguen funcionando sin conexión.
+  </p>
+
+  <button
+    class="btn primary section"
+    id="saveXKiroBtn">
+    Comprobar conexión xKiro
+  </button>
+
+</div> 
 
     <div class="notice">
       <strong>Selección dinámica de modelos</strong><br>
