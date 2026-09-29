@@ -842,8 +842,7 @@ async function runNexusLensPipeline(source,label='imagen',{expand=false}={}){
   let analysis=null;
   const provider=getLensVisionProvider();
   if(!provider)context=buildNexusLensContext([...context.evidences,createLensEvidence({source:'vision',type:'provider-status',value:'not-configured',metadata:{message:'Reconocimiento visual externo no configurado. QR y conocimiento local siguen disponibles.'}})],{expanded:expand});
-  else if(navigator.onLine&&!state.web)context=buildNexusLensContext([...context.evidences,createLensEvidence({source:provider.id,type:'provider-status',value:'disabled'})],{expanded:expand});
-  else if(quality.value.usable&&state.web&&navigator.onLine){
+  else if(quality.value.usable&&navigator.onLine){
    setLensUiState('expanding','Analizando imagen con visión','Se envía una única fotografía al proveedor multimodal.');
    const imageDataUrl=lensImageDataUrl(frame),fingerprint=await lensImageFingerprint(imageDataUrl);
    try{
