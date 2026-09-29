@@ -13,11 +13,14 @@ const GEMINI_FALLBACK_MODEL='gemini-3.7-flash';
 const GEMINI_MODEL_CHAIN=[GEMINI_MODEL,GEMINI_FALLBACK_MODEL,'gemini-3.6-flash'];
 const GEMINI_MODEL_KEY='nexus_gemini_model_v1';
 const GEMINI_ENDPOINT='https://generativelanguage.googleapis.com/v1beta/models';
+ const XKIRO_API='https://api.xkiro.com/v1';
+const XKIRO_KEY='nexus_xkiro_api_key_v1';
+const XKIRO_MODEL_CACHE_MS=10*60*1000;
 const REPO_OWNER='miqueas80';
 const REPO_NAME='';
 const REPO_BRANCH='';
 const DOC_MAX_BYTES=16*1024*1024;
-const APP_VERSION='2026.09.29-r12';
+const APP_VERSION='2026.09.29-r13';
 const INVENTORY_RECOVERY_KEY='nexus_x_inventory_recovery_v1';
 const health={storage:'sin comprobar',documents:'sin comprobar',errors:[],boot:'BOOT'};
 const LENS_EXTERNAL_CACHE_TTL=30*60*1000;
@@ -461,7 +464,7 @@ function importDocumentFile(file){
  finally{documentJob=null;if($('#cancelDocumentBtn'))$('#cancelDocumentBtn').disabled=true}
  };const result=documentQueue.then(job,job);documentQueue=result.catch(()=>{});return result;
 }
-let sessionGeminiKey='',geminiModelCache=null;
+let sessionGeminiKey='',geminiModelCache=null,sessionXKiroKey='',xkiroModelCache=null;
 const GEMINI_COOLDOWN_MS=12*60*1000;
 function extractGeminiResponse(data){
  if(!data||typeof data!=='object'||Array.isArray(data))return {answer:'',reason:'Formato de respuesta inválido',candidateCount:0};
@@ -539,7 +542,186 @@ async function testGeminiKey(key){
  try{const previous=sessionGeminiKey;sessionGeminiKey=key;let out;try{out=await geminiGenerate({question:'Respondé solamente: OK',maxOutputTokens:1024,thinkingLevel:'low'})}finally{sessionGeminiKey=previous}return {ok:true,message:'Respuesta comprobada · '+out.model}}
  catch(e){return {ok:false,message:e.message}}
 }
+function getXKiroKey(){
+ return sessionXKiroKey||readStorage(XKIRO_KEY)||'';
+}
 
+async function loadXKiroModels({force=false}={}){
+ if(!force&&xkiroModelCache?.expiresAt>Date.now())return xkiroModelCache;
+
+ const res=await fetchTimeout(
+  `${XKIRO_API}/models`,
+  {headers:{Accept:'application/json'}},
+  9000
+ );
+
+ if(!res.ok)throw new Error('xKiro catálogo HTTP '+res.status);
+
+ const data=await res.json();
+ const models=(Array.isArray(data.data)?data.data:[])
+  .filter(m=>m&&m.id&&m.access_tier==='free');
+
+ if(!models.length)throw new Error('xKiro no devolvió modelos gratuitos.');
+
+ const text=[...models].sort(
+  (a,b)=>Number(Boolean(a.capabilities?.reasoning))-Number(Boolean(b.capabilities?.reasoning))
+ );
+
+ const vision=models.filter(m=>m.capabilities?.vision===true);
+
+ xkiroModelCache={
+  models,
+  text,
+  vision,
+  expiresAt:Date.now()+XKIRO_MODEL_CACHE_MS
+ };
+
+ return xkiroModelCache;
+}
+
+async function testXKiroKey(key){
+ if(!key)return {ok:false,message:'Pegá una API Key de xKiro.'};
+
+ try{
+  const catalog=await loadXKiroModels({force:true});
+  const candidates=catalog.text.slice(0,6);
+  const attempted=[];
+
+  for(const entry of candidates){
+   attempted.push(entry.id);
+
+   const res=await fetchTimeout(
+    `${XKIRO_API}/chat/completions`,
+    {
+     method:'POST',
+     headers:{
+      'Content-Type':'application/json',
+      'Authorization':'Bearer '+key
+     },
+     body:JSON.stringify({
+      model:entry.id,
+      messages:[
+       {role:'user',content:'Respondé solamente: OK'}
+      ],
+      max_tokens:64,
+      temperature:0
+     })
+    },
+    20000
+   );
+
+   if(res.status===401||res.status===403){
+    throw new Error('xKiro rechazó la clave (HTTP '+res.status+').');
+   }
+
+   if(!res.ok){
+    if([429,500,502,503,504].includes(res.status))continue;
+    throw new Error('xKiro HTTP '+res.status);
+   }
+
+   const data=await res.json();
+   const answer=String(data?.choices?.[0]?.message?.content||'').trim();
+
+   if(!answer)continue;
+
+   health.xkiro={
+    status:'conectado',
+    model:entry.id,
+    freeModels:catalog.models.length,
+    visionModels:catalog.vision.length,
+    attemptedModels:attempted,
+    checkedAt:new Date().toISOString()
+   };
+
+   return {
+    ok:true,
+    message:`xKiro conectado · ${entry.id} · ${catalog.models.length} free · ${catalog.vision.length} visión`
+   };
+  }
+
+  throw new Error('Ningún modelo gratuito de prueba respondió.');
+
+ }catch(e){
+  health.xkiro={
+   status:'error',
+   message:e.message,
+   checkedAt:new Date().toISOString()
+  };
+
+  return {ok:false,message:e.message};
+ }
+}
+
+function renderXKiroSettings(){
+ const input=$('#xkiroKey');
+ if(!input)return;
+
+ const key=getXKiroKey();
+ input.value=key;
+
+ const remember=$('#rememberXKiroKey');
+ if(remember)remember.checked=Boolean(readStorage(XKIRO_KEY));
+
+ const status=$('#xkiroStatus');
+ if(!status)return;
+
+ if(!key){
+  status.textContent='Sin clave configurada';
+  return;
+ }
+
+ if(health.xkiro?.status==='conectado'){
+  status.textContent=
+   `CONECTADO · ${health.xkiro.model} · `+
+   `${health.xkiro.freeModels} modelos free · `+
+   `${health.xkiro.visionModels} con visión`;
+ }else{
+  status.textContent=
+   `${readStorage(XKIRO_KEY)?'Clave guardada':'Clave en sesión'} · `+
+   `${health.xkiro?.status||'sin comprobar'}`;
+ }
+}
+
+function bindXKiroSettings(){
+ const btn=$('#saveXKiroBtn');
+ if(!btn)return;
+
+ renderXKiroSettings();
+
+ btn.onclick=async()=>{
+  const key=$('#xkiroKey').value.trim();
+
+  sessionXKiroKey=key;
+  xkiroModelCache=null;
+
+  try{
+   if($('#rememberXKiroKey').checked&&key){
+    writeStorage(XKIRO_KEY,key);
+   }else{
+    removeStorage(XKIRO_KEY);
+   }
+
+   if(!key){
+    health.xkiro={status:'no configurada'};
+    renderXKiroSettings();
+    return toast('Clave xKiro eliminada.');
+   }
+
+   btn.disabled=true;
+   toast('Comprobando xKiro…');
+
+   const result=await testXKiroKey(key);
+
+   renderXKiroSettings();
+   toast(result.message);
+
+  }catch(e){
+   toast('xKiro: '+e.message);
+  }finally{
+   btn.disabled=false;
+  }
+ };
+}
 async function aiQuery(){return assistantAsk($('#aiInput').value.trim());}
 
 function csvCell(value){const s=String(value??'');return /^[\s]*[=+@-]|^[\t\r\n]/.test(s)?"'"+s:s}
@@ -1340,7 +1522,7 @@ function bind(){
 }
 let bootPromise=null;
 function boot(){if(bootPromise)return bootPromise;bootPromise=(async()=>{
- try{bind();health.boot='STORAGE';renderGeminiSettings();renderActivity();await loadMaster();await loadCatalogMaster();health.boot='DOCUMENTS';await loadCachedDocumentIndex();health.boot=state.inventoryError||!state.docIndexReady?'DEGRADED':'READY';renderDiagnostics();
+try{bind();bindXKiroSettings();health.boot='STORAGE';renderGeminiSettings();renderActivity();await loadMaster();await loadCatalogMaster();health.boot='DOCUMENTS';await loadCachedDocumentIndex();health.boot=state.inventoryError||!state.docIndexReady?'DEGRADED':'READY';renderDiagnostics();
  setupServiceWorker();
  if(state.docIndexReady)$('#repoStatus').textContent=navigator.onLine?'Documentos locales listos':'Sin conexión · documentos locales';
  if(navigator.onLine&&githubRepo.repo)syncRepository().catch(e=>{health.errors.push({domain:'GitHub',message:e.message})});
