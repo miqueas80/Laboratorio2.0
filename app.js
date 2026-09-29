@@ -367,6 +367,7 @@ function runResearch({allowExternal=true}={}){const q=$('#researchInput').value.
 }else{
  $('#webResults').innerHTML='';
 }
+}                                              
 let researchAiEpoch=0;
 
 async function runResearchAI(q,hits=[],docHits=[]){
