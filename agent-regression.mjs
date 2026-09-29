@@ -19,11 +19,12 @@ const actionMatch = app.match(/const NEXUS_AGENT_ACTIONS=new Set\(\[([^\]]+)\]\)
 const actions = actionMatch ? [...actionMatch[1].matchAll(/'([^']+)'/g)].map(m=>m[1]) : [];
 pass('agent action registry found', actions.length > 0);
 pass('no stale chat action', !actions.includes('chat'));
+pass('no standalone OCR/Tesseract engine', !/Tesseract|LENS_TEXT_ENGINE|extractLensTextSignal|getLensTextWorker|preprocessLensTextSource/i.test(app));
 
 const toolSection = app.slice(app.indexOf('const NEXUS_AGENT_TOOL_DEFS='), app.indexOf('// Metadatos y validación únicos'));
 const toolNames = [...toolSection.matchAll(/\{name:'([^']+)'/g)].map(m=>m[1]);
 const uniqueTools = [...new Set(toolNames)];
-for (const a of actions.filter(x=>!['sequence','status','diagnostics','get_inventory','get_documents','get_activity','get_state'].includes(x))) {
+for (const a of actions.filter(x=>!['sequence','status','diagnostics','get_inventory','get_documents','get_lens_context','get_activity','get_state'].includes(x))) {
   pass(`executor branch ${a}`, app.includes(`type==='${a}'`), 'missing executor branch');
 }
 for (const t of uniqueTools) pass(`tool registered ${t}`, actions.includes(t), 'tool is not in action registry');
@@ -48,6 +49,9 @@ const parserCases = [
   ['abre inventario', {action:'open_view',query:'inventory'}],
   ['abrí documentos', {action:'open_view',query:'documents'}],
   ['mostrame qr', {action:'open_qr'}],
+  ['abrí nexus lens', {action:'open_lens'}],
+  ['abrí ocr', null],
+  ['identificá código NEXUS-X-0001', {action:'identify_lens_code',code:'nexus-x-0001'}],
   ['buscá en inventario alcohol', {action:'search_inventory',query:'alcohol'}],
   ['dónde está ácido nítrico', {action:'search_inventory',query:'acido nitrico'}],
   ['abrí la ficha alcohol', {action:'open_item',query:'alcohol'}],

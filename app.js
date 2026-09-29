@@ -16,13 +16,14 @@ const REPO_OWNER='miqueas80';
 const REPO_NAME='';
 const REPO_BRANCH='';
 const DOC_MAX_BYTES=16*1024*1024;
-const APP_VERSION='2026.09.28-r3';
+const APP_VERSION='2026.09.29-r8';
 const INVENTORY_RECOVERY_KEY='nexus_x_inventory_recovery_v1';
 const health={storage:'sin comprobar',documents:'sin comprobar',errors:[],boot:'BOOT'};
-const OCR_ENGINE_URL='https://cdn.jsdelivr.net/npm/tesseract.js@6.0.0/dist/tesseract.min.js';
-const OCR_LANG=['spa','eng'];
+const LENS_EXTERNAL_CACHE_TTL=30*60*1000;
+const LENS_EXTERNAL_CACHE_LIMIT=20;
 const VOICE_WAKE=/\bnexus(?:[- ]?x)?\b/i;
-let ocrWorkerPromise=null;let ocrBusy=false;let voiceRecognition=null;let voiceListening=false;let voiceMonitoring=false;let voiceSpeaking=false;let voiceAwaitingCommand=false;let voiceWakeTimer=null;let voiceRestartTimer=null;let voiceCommandQueue=Promise.resolve();
+let voiceRecognition=null;let voiceListening=false;let voiceMonitoring=false;let voiceSpeaking=false;let voiceAwaitingCommand=false;let voiceWakeTimer=null;let voiceRestartTimer=null;let voiceCommandQueue=Promise.resolve();
+const lensExternalCache=new Map(),lensExternalPending=new Map();
 const GEMINI_KEY='nexus_gemini_api_key_v1';
 const WEB_TIMEOUT=6500;
 function storageFailure(error){
@@ -35,8 +36,9 @@ function readStorage(key){try{return localStorage.getItem(key)}catch(e){storageF
 function writeStorage(key,value){try{localStorage.setItem(key,value);health.storage='disponible'}catch(e){throw new Error(storageFailure(e),{cause:e})}}
 function removeStorage(key){try{localStorage.removeItem(key)}catch(e){throw new Error(storageFailure(e),{cause:e})}}
 function readJsonStorage(key,fallback){try{const raw=readStorage(key);return raw?JSON.parse(raw):fallback}catch{return fallback}}
-const state={agentTelemetry:{mode:'READY',ms:0,actions:0},agentAudit:[],agentHistory:[],inventory:[],view:'dashboard',web:false,stream:null,scanBusy:false,visionStream:null,visionBusy:false,docs:[],lastQuery:'',activity:[],favorites:new Set(Array.isArray(readJsonStorage('nexus_x_favorites_v1',[]))?readJsonStorage('nexus_x_favorites_v1',[]):[]),docIndexReady:false,docSyncing:false};
+const state={agentTelemetry:{mode:'READY',ms:0,actions:0},agentAudit:[],agentHistory:[],inventory:[],catalog:[],view:'dashboard',web:false,stream:null,scanBusy:false,lensStream:null,lensBusy:false,lensLastContext:null,docs:[],lastQuery:'',activity:[],favorites:new Set(Array.isArray(readJsonStorage('nexus_x_favorites_v1',[]))?readJsonStorage('nexus_x_favorites_v1',[]):[]),docIndexReady:false,docSyncing:false};
 const MASTER_URL='inventory.json';
+const CATALOG_URL='catalogo_maestro.json';
 function detectGitHubRepo(){
  const host=location.hostname.toLowerCase();
  const parts=location.pathname.split('/').filter(Boolean);
@@ -114,7 +116,7 @@ function docType(path){const ext=(String(path).split('.').pop()||'').toLowerCase
 function chunkText(text,size=1100,overlap=140){const clean=String(text||'').replace(/\r/g,'').replace(/[ \t]+/g,' ').replace(/\n{3,}/g,'\n\n').trim();const out=[];if(!clean)return out;let start=0;while(start<clean.length){let end=Math.min(clean.length,start+size);if(end<clean.length){const cut=clean.lastIndexOf(' ',end);if(cut>start+500)end=cut}const value=clean.slice(start,end).trim();if(value)out.push(value);if(end>=clean.length)break;start=Math.max(end-overlap,start+1)}return out}
 function entityRelations(text,doc){const raw=String(text||'');const nt=norm(raw);const rel=[];const seen=new Set();for(const r of state.inventory){const candidates=[{value:r.id,weight:100,kind:'ID'},{value:r.formula,weight:85,kind:'fórmula'},{value:r.name,weight:70,kind:'nombre'}].filter(x=>x.value&&norm(x.value).length>=4).map(x=>({...x,norm:norm(x.value)}));const matched=candidates.filter(x=>x.norm&&nt.includes(x.norm));if(!matched.length||seen.has(r.id))continue;const strong=matched.some(x=>x.kind==='ID'||x.kind==='fórmula'||x.norm.length>=8);if(!strong)continue;const snippets=[];for(const term of matched.slice(0,2)){const pos=nt.indexOf(term.norm);if(pos>=0)snippets.push(raw.slice(Math.max(0,pos-180),Math.min(raw.length,pos+420)).replace(/\s+/g,' ').trim())}seen.add(r.id);rel.push({type:'document→entity',entityId:r.id,entityName:r.name,reason:'mención directa',terms:matched.map(x=>x.value),snippets,confidence:Math.min(100,Math.max(...matched.map(x=>x.weight)))})}return rel.sort((a,b)=>(b.confidence||0)-(a.confidence||0))}
 async function indexDocument({name,path,text,type,size=0,source='local',url='',blob=null,mime='',fingerprint='',revision='',createOnly=false}){const clean=String(text||'').trim();const chunks=chunkText(clean);const relations=entityRelations(clean,{name,path});const doc={name,path:path||name,type:type||docType(name),size:Number(size||0),source,text:clean,chunks,relations,indexedAt:new Date().toISOString(),url,blob,mime:mime||blob?.type||'',fingerprint,revision};checkDocumentCancellation();await putDoc(doc,{createOnly});const i=state.docs.findIndex(x=>x.path===doc.path);const meta={...doc,text:clean,chunks,relations};if(i>=0)state.docs[i]=meta;else state.docs.push(meta);state.docIndexReady=true;renderDocuments();renderDashboard();try{state.dataChannel?.postMessage({type:'documents-changed'})}catch(e){health.errors.push({domain:'Document notification',message:e.message})}return doc}
-function documentSummary(d){const lowText=d.type==='PDF'&&norm(d.text||'').replace(/pagina\s+\d+/g,'').trim().length<40;const relationCount=(d.relations||[]).length;return `<div class="result-card doc-card"><div style="display:flex;justify-content:space-between;gap:10px;align-items:center"><div><strong>📄 ${escapeHtml(d.name)}</strong><div class="muted">${escapeHtml(d.type)} · ${d.chunks?.length||0} fragmentos · ${relationCount} conexiones · ${escapeHtml(d.source||'local')}</div></div><button class="btn teal" data-open-doc="${escapeHtml(d.path)}">Abrir visor</button></div><div>${escapeHtml(d.path||d.name)}</div>${lowText?'<div class="notice warn">PDF con poco texto extraíble. El original se conserva; usá OCR opcional para ampliar su búsqueda.</div>':''}${relationCount?`<div class="footer-note">Relacionado con: ${d.relations.slice(0,6).map(r=>escapeHtml(r.entityId+' · '+r.entityName)).join(' · ')}</div>`:''}</div>`}
+function documentSummary(d){const lowText=d.type==='PDF'&&norm(d.text||'').replace(/pagina\s+\d+/g,'').trim().length<40;const relationCount=(d.relations||[]).length;return `<div class="result-card doc-card"><div style="display:flex;justify-content:space-between;gap:10px;align-items:center"><div><strong>📄 ${escapeHtml(d.name)}</strong><div class="muted">${escapeHtml(d.type)} · ${d.chunks?.length||0} fragmentos · ${relationCount} conexiones · ${escapeHtml(d.source||'local')}</div></div><button class="btn teal" data-open-doc="${escapeHtml(d.path)}">Abrir visor</button></div><div>${escapeHtml(d.path||d.name)}</div>${lowText?'<div class="notice warn">PDF con poco texto extraíble. El original se conserva; NEXUS LENS podrá usar una imagen como señal auxiliar en una fase posterior.</div>':''}${relationCount?`<div class="footer-note">Relacionado con: ${d.relations.slice(0,6).map(r=>escapeHtml(r.entityId+' · '+r.entityName)).join(' · ')}</div>`:''}</div>`}
 function renderDocuments(){const el=$('#documentList');if(!el)return;if(state.docSyncing)$('#repoStatus').textContent='Indexando documentos…';if(!state.docs.length){el.innerHTML='<div class="notice">Sin documentos indexados. Subí PDF, Word, Excel, CSV, TXT o Markdown al repositorio y sincronizá, o cargalos manualmente.</div>';return}el.innerHTML=`<div class="notice"><strong>${state.docs.length} documento(s) indexado(s).</strong> La búsqueda cruza documentos, materiales, fórmulas y protocolos. Abrí cualquier archivo dentro de NEXUS-X.</div>`+state.docs.map(documentSummary).join('');$$('[data-open-doc]').forEach(b=>b.onclick=()=>openDocumentViewer(b.dataset.openDoc))}
 const searchMemo=new WeakMap();
 const SEARCH_STOP=new Set('de del la el los las un una unos unas en sobre para por con y que tenemos hay nuestro nuestra documento documentos archivo archivos material materiales sustancia sustancias muestra muestrame mostrame buscar busca buscame nexus'.split(' '));
@@ -264,12 +266,20 @@ async function loadMaster({restore=false}={}){
   renderAll();return true;
  }catch(e){state.inventoryError='No se pudo abrir el inventario. '+e.message;health.errors.push({domain:'Inventory',message:state.inventoryError});toast(state.inventoryError);renderAll();return false}
 }
+async function loadCatalogMaster(){
+ try{
+  const res=await fetchTimeout(CATALOG_URL,{cache:'no-store'},8000);if(!res.ok)throw new Error(`HTTP ${res.status}`);
+  const data=await res.json(),rows=Array.isArray(data?.sheets?.Hoja1?.rows)?data.sheets.Hoja1.rows:[];
+  state.catalog=rows.map((row,i)=>normalizeRecord({id:row._NEXUS_ID||'',originalNumber:row['Nº'],name:row['Sustancia│Mezcla│Material'],formula:row['Fórmula'],physicalState:row['Estado Físico'],presentation:row['Presentación (c/d: se desconoce la cantidad│s: sólido│l: liquido)'],originalPackage:row['Envase original '],expiry:row['Fecha de envasado o vencimiento'],location:row['Ubicaciónen el armario'],notes:row.Observaciones,source:'catalogo_maestro.json'},i+1)).filter(r=>r.name.trim());
+  return state.catalog;
+ }catch(e){state.catalog=[];health.errors.push({domain:'Catalog',message:'No se pudo abrir el catálogo: '+(e.message||e)});return []}
+}
 const modalOpeners=new WeakMap();
 function showModal(id){const el=$('#'+id);if(!el)return;modalOpeners.set(el,DOM.activeElement);el.classList.add('open');el.setAttribute('role','dialog');el.setAttribute('aria-modal','true');const title=$('h2',el);if(title){title.id=title.id||id+'Title';el.setAttribute('aria-labelledby',title.id)}el.tabIndex=-1;($('.close,button,input',el)||el).focus();$('.app').inert=true}
 function hideModal(id){const el=$('#'+id);if(!el)return;el.classList.remove('open');$('.app').inert=$$('.modal-backdrop.open').length>0;modalOpeners.get(el)?.focus();if(id==='documentViewerModal'){documentViewEpoch++;documentLoadingTask?.destroy().catch(()=>{});documentLoadingTask=null;activeDocument=null}}
 function initAccessibility(){
  $$('.field').forEach(field=>{const label=$('label',field),input=$('input,select,textarea',field);if(label&&input?.id)label.htmlFor=input.id});
- const labels={globalSearch:'Buscar en NEXUS-X',inventorySearch:'Buscar inventario',researchInput:'Consulta de investigación',aiInput:'Orden para NEXUS',documentAIInput:'Pregunta a Gemini sobre el documento',locationFilter:'Filtrar por ubicación',statusFilter:'Filtrar por vencimiento',qrCameraSelect:'Elegir cámara',manualQr:'Código QR manual',settingsBtn:'Abrir ajustes',commandBtn:'Abrir paleta de comandos',calPrev:'Mes anterior',calNext:'Mes siguiente',ocrText:'Texto OCR'};
+ const labels={globalSearch:'Buscar en NEXUS-X',inventorySearch:'Buscar inventario',researchInput:'Consulta de investigación',aiInput:'Orden para NEXUS',documentAIInput:'Pregunta a Gemini sobre el documento',locationFilter:'Filtrar por ubicación',statusFilter:'Filtrar por vencimiento',qrCameraSelect:'Elegir cámara',manualQr:'Código QR manual',settingsBtn:'Abrir ajustes',commandBtn:'Abrir paleta de comandos',calPrev:'Mes anterior',calNext:'Mes siguiente'};
  for(const [id,label] of Object.entries(labels))$('#'+id)?.setAttribute('aria-label',label);
  $('#toast').setAttribute('role','status');$('#toast').setAttribute('aria-live','polite');
  DOM.addEventListener('keydown',e=>{const modal=$$('.modal-backdrop.open').at(-1);if(!modal)return;if(e.key==='Escape'){e.preventDefault();hideModal(modal.id)}else if(e.key==='Tab'){const nodes=$$('button,input,select,textarea,a[href],[tabindex="0"]',modal).filter(x=>!x.disabled&&x.getClientRects().length);if(!nodes.length){e.preventDefault();modal.focus();return}const first=nodes[0],last=nodes.at(-1);if(e.shiftKey&&(DOM.activeElement===first||!modal.contains(DOM.activeElement))){e.preventDefault();last.focus()}else if(!e.shiftKey&&(DOM.activeElement===last||!modal.contains(DOM.activeElement))){e.preventDefault();first.focus()}}});
@@ -520,7 +530,7 @@ async function collectDiagnostics(){
   try{
    if(!globalThis.caches)checks.offlineCache={supported:false,complete:false};
    else{const scope=new URL(registration?.scope||'./',location.href),name='nexus-x-shell:'+encodeURIComponent(scope.pathname)+':'+APP_VERSION;
-    const required=['./','index.html','app.js','manifest.webmanifest','icon.svg','icon-192.png','icon-512.png','inventory.json','document-worker.js','jszip.min.js','xlsx.full.min.js','jsQR.js','pdf.mjs','pdf.worker.mjs'];
+    const required=['./','index.html','app.js','manifest.webmanifest','icon.svg','icon-192.png','icon-512.png','inventory.json','catalogo_maestro.json','document-worker.js','jszip.min.js','xlsx.full.min.js','jsQR.js','pdf.mjs','pdf.worker.mjs'];
     const exists=(await caches.keys()).includes(name),missing=[];if(exists){const cache=await caches.open(name);for(const path of required)if(!await cache.match(new URL(path,scope).href))missing.push(path)}else missing.push(...required);
     checks.offlineCache={supported:true,cache:name,complete:exists&&!missing.length,missing};
    }
@@ -610,131 +620,193 @@ function openCalendar(){calCursor=new Date();$('#calDate').value=isoDate(calCurs
 function addCalendarEvent(){const date=$('#calDate').value,text=$('#calEvent').value.trim();if(!date||!text){toast('Indicá fecha y evento.');return}const events=calendarEvents();events.push({date,text});events.sort((a,b)=>a.date.localeCompare(b.date));try{saveCalendarEvents(events)}catch(e){return toast('No se guardó: '+e.message)}$('#calEvent').value='';renderCalendar();saveActivity(`Evento agregado: ${text}`);toast('Evento agregado al calendario.')}
 
 
-async function requestVisionCameraPermission({silent=false}={}){
- if(!navigator.mediaDevices?.getUserMedia){const msg='La cámara no está disponible. Usá HTTPS o un navegador compatible.';if(!silent)toast(msg);$('#visionStatus')&&( $('#visionStatus').textContent=msg);return false}
+async function requestLensCameraPermission({silent=false}={}){
+ if(!navigator.mediaDevices?.getUserMedia){const msg='La cámara no está disponible. Usá HTTPS o un navegador compatible.';if(!silent)toast(msg);$('#lensStatus')&&( $('#lensStatus').textContent=msg);return false}
  try{
-  if(navigator.permissions?.query){try{const p=await navigator.permissions.query({name:'camera'});if(p.state==='denied'){const msg='Permiso de cámara bloqueado para NEXUS-X.';if(!silent)toast(msg);$('#visionStatus')&&( $('#visionStatus').textContent=msg);return false}}catch{}}
-  const s=await navigator.mediaDevices.getUserMedia({video:true,audio:false});s.getTracks().forEach(t=>t.stop());if($('#visionStatus'))$('#visionStatus').textContent='Permiso de cámara concedido.';return true;
- }catch(e){const msg=e.name==='NotAllowedError'?'Permiso de cámara denegado.':e.name==='NotFoundError'?'No se encontró una cámara.':`No se pudo acceder a la cámara: ${e.message||e}`;if(!silent)toast(msg);if($('#visionStatus'))$('#visionStatus').textContent=msg;return false}
+  if(navigator.permissions?.query){try{const p=await navigator.permissions.query({name:'camera'});if(p.state==='denied'){const msg='Permiso de cámara bloqueado para NEXUS-X.';if(!silent)toast(msg);$('#lensStatus')&&( $('#lensStatus').textContent=msg);return false}}catch{}}
+  const s=await navigator.mediaDevices.getUserMedia({video:true,audio:false});s.getTracks().forEach(t=>t.stop());if($('#lensStatus'))$('#lensStatus').textContent='Permiso de cámara concedido.';return true;
+ }catch(e){const msg=e.name==='NotAllowedError'?'Permiso de cámara denegado.':e.name==='NotFoundError'?'No se encontró una cámara.':`No se pudo acceder a la cámara: ${e.message||e}`;if(!silent)toast(msg);if($('#lensStatus'))$('#lensStatus').textContent=msg;return false}
 }
-async function openVisionStream(){
+async function openLensStream(){
  if(!navigator.mediaDevices?.getUserMedia)return null;
  const devices=await listCameraDevices();const labeled=devices.filter(d=>d.label);
  const preferred=[...labeled].sort((a,b)=>cameraLabelScore(b)-cameraLabelScore(a))[0]?.deviceId||null;
  const constraints=preferred?{video:{deviceId:{exact:preferred},width:{ideal:1280},height:{ideal:720}},audio:false}:{video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720}},audio:false};
  return navigator.mediaDevices.getUserMedia(constraints);
 }
-async function startVisionCamera(){
+async function startLensCamera(){
  if(!navigator.mediaDevices?.getUserMedia){toast('La cámara no está disponible en este navegador/contexto.');return false}
- stopVisionCamera();try{
-  setView('vision');state.visionStream=await openVisionStream();const v=$('#visionVideo');if(!v)throw new Error('Módulo de visión no disponible.');v.srcObject=state.visionStream;await v.play();$('#visionStage')?.classList.remove('black');if($('#visionStatus'))$('#visionStatus').textContent='Cámara de visión activa · lista para analizar.';return true;
- }catch(e){stopVisionCamera();toast('No se pudo iniciar la cámara de visión: '+(e.message||e));return false}
+ stopLensCamera();try{
+  setView('lens');state.lensStream=await openLensStream();const v=$('#lensVideo');if(!v)throw new Error('Módulo NEXUS LENS no disponible.');v.srcObject=state.lensStream;await v.play();$('#lensStage')?.classList.remove('black');if($('#lensStatus'))$('#lensStatus').textContent='Cámara NEXUS LENS activa · lista para identificar.';const camera=$('#lensCameraState'),hint=$('#lensFrameHint');if(camera){camera.dataset.state='ready';camera.innerHTML='<i></i>Cámara activa'}if(hint)hint.textContent='Centrar objeto, etiqueta o código';if(!state.lensLastContext)setLensUiState(navigator.onLine?'ready':'offline',navigator.onLine?'Cámara lista · modo local':'Modo local · sin conexión',navigator.onLine?'Apuntá y tocá Analizar para capturar una imagen.':'La cámara y las búsquedas locales siguen disponibles.');return true;
+ }catch(e){stopLensCamera();toast('No se pudo iniciar la cámara NEXUS LENS: '+(e.message||e));return false}
 }
-function stopVisionCamera(){if(state.visionStream){state.visionStream.getTracks().forEach(t=>t.stop());state.visionStream=null}const v=$('#visionVideo');if(v)v.srcObject=null;$('#visionStage')?.classList.add('black');if($('#visionStatus'))$('#visionStatus').textContent='Cámara de visión detenida.'}
-async function analyzeCurrentVisionCamera(){
- const v=$('#visionVideo');if(!v||!state.visionStream||v.readyState<2){toast('Primero concedé el permiso e iniciá la cámara de visión.');return {ok:false,error:'Cámara de visión no iniciada'}}
- try{const c=DOM.createElement('canvas');c.width=Math.min(v.videoWidth||1280,2200);c.height=Math.min(v.videoHeight||720,2200);const ctx=c.getContext('2d',{willReadFrequently:true});ctx.drawImage(v,0,0,c.width,c.height);const imageDataUrl=canvasToDataUrl(c);const r=await ocrImageSource(c,'captura de visión');const analysis=await analyzeSubstance(r.text,{canvas:c,imageDataUrl,source:'cámara de visión',ocrQualityScore:r.quality});saveActivity('Análisis visual de sustancia realizado desde módulo de visión');return {ok:true,ocr:{text:r.text,quality:r.quality},analysis:{local:analysis?.local?{id:analysis.local.r?.id,name:analysis.local.r?.name,formula:analysis.local.r?.formula}:null,vision:analysis?.vision||null,web:analysis?.web||{results:[]}}};}catch(e){console.error(e);toast('No se pudo analizar la cámara de visión: '+(e.message||e));return {ok:false,error:e.message||String(e)}}
-}
+function stopLensCamera(){if(state.lensStream){state.lensStream.getTracks().forEach(t=>t.stop());state.lensStream=null}const v=$('#lensVideo');if(v)v.srcObject=null;$('#lensStage')?.classList.add('black');if($('#lensStatus'))$('#lensStatus').textContent='Cámara NEXUS LENS detenida.';const camera=$('#lensCameraState'),hint=$('#lensFrameHint');if(camera){camera.dataset.state='offline';camera.innerHTML='<i></i>Cámara detenida'}if(hint)hint.textContent='Sin imagen seleccionada';if(!state.lensLastContext)setLensUiState('offline','Modo local · cámara detenida','Podés analizar una foto sin iniciar la cámara.');}
 
-async function getOcrWorker(){
-  if(ocrWorkerPromise)return ocrWorkerPromise;
-  ocrWorkerPromise=(async()=>{
-    await loadScript(OCR_ENGINE_URL,'Tesseract');
-    if(!globalThis.Tesseract?.createWorker)throw new Error('Motor OCR no disponible.');
-    const worker=await Tesseract.createWorker(OCR_LANG,1,{logger:m=>{
-      const p=Number(m?.progress||0);const bar=$('#ocrProgressBar');if(bar)bar.style.width=`${Math.max(0,Math.min(100,p*100))}%`;
-      const st=$('#ocrStatus');if(st&&m?.status)st.textContent=`OCR: ${m.status} · ${Math.round(p*100)}%`;
-    }});
-    try{await worker.setParameters({preserve_interword_spaces:'1'});}catch{}
-    return worker;
-  })().catch(e=>{ocrWorkerPromise=null;throw e});
-  return ocrWorkerPromise;
+function createLensEvidence({source,type,value,confidence=0,local=true,metadata={}}={}){
+ const score=Math.max(0,Math.min(100,Math.round(Number(confidence)||0)));
+ return {source:String(source||'unknown'),type:String(type||'observation'),value:value??null,confidence:score,local:Boolean(local),metadata:metadata&&typeof metadata==='object'&&!Array.isArray(metadata)?metadata:{}};
 }
-function preprocessOcrSource(source,{mode='gray',scaleCap=3}={}){
-  const maxW=3000,maxH=4200;let w=source.naturalWidth||source.videoWidth||source.width,h=source.naturalHeight||source.videoHeight||source.height;if(!w||!h)throw new Error('La imagen no tiene dimensiones válidas.');
-  const scale=Math.min(scaleCap,maxW/w,maxH/h);w=Math.max(1,Math.round(w*scale));h=Math.max(1,Math.round(h*scale));
-  const c=DOM.createElement('canvas');c.width=w;c.height=h;const ctx=c.getContext('2d',{willReadFrequently:true});ctx.drawImage(source,0,0,w,h);
-  const img=ctx.getImageData(0,0,w,h),d=img.data;
-  if(mode==='color'){ctx.putImageData(img,0,0);return c;}
-  const gray=new Uint8Array(w*h);
-  for(let i=0,p=0;i<d.length;i+=4,p++)gray[p]=Math.max(0,Math.min(255,Math.round(.299*d[i]+.587*d[i+1]+.114*d[i+2])));
-  for(let p=0;p<gray.length;p++){let v=gray[p];if(mode==='contrast')v=Math.max(0,Math.min(255,Math.round((v-128)*1.85+128)));if(mode==='binary'){let sum=0,n=0;const x=p%w,y=Math.floor(p/w);for(let yy=-2;yy<=2;yy++)for(let xx=-2;xx<=2;xx++){const nx=x+xx,ny=y+yy;if(nx>=0&&nx<w&&ny>=0&&ny<h){sum+=gray[ny*w+nx];n++}}v=gray[p] < (sum/n-8) ? 0 : 255;}d[p*4]=d[p*4+1]=d[p*4+2]=v;d[p*4+3]=255;}
-  ctx.putImageData(img,0,0);return c;
+function mergeLensEvidence(...sets){
+ const out=[],seen=new Set();
+ for(const evidence of sets.flat()){
+  if(!evidence)continue;const recordId=evidence.metadata?.record?.id||'',path=evidence.value?.path||'',value=typeof evidence.value==='string'?evidence.value.slice(0,240):evidence.value?.id||evidence.value?.hypothesis||'';
+  const key=[evidence.source,evidence.type,recordId,path,value,evidence.metadata?.match||''].join('|');if(seen.has(key))continue;seen.add(key);out.push(evidence);
+ }
+ return out;
 }
-function normalizeOcrText(text){return String(text||'').replace(/[|¦]/g,'I').replace(/[“”„]/g,'"').replace(/[‘’]/g,"'").replace(/\u00ad/g,'').replace(/[ \t]+/g,' ').replace(/\n{3,}/g,'\n\n').split('\n').map(x=>x.trim()).filter((x,i,a)=>x||a[i-1]).join('\n').trim();}
-function ocrQuality(text,confidence){const clean=normalizeOcrText(text),letters=(clean.match(/[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]/g)||[]).length,digits=(clean.match(/\d/g)||[]).length,noise=(clean.match(/[^\p{L}\p{N}\s.,:;()\-+%/]/gu)||[]).length;const len=clean.length||1;const noiseRatio=noise/len;let score=Math.round(Number(confidence)||0);if(letters>=12)score+=8;if(digits>=1)score+=4;if(noiseRatio>.16)score-=20;return Math.max(0,Math.min(100,score));}
-async function ocrImageSource(source,name='imagen'){
-  if(ocrBusy)throw new Error('Ya hay un OCR en ejecución.');
-  ocrBusy=true;const bar=$('#ocrProgressBar'),status=$('#ocrStatus'),out=$('#ocrOutput');if(bar)bar.style.width='1%';if(status)status.textContent=`Preparando OCR avanzado: ${name}`;
-  try{
-    const worker=await getOcrWorker();
-    const passes=[['color','Texto original'],['gray','Grises mejorados'],['binary','Binarización adaptativa']];const results=[];
-    for(let i=0;i<passes.length;i++){
-      const [mode,label]=passes[i];if(status)status.textContent=`OCR avanzado · ${label} (${i+1}/${passes.length})…`;
-      const canvas=preprocessOcrSource(source,{mode});
-      try{await worker.setParameters({tessedit_pageseg_mode:mode==='color'?'6':'11'});}catch{}
-      const result=await worker.recognize(canvas,{rotateAuto:true},{blocks:true});
-      const text=normalizeOcrText(result?.data?.text||'');const confidence=Math.round(Number(result?.data?.confidence||0));results.push({mode,text,confidence,quality:ocrQuality(text,confidence),canvas});
-      if(bar)bar.style.width=`${Math.round(((i+1)/passes.length)*92)}%`;
-    }
-    results.sort((a,b)=>b.quality-a.quality);const best=results[0]||{text:'',confidence:0,quality:0,canvas:preprocessOcrSource(source)};
-    const distinct=[...new Set(results.map(r=>r.text).filter(Boolean))];const consensus=distinct.length>1?results.filter(r=>r.text&&r.text.length>20).slice(0,2).map(r=>r.text).join('\n---\n'):best.text;
-    const finalText=normalizeOcrText(best.text||consensus);if(out)out.textContent=finalText||'No se reconoció texto con suficiente claridad.';
-    if(status)status.textContent=`OCR avanzado terminado · calidad ${best.quality}% · confianza Tesseract ${best.confidence}% · ${finalText.length} caracteres · ${results.length} pasadas.`;
-    if(bar)bar.style.width='100%';
-    return {text:finalText,confidence:best.confidence,quality:best.quality,canvas:best.canvas,passes:results};
-  }finally{ocrBusy=false;}
+function lensMatchesFromText(records,text){
+ const nq=norm(text||'');if(!nq)return [];
+ const tokens=[...new Set(nq.split(/[^a-z0-9áéíóúüñ]+/i).filter(t=>t.length>=3))];
+ return records.map(r=>{
+  const fields=[r.id,r.name,r.formula,r.originalPackage,r.presentation,r.notes].map(norm).filter(Boolean);const hay=fields.join(' ');let score=0;let exactField=false;
+  if(r.name&&nq.includes(norm(r.name))){score+=180;exactField=true}if(r.formula&&nq.includes(norm(r.formula))){score+=150;exactField=true}if(r.id&&nq.includes(norm(r.id))){score+=200;exactField=true}if(r.originalPackage&&nq.includes(norm(r.originalPackage)))score+=80;
+  const nameTokens=norm(r.name).split(/[^a-z0-9áéíóúüñ]+/i).filter(t=>t.length>=3);for(const t of nameTokens)if(tokens.includes(t))score+=24;for(const t of tokens)if(t.length>=5&&hay.includes(t))score+=4;
+  return {r,score,exactField};
+ }).filter(x=>x.score>=45).sort((a,b)=>b.score-a.score).slice(0,8);
 }
-function canvasToDataUrl(canvas){return canvas.toDataURL('image/jpeg',.9);}
-function inventoryMatchesFromText(text){
-  const nq=norm(text||'');if(!nq)return [];
-  const tokens=[...new Set(nq.split(/[^a-z0-9áéíóúüñ]+/i).filter(t=>t.length>=3))];
-  return state.inventory.map(r=>{
-    const fields=[r.name,r.formula,r.originalPackage,r.presentation,r.notes].map(norm).filter(Boolean);const hay=fields.join(' ');let score=0;let exactField=false;
-    if(r.name&&nq.includes(norm(r.name))){score+=180;exactField=true}if(r.formula&&nq.includes(norm(r.formula))){score+=150;exactField=true}if(r.originalPackage&&nq.includes(norm(r.originalPackage)))score+=80;
-    const nameTokens=norm(r.name).split(/[^a-z0-9áéíóúüñ]+/i).filter(t=>t.length>=3);for(const t of nameTokens)if(tokens.includes(t))score+=24;for(const t of tokens)if(t.length>=5&&hay.includes(t))score+=4;
-    return {r,score,exactField};
-  }).filter(x=>x.score>=45).sort((a,b)=>b.score-a.score).slice(0,8);
+async function ensureLensIndexedDocuments(){
+ try{if(!state.docIndexReady)await loadCachedDocumentIndex();return createLensEvidence({source:'indexeddb',type:'index-state',value:'ready',confidence:100,metadata:{database:DOC_DB,store:DOC_STORE,count:state.docs.length}})}
+ catch(e){return createLensEvidence({source:'indexeddb',type:'index-state',value:'unavailable',confidence:0,metadata:{database:DOC_DB,store:DOC_STORE,error:e.message||String(e)}})}
 }
-function strongLocalMatch(candidates,ocrQualityScore){
-  return candidates.filter(x=>x.exactField&&ocrQualityScore>=72&&x.score>=150).sort((a,b)=>b.score-a.score)[0]||null;
+function searchLensDocuments(query){
+ if(!String(query||'').trim())return [];
+ return documentSearch(query).slice(0,8).map(hit=>createLensEvidence({source:'indexeddb',type:'document-context',value:{name:hit.d.name,path:hit.d.path,excerpt:hit.chunk.slice(0,700)},confidence:Math.min(90,45+Number(hit.score||0)),metadata:{path:hit.d.path,score:hit.score,index:hit.index,count:hit.count||1}}));
 }
-function buildOcrQuery(text){return String(text||'').replace(/\s+/g,' ').replace(/[^\p{L}\p{N}%+.,:;()\-\/ ]/gu,' ').trim().slice(0,420);}
-async function analyzeVisionLabel(imageDataUrl,ocrText=''){
-  const key=getGeminiKey()||'';if(!state.web||!navigator.onLine||!key||!imageDataUrl)return null;
-  const prompt=`Analizá esta fotografía de una etiqueta/envase de laboratorio como un sistema de identificación. No adivines. Extraé SOLO lo visible o claramente legible. Devolvé JSON válido con estas claves: name, formula, cas, manufacturer, product, concentration, physical_state, identifiers, pictograms, hazards, precautions, confidence, evidence. pictograms y hazards y precautions deben ser arrays. confidence es 0-100. Si algo no se ve o no se puede verificar, usá null o [] y no lo inventes. Si hay un pictograma GHS, describilo solo si realmente es visible. OCR previo, que puede contener errores: ${JSON.stringify(String(ocrText||'').slice(0,2500))}`;
-  try{
-    const out=await geminiGenerate({question:prompt,context:'El OCR es auxiliar y NO es evidencia definitiva.',imageDataUrl});
-    const raw=out.answer.replace(/^```json\s*/i,'').replace(/```$/,'').trim();const parsed=JSON.parse(raw);return parsed&&typeof parsed==='object'?parsed:null;
-  }catch(e){console.warn('Visión Gemini',e);return null}
+function buildNexusLensContext(evidences,{expanded=false}={}){
+ const rows=mergeLensEvidence(Array.isArray(evidences)?evidences.filter(e=>e&&typeof e==='object'):[]);
+ const identities=rows.filter(e=>e.type==='identity'&&e.metadata?.record);
+ const confirmed=identities.find(e=>e.metadata.match==='exact-code'&&e.confidence===100&&e.local);
+ const candidate=confirmed||identities.sort((a,b)=>b.confidence-a.confidence)[0]||null;
+ const visual=rows.filter(e=>e.type==='visual-hypothesis');
+ const externalInformation=rows.filter(e=>e.type==='external-information');
+ const status=confirmed?'confirmed':candidate?'candidate':visual.length?'hypothesis':'unknown';
+ const classification=confirmed?'confirmed-local':candidate?'probable-match':visual.length?'visual-hypothesis':externalInformation.length?'external-information':'unresolved';
+ const documents=rows.filter(e=>e.type==='document-context');
+ const externalRows=rows.filter(e=>!e.local);
+ return {ok:true,status,classification,identity:candidate?{source:candidate.source,record:candidate.metadata.record,confidence:candidate.confidence,confirmed:Boolean(confirmed)}:null,evidences:rows,evidenceGroups:{confirmedLocal:confirmed?[confirmed]:[],probableMatches:identities.filter(e=>e!==confirmed),visualHypotheses:visual,externalInformation},documents,local:externalRows.length===0,localFirst:true,external:{requested:externalRows.length>0,allowed:!confirmed||expanded,blocked:Boolean(confirmed&&!expanded),reason:confirmed&&!expanded?'Coincidencia exacta de código NEXUS en datos locales.':'La evidencia local no produjo una identificación exacta o se solicitó ampliación.'}};
 }
-function formatVisionFacts(v){if(!v)return '';const rows=[];const add=(k,label)=>{const x=v[k];if(Array.isArray(x)&&x.length)rows.push(`<div><strong>${label}:</strong> ${escapeHtml(x.join(' · '))}</div>`);else if(x!==null&&x!==undefined&&String(x).trim())rows.push(`<div><strong>${label}:</strong> ${escapeHtml(String(x))}</div>`)};add('name','Identificación visual');add('formula','Fórmula');add('cas','CAS');add('manufacturer','Fabricante');add('product','Producto');add('concentration','Concentración');add('physical_state','Estado físico');add('pictograms','Pictogramas GHS visibles');add('hazards','Peligros respaldados');add('precautions','Precauciones');return rows.join('');}
-async function analyzeSubstance(text,{canvas=null,imageDataUrl=null,source='OCR',ocrQualityScore=0}={}){
-  const box=$('#substanceAnalysis');if(!box)return;const clean=String(text||'').trim();let html='';
-  const candidates=inventoryMatchesFromText(clean);const strong=strongLocalMatch(candidates,ocrQualityScore);
-  if(strong){html+=`<div class="notice"><strong>Coincidencia local verificada por texto.</strong> NEXUS-X encontró el nombre o fórmula de la etiqueta con calidad OCR suficiente.</div><div class="result-card"><strong>${escapeHtml(strong.r.name)} <span class="id">${escapeHtml(strong.r.id)}</span></strong><div class="muted">${escapeHtml(strong.r.formula||'Sin fórmula')} · ${escapeHtml(strong.r.physicalState||'—')} · ${escapeHtml(strong.r.location||'Sin ubicación')}</div><div class="footer-note">Evidencia: texto OCR de calidad ${ocrQualityScore}% · coincidencia ${strong.score}</div><button class="btn primary section" data-substance-id="${escapeHtml(strong.r.id)}">Abrir ficha</button></div>`;
-  }else html+=`<div class="notice ${candidates.length?'warn':''}"><strong>${candidates.length?'No hay coincidencia local suficientemente fiable.':'Sin coincidencia local fiable.'}</strong> NEXUS-X no convertirá un OCR dudoso en una identificación.</div>`;
-  const vision=await analyzeVisionLabel(imageDataUrl,clean);
-  let visionLocal=null;
-  if(vision){const vtext=[vision.name,vision.formula,vision.cas,vision.product,vision.manufacturer,Array.isArray(vision.identifiers)?vision.identifiers.join(' '):''].filter(Boolean).join(' ');const vc=inventoryMatchesFromText(vtext);const visualConfidence=Number(vision.confidence);const visualEvidence=Array.isArray(vision.evidence)?vision.evidence.filter(Boolean).length:String(vision.evidence||'').trim().length;visionLocal=(Number.isFinite(visualConfidence)&&visualConfidence>=80&&visualEvidence&&vc.some(x=>x.exactField&&x.score>=150))?vc.find(x=>x.exactField&&x.score>=150):null;
-    html+=`<div class="result-card"><strong>🧠 Análisis visual</strong>${formatVisionFacts(vision)}<div class="footer-note">Confianza visual declarada: ${escapeHtml(String(vision.confidence??'no verificada'))}% · La IA no se usa como sustituto de la etiqueta/SDS.</div></div>`;
-    if(visionLocal&&!strong)html+=`<div class="notice section"><strong>Coincidencia local confirmada por identificación visual:</strong> ${escapeHtml(visionLocal.r.name)} · ${escapeHtml(visionLocal.r.id)}.</div>`;
-  }
-  const identified=[strong?.r.name,strong?.r.formula,visionLocal?.r.name,visionLocal?.r.formula,vision?.name,vision?.formula,vision?.cas].filter(Boolean).join(' ');
-  const query=buildOcrQuery([identified,clean].filter(Boolean).join(' '));
-  const needsWeb=!strong&&!visionLocal;
-  let web={provider:'',results:[]};
-  if(needsWeb&&query){web=await searchWebSources(`${query} sustancia química SDS GHS inflamable corrosivo toxicidad oxidante irritante`);if(web.results.length)html+=`<div class="notice section"><strong>🌐 Verificación externa</strong> · no hubo identificación local fiable; se consultaron fuentes externas.</div>`+web.results.slice(0,5).map(x=>`<div class="result-card"><strong>${escapeHtml(x.title)}</strong><div class="muted">${escapeHtml(x.snippet||'')}</div>${x.url?`<a href="${escapeHtml(safeExternalUrl(x.url))}" target="_blank" rel="noopener noreferrer">Abrir fuente</a>`:''}</div>`).join('');}
-  if(candidates.length&&!strong)html+=`<div class="footer-note">Se encontraron posibles candidatos locales, pero NEXUS-X los dejó como candidatos y no como identificación exacta porque la evidencia no alcanzó el umbral.</div>`;
-  if(strong||visionLocal)$$('[data-substance-id]').forEach(b=>b.onclick=()=>openItem(b.dataset.substanceId));
-  box.innerHTML=html||'<div class="notice warn">No se pudo identificar el material a partir de la evidencia disponible.</div>';
-  return {local:strong||visionLocal,vision,web,candidates};
+function resolveLensLocalSignals({code='',indexEvidence=null,extraEvidence=[],expanded=false}={}){
+ const evidences=[];if(indexEvidence)evidences.push(indexEvidence);evidences.push(...extraEvidence);
+ const rawCode=String(code||'').trim(),id=rawCode?qrExtractId(rawCode):'';
+ if(rawCode)evidences.push(createLensEvidence({source:'camera',type:'code-observation',value:id||rawCode,confidence:100,metadata:{raw:rawCode,format:'qr'}}));
+ const inventoryExact=id?state.inventory.find(r=>r.id===id):null;
+ if(inventoryExact)evidences.push(createLensEvidence({source:'inventory',type:'identity',value:{id:inventoryExact.id,name:inventoryExact.name,formula:inventoryExact.formula},confidence:100,metadata:{match:'exact-code',record:inventoryExact}}));
+ const catalogExact=id?state.catalog.find(r=>r.id===id||norm(r.originalNumber)===norm(rawCode)):null;
+ if(catalogExact)evidences.push(createLensEvidence({source:'catalog',type:'identity',value:{id:catalogExact.id,name:catalogExact.name,formula:catalogExact.formula},confidence:100,metadata:{match:'exact-code',record:catalogExact}}));
+ const identity=evidences.filter(e=>e.type==='identity').sort((a,b)=>b.confidence-a.confidence)[0];
+ const query=[id,identity?.metadata?.record?.name,identity?.metadata?.record?.formula].filter(Boolean).join(' ');
+ evidences.push(...searchLensDocuments(query));
+ return buildNexusLensContext(evidences,{expanded});
 }
-async function analyzeCurrentQrCamera(){const v=$('#qrVideo');if(!v||!state.stream||v.readyState<2){toast('Primero iniciá la cámara y apuntá al envase.');return {ok:false,error:'Cámara no iniciada'}}try{const c=DOM.createElement('canvas');c.width=Math.min(v.videoWidth||1280,2200);c.height=Math.min(v.videoHeight||720,2200);const ctx=c.getContext('2d',{willReadFrequently:true});ctx.drawImage(v,0,0,c.width,c.height);const imageDataUrl=canvasToDataUrl(c);const r=await ocrImageSource(c,'captura de cámara');const analysis=await analyzeSubstance(r.text,{canvas:c,imageDataUrl,source:'cámara',ocrQualityScore:r.quality});saveActivity('Análisis visual de sustancia realizado desde cámara');return {ok:true,ocr:{text:r.text,quality:r.quality},analysis:{local:analysis?.local?{id:analysis.local.r?.id,name:analysis.local.r?.name,formula:analysis.local.r?.formula}:null,vision:analysis?.vision||null,web:analysis?.web||{results:[]}}};}catch(e){console.error(e);toast('No se pudo analizar la cámara: '+(e.message||e));return {ok:false,error:e.message||String(e)}}}
-async function ocrImageFile(file){if(!file)return;try{const img=new Image();const url=URL.createObjectURL(file);img.onload=async()=>{try{const r=await ocrImageSource(img,file.name);await analyzeSubstance(r.text,{canvas:r.canvas,imageDataUrl:canvasToDataUrl(r.canvas),source:'imagen',ocrQualityScore:r.quality})}catch(e){$('#ocrStatus').textContent='Error OCR: '+(e.message||e);toast('OCR: '+(e.message||e))}finally{URL.revokeObjectURL(url)}};img.onerror=()=>{URL.revokeObjectURL(url);throw new Error('No se pudo abrir la imagen.')};img.src=url}catch(e){$('#ocrStatus').textContent='Error OCR: '+(e.message||e);toast('OCR: '+(e.message||e))}}
-async function ocrPdfFile(file){if(!file)return;try{await loadScript('./pdf.mjs','pdfjsLib');const pdf=await pdfjsLib.getDocument({isEvalSupported:false,data:await file.arrayBuffer()}).promise;const maxPages=Math.min(pdf.numPages,30),pages=[];const status=$('#ocrStatus');for(let n=1;n<=maxPages;n++){status.textContent=`OCR PDF: página ${n}/${maxPages}`;const page=await pdf.getPage(n),vp=page.getViewport({scale:2});const canvas=DOM.createElement('canvas');canvas.width=Math.ceil(vp.width);canvas.height=Math.ceil(vp.height);await page.render({canvasContext:canvas.getContext('2d'),viewport:vp}).promise;const r=await ocrImageSource(canvas,`${file.name} · página ${n}`);if(r.text)pages.push(`PÁGINA ${n}\n${r.text}`)}const text=pages.join('\n\n').trim();$('#ocrOutput').textContent=text||'No se reconoció texto en el PDF.';$('#ocrStatus').textContent=`OCR PDF terminado · ${maxPages} página(s) procesada(s).${pdf.numPages>maxPages?' Se limitó a 30 páginas para evitar bloquear el navegador.':''}`;return text}catch(e){$('#ocrStatus').textContent='Error OCR PDF: '+(e.message||e);toast('OCR PDF: '+(e.message||e))}}
-async function indexOcrText(){const text=$('#ocrOutput')?.textContent?.trim()||'';if(!text||text==='El texto reconocido aparecerá aquí.')return toast('Primero ejecutá un OCR.');const name=`OCR-${new Date().toISOString().replace(/[:.]/g,'-')}.txt`;await indexDocument({name,path:'ocr:'+name,type:'TXT',size:text.length,text,source:'OCR local',mime:'text/plain'});saveActivity(`OCR indexado: ${name}`);toast('Texto OCR incorporado a la fabric documental.');}
-async function copyOcrText(){const text=$('#ocrOutput')?.textContent||'';if(!text.trim())return;try{await navigator.clipboard.writeText(text);toast('Texto OCR copiado.')}catch{toast('No se pudo copiar automáticamente; seleccioná el texto manualmente.')}}
+function captureLensFrame(source){
+ const sourceWidth=source?.naturalWidth||source?.videoWidth||source?.width,sourceHeight=source?.naturalHeight||source?.videoHeight||source?.height;if(!sourceWidth||!sourceHeight)throw new Error('La imagen no tiene dimensiones válidas.');
+ const scale=Math.min(1,1400/Math.max(sourceWidth,sourceHeight)),canvas=DOM.createElement('canvas');canvas.width=Math.max(1,Math.round(sourceWidth*scale));canvas.height=Math.max(1,Math.round(sourceHeight*scale));canvas.getContext('2d',{willReadFrequently:true}).drawImage(source,0,0,canvas.width,canvas.height);return canvas;
+}
+function analyzeLensFrameLocally(canvas){
+ const sample=DOM.createElement('canvas'),max=96,scale=Math.min(1,max/Math.max(canvas.width,canvas.height));sample.width=Math.max(1,Math.round(canvas.width*scale));sample.height=Math.max(1,Math.round(canvas.height*scale));const ctx=sample.getContext('2d',{willReadFrequently:true});ctx.drawImage(canvas,0,0,sample.width,sample.height);const data=ctx.getImageData(0,0,sample.width,sample.height).data;let lum=0,lum2=0,color=0,edges=0,previous=null;
+ for(let i=0;i<data.length;i+=4){const r=data[i],g=data[i+1],b=data[i+2],l=.299*r+.587*g+.114*b;lum+=l;lum2+=l*l;color+=Math.max(r,g,b)-Math.min(r,g,b);if(previous!==null&&Math.abs(l-previous)>34)edges++;previous=l}
+ const pixels=Math.max(1,data.length/4),brightness=Math.round(lum/pixels),contrast=Math.round(Math.sqrt(Math.max(0,lum2/pixels-(lum/pixels)**2))),colorfulness=Math.round(color/pixels),edgeDensity=Math.round(edges/pixels*100);const usable=brightness>=28&&brightness<=235&&contrast>=18;const quality=Math.max(10,Math.min(100,Math.round(contrast*1.25+Math.min(edgeDensity,30)+20-(brightness<35||brightness>225?25:0))));
+ return createLensEvidence({source:'camera',type:'frame-perception',value:{width:canvas.width,height:canvas.height,brightness,contrast,colorfulness,edgeDensity,usable},confidence:quality,metadata:{capturedOnce:true,imageStored:false}});
+}
+function lensImageDataUrl(canvas){return canvas.toDataURL('image/jpeg',.82)}
+async function lensImageFingerprint(dataUrl){
+ const body=String(dataUrl).split(',')[1]||String(dataUrl);if(globalThis.crypto?.subtle){const bytes=new TextEncoder().encode(body),hash=await crypto.subtle.digest('SHA-256',bytes);return [...new Uint8Array(hash)].map(x=>x.toString(16).padStart(2,'0')).join('')}
+ let hash=2166136261;for(let i=0;i<body.length;i+=97)hash=Math.imul(hash^body.charCodeAt(i),16777619);return (hash>>>0).toString(16);
+}
+function trimLensExternalCache(){const now=Date.now();for(const [key,item] of lensExternalCache)if(item.expires<=now)lensExternalCache.delete(key);while(lensExternalCache.size>LENS_EXTERNAL_CACHE_LIMIT)lensExternalCache.delete(lensExternalCache.keys().next().value)}
+async function cachedLensExternal(kind,key,producer){
+ trimLensExternalCache();const cacheKey=kind+':'+key,hit=lensExternalCache.get(cacheKey);if(hit)return {...hit.value,cacheHit:true};if(lensExternalPending.has(cacheKey))return lensExternalPending.get(cacheKey);
+ const task=(async()=>{const value=await producer();lensExternalCache.set(cacheKey,{value,expires:Date.now()+LENS_EXTERNAL_CACHE_TTL});trimLensExternalCache();return {...value,cacheHit:false}})().finally(()=>lensExternalPending.delete(cacheKey));lensExternalPending.set(cacheKey,task);return task;
+}
+function configuredLensVisionProxy(){
+ const raw=String(globalThis.NEXUS_CONFIG?.lensVisionProxy||'').trim();if(!raw)return '';try{const url=new URL(raw,location.href);if(url.protocol!=='https:'||url.username||url.password||url.search)return '';return url.href}catch{return ''}
+}
+function parseLensVisionPayload(value){
+ let raw=value;if(typeof raw==='string'){const clean=raw.replace(/^```(?:json)?\s*/i,'').replace(/```\s*$/,'').trim(),start=clean.indexOf('{'),end=clean.lastIndexOf('}');if(start<0||end<=start)throw new Error('El proveedor visual no devolvió JSON válido.');raw=JSON.parse(clean.slice(start,end+1))}
+ if(!raw||typeof raw!=='object'||Array.isArray(raw))throw new Error('Respuesta visual inválida.');const list=value=>[...(Array.isArray(value)?value:[])].map(x=>String(x||'').trim()).filter(Boolean).slice(0,12),categories=new Set(['reactivo','frasco','instrumental','equipo','componente','codigo','formula','etiqueta','pictograma','objeto-general','desconocido']);
+ return {category:categories.has(raw.category)?raw.category:'desconocido',hypothesis:String(raw.hypothesis||'').trim().slice(0,300),confidence:Math.max(0,Math.min(100,Math.round(Number(raw.confidence)||0))),objects:list(raw.objects),visibleText:list(raw.visibleText),formulaCandidates:list(raw.formulaCandidates),codes:list(raw.codes),pictograms:list(raw.pictograms),manufacturer:String(raw.manufacturer||'').trim().slice(0,160),model:String(raw.model||'').trim().slice(0,160),observableEvidence:list(raw.observableEvidence),limitations:list(raw.limitations)};
+}
+function lensVisionPrompt(){return 'Analizá UNA fotografía de laboratorio como un sistema de búsqueda visual multimodal. Devolvé exclusivamente JSON válido, sin markdown, con: category (reactivo|frasco|instrumental|equipo|componente|codigo|formula|etiqueta|pictograma|objeto-general|desconocido), hypothesis, confidence (0-100), objects[], visibleText[], formulaCandidates[], codes[], pictograms[], manufacturer, model, observableEvidence[], limitations[]. Integrá en una sola interpretación los objetos, códigos, fórmulas, pictogramas y texto visible en la imagen. Describí sólo rasgos observables. No confirmes identidad química, composición, concentración, peligros ni contenido por apariencia. Un pictograma sólo se informa si es visible. Si hay duda usá category desconocido y bajá confidence.'}
+function lensContextForProvider(context){
+ const local=(context.evidenceGroups?.probableMatches||[]).slice(0,4).map(e=>({source:e.source,id:e.metadata?.record?.id,name:e.metadata?.record?.name,formula:e.metadata?.record?.formula,confidence:e.confidence}));const documents=(context.documents||[]).slice(0,4).map(e=>({name:e.value?.name,excerpt:e.value?.excerpt?.slice(0,240)}));return JSON.stringify({localCandidates:local,documents,note:'Datos locales no confirmados; sólo sirven para contrastar la imagen.'});
+}
+function getLensVisionProvider(){
+ const proxy=configuredLensVisionProxy();if(proxy)return {id:'secure-proxy',async analyze({imageDataUrl,context}){const response=await fetchTimeout(proxy,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({task:'nexus-lens-lab-v1',image:imageDataUrl,context})},25000);if(!response.ok)throw new Error('Proxy visual HTTP '+response.status);const data=await response.json();return {analysis:parseLensVisionPayload(data.analysis??data),model:String(data.model||'proxy')}}};
+ if(getGeminiKey())return {id:'gemini-byok',async analyze({imageDataUrl,context}){const result=await geminiGenerate({question:lensVisionPrompt(),context,imageDataUrl,temperature:0.05,maxOutputTokens:900});return {analysis:parseLensVisionPayload(result.answer),model:result.model}}};return null;
+}
+function lensVisionEvidence(providerResult){
+ const analysis=providerResult.analysis,evidence=[createLensEvidence({source:providerResult.provider,type:'visual-hypothesis',value:analysis,confidence:Math.min(90,analysis.confidence),local:false,metadata:{tier:'visual-hypothesis',model:providerResult.model,cacheHit:Boolean(providerResult.cacheHit),chemicalCertainty:false}})];
+ for(const pictogram of analysis.pictograms)evidence.push(createLensEvidence({source:providerResult.provider,type:'pictogram-observation',value:pictogram,confidence:Math.min(85,analysis.confidence),local:false,metadata:{visibleOnly:true,chemicalCertainty:false}}));return evidence;
+}
+function lensVisionQuery(analysis){return [analysis.hypothesis,...analysis.objects,...analysis.visibleText,...analysis.formulaCandidates,...analysis.codes,analysis.manufacturer,analysis.model].filter(Boolean).join(' ').slice(0,600)}
+function fuseLensVisualContext(localContext,providerResult,{expanded=false}={}){
+ const analysis=providerResult.analysis,query=lensVisionQuery(analysis),evidence=mergeLensEvidence(localContext.evidences,lensVisionEvidence(providerResult));
+ for(const [source,records,cap] of [['inventory',state.inventory,86],['catalog',state.catalog,83]])for(const hit of lensMatchesFromText(records,query).slice(0,3))evidence.push(createLensEvidence({source,type:'identity',value:{id:hit.r.id,name:hit.r.name,formula:hit.r.formula},confidence:Math.min(cap,Math.round(analysis.confidence*.55+Math.min(hit.score,200)*.15)),metadata:{match:'visual-context',score:hit.score,record:hit.r,chemicalCertainty:false}}));
+ evidence.push(...searchLensDocuments(query));return buildNexusLensContext(evidence,{expanded});
+}
+function buildLensExternalQuery(context,analysis,code){
+ const record=context.identity?.record;const signals=[record?.name,record?.formula,analysis?.hypothesis,...(analysis?.objects||[]),...(analysis?.visibleText||[]),...(analysis?.formulaCandidates||[]),...(analysis?.codes||[]),analysis?.manufacturer,analysis?.model,code].filter(Boolean).join(' ').replace(/\s+/g,' ').trim();
+ return signals?(signals+' laboratorio ficha técnica seguridad').slice(0,420):'';
+}
+function shouldSearchLensWeb(context,{expanded=false}={}){return expanded||(!context.identity?.confirmed&&['hypothesis','unknown'].includes(context.status))}
+async function searchLensExternalEvidence(query){
+ if(!query||!state.web||!navigator.onLine)return [];const key=norm(query),result=await cachedLensExternal('web',key,()=>searchWebSources(query));return (result.results||[]).slice(0,6).map(item=>createLensEvidence({source:'web:'+String(result.provider||'search'),type:'external-information',value:{title:item.title,snippet:item.snippet,url:safeExternalUrl(item.url)},confidence:40,local:false,metadata:{provider:result.provider,cacheHit:Boolean(result.cacheHit),identityClaim:false}}));
+}
+async function decodeLensCode(source){
+ const w=source?.naturalWidth||source?.videoWidth||source?.width,h=source?.naturalHeight||source?.videoHeight||source?.height;if(!w||!h)return '';
+ const canvas=DOM.createElement('canvas'),scale=Math.min(1,1600/Math.max(w,h));canvas.width=Math.max(1,Math.round(w*scale));canvas.height=Math.max(1,Math.round(h*scale));const ctx=canvas.getContext('2d',{willReadFrequently:true});ctx.drawImage(source,0,0,canvas.width,canvas.height);
+ if('BarcodeDetector' in window){try{const codes=await new BarcodeDetector({formats:['qr_code']}).detect(canvas);if(codes[0]?.rawValue)return codes[0].rawValue}catch{}}
+ await loadQrFallback();const image=ctx.getImageData(0,0,canvas.width,canvas.height);return window.jsQR?.(image.data,image.width,image.height,{inversionAttempts:'attemptBoth'})?.data||'';
+}
+function setLensUiState(kind,label,detail=''){
+ const stateEl=$('#lensState'),labelEl=$('#lensStateLabel'),detailEl=$('#lensStateDetail'),camera=$('#lensCameraState');if(stateEl){stateEl.dataset.state=kind;labelEl.textContent=label;detailEl.textContent=detail}if(camera){camera.dataset.state=kind;camera.innerHTML='<i></i>'+escapeHtml(kind==='analyzing'?'Analizando captura':kind==='expanding'?'Ampliando evidencia':kind==='local'?'Contexto local listo':kind==='unavailable'?'Servicio externo no disponible':kind==='offline'?'Modo local':state.lensStream?'Cámara activa':'Cámara detenida')}
+}
+function lensVisualEvidence(context){return context?.evidenceGroups?.visualHypotheses?.[0]?.value||null}
+function lensContextQuery(context=state.lensLastContext){const record=context?.identity?.record,visual=lensVisualEvidence(context),code=context?.evidences?.find(e=>e.type==='code-observation')?.value;return [record?.id,record?.name,record?.formula,visual?.hypothesis,...(visual?.objects||[]),...(visual?.visibleText||[]),...(visual?.formulaCandidates||[]),code].filter(Boolean).join(' ').replace(/\s+/g,' ').trim().slice(0,420)}
+function lensSetContextActions(context){
+ const query=lensContextQuery(context),record=context?.identity?.record,inventoryRecord=record&&state.inventory.some(r=>r.id===record.id),hasDocs=Boolean(context?.documents?.length);for(const [id,enabled] of [['lensSearchBtn',Boolean(query)],['lensInventoryBtn',Boolean(record||query)],['lensDocumentsBtn',hasDocs||Boolean(query)],['lensInternetBtn',Boolean(query)],['lensFichaBtn',Boolean(inventoryRecord)]]){const button=$('#'+id);if(button)button.disabled=!enabled}
+}
+function lensStateFromContext(context){
+ const unavailable=context.evidences?.some(e=>e.type==='provider-status'&&e.value==='unavailable');if(unavailable)return ['unavailable','Servicio externo no disponible','NEXUS conserva los resultados locales y no bloquea la operación.'];
+ if(context.status==='confirmed')return ['local','Encontrado localmente','Código NEXUS confirmado contra datos locales.'];
+ if(context.status==='candidate')return ['local','Coincidencia local probable','Requiere verificación física antes de usar el material.'];
+ if(context.status==='hypothesis')return ['local','Hipótesis visual','La imagen aporta una propuesta; no confirma una identidad química.'];
+ if(!navigator.onLine)return ['offline','Modo local · sin conexión','No se consultaron servicios externos.'];
+ return ['empty','Sin coincidencias','No se encontró evidencia suficiente para identificar el objeto.'];
+}
+function renderLensResult(result){
+ const box=$('#lensResult'),evidence=$('#lensEvidence');if(!box||!evidence)return;
+ const record=result.identity?.record||null,visual=lensVisualEvidence(result),external=result.evidenceGroups?.externalInformation||[],title=result.status==='confirmed'?'Identificación confirmada':result.status==='candidate'?'Identificación propuesta':result.status==='hypothesis'?'Objeto propuesto':'Sin identificación';const proposal=record?.name||visual?.hypothesis||visual?.category||'No se pudo proponer un objeto';const origin=result.status==='confirmed'?'Coincidencia exacta de código NEXUS':record?`${result.identity?.source||'local'} · coincidencia contextual`:visual?'Visión multimodal · hipótesis visual':'Percepción local sin coincidencias';const confidence=record?result.identity?.confidence:visual?.confidence||0;
+ const sourceHtml=external.length?`<div class="lens-source-list"><strong class="muted">Fuentes externas</strong>${external.slice(0,4).map(e=>{const value=e.value||{},url=safeExternalUrl(value.url);return `<div class="lens-source"><strong>${escapeHtml(value.title||e.source)}</strong>${value.snippet?`<div>${escapeHtml(value.snippet).slice(0,230)}</div>`:''}${url?`<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">Abrir fuente</a>`:''}</div>`}).join('')}</div>`:'';
+ box.innerHTML=`<div class="badge ${result.status==='confirmed'?'ok':result.status==='unknown'?'warn':''}">${escapeHtml(title)}</div><h3 class="lens-proposal">${escapeHtml(proposal)}</h3><div class="muted">${escapeHtml(origin)}</div><div class="lens-meta"><span class="badge">Confianza ${escapeHtml(String(confidence||0))}%</span><span class="badge ${result.local?'ok':'warn'}">${result.local?'Evidencia local':'Evidencia combinada'}</span>${record?.id?`<span class="badge">${escapeHtml(record.id)}</span>`:''}</div>${record?`<div class="footer-note">${result.status==='confirmed'?'La identidad proviene de un código NEXUS exacto.':'No usar como confirmación química: verificá envase, etiqueta y ficha de seguridad.'}</div>`:visual?`<div class="footer-note">La visión identifica rasgos visibles, no el contenido ni la composición del material.</div>`:'<div class="footer-note">Podés ajustar el encuadre, buscar un código o consultar los datos locales.</div>'}${sourceHtml}`;
+ evidence.innerHTML='<h3>Origen de la evidencia</h3>'+result.evidences.map(e=>`<div class="result-card"><strong>${escapeHtml(e.source)} · ${escapeHtml(e.type)}</strong><div class="muted">${e.local?'local':'externa'} · confianza ${e.confidence}%</div><div>${escapeHtml(typeof e.value==='string'?e.value:JSON.stringify(e.value))}</div></div>`).join('');
+ const selected=$('#lensSelectedObject'),frameHint=$('#lensFrameHint');if(selected)selected.textContent=record?.name||visual?.hypothesis||'Sin objeto confirmado';if(frameHint)frameHint.textContent=result.status==='confirmed'?'Código local confirmado':result.status==='candidate'?'Coincidencia local':result.status==='hypothesis'?'Hipótesis visual':'Sin coincidencia';
+ const [kind,label,detail]=lensStateFromContext(result);setLensUiState(kind,label,detail);lensSetContextActions(result);
+}
+function lensSearchInNexus(){const query=lensContextQuery();if(!query)return;setView('research');$('#researchInput').value=query;runResearch({allowExternal:false})}
+async function lensOpenInventory(){const context=state.lensLastContext,query=context?.identity?.record?.id||lensContextQuery(context);if(!query)return;return showInventoryQuery(query)}
+async function lensOpenDocuments(){const context=state.lensLastContext,query=lensContextQuery(context);if(!query)return;return searchAndOpenDocument(query)}
+function lensOpenFicha(){const record=state.lensLastContext?.identity?.record;if(record&&state.inventory.some(r=>r.id===record.id))openItem(record.id)}
+async function lensInvestigateInternet(){
+ const context=state.lensLastContext,query=lensContextQuery(context);if(!context||!query)return;if(!navigator.onLine){setLensUiState('offline','Modo local · sin conexión','Internet no está disponible; el contexto local sigue abierto.');return}
+ state.web=true;const toggle=$('#webToggle');if(toggle)toggle.textContent='🌐 Internet: ON';setLensUiState('expanding','Ampliando con Internet','Buscando información adicional sin reemplazar la evidencia local.');
+ try{const external=await searchLensExternalEvidence(query),next=buildNexusLensContext([...context.evidences,...external],{expanded:true});if(!external.length)next.evidences.push(createLensEvidence({source:'web',type:'provider-status',value:'unavailable',confidence:0,local:false,metadata:{reason:'Sin resultados externos'}}));finalizeLensContext(buildNexusLensContext(next.evidences,{expanded:true}),'ampliación web')}catch(e){const next=buildNexusLensContext([...context.evidences,createLensEvidence({source:'web',type:'provider-status',value:'unavailable',confidence:0,local:false,metadata:{error:e.message||String(e)}})],{expanded:true});finalizeLensContext(next,'ampliación web')}
+}
+function finalizeLensContext(context,label){state.lensLastContext=context;renderLensResult(context);saveActivity(`NEXUS LENS analizó ${label}: ${context.status}`);return context;}
+async function identifyLensCode(code,{render=true}={}){const indexEvidence=await ensureLensIndexedDocuments(),context=resolveLensLocalSignals({code,indexEvidence});if(render){setView('lens');finalizeLensContext(context,'código manual')}return context;}
+async function runNexusLensPipeline(source,label='imagen',{expand=false}={}){
+ if(state.lensBusy)return {ok:false,error:'NEXUS LENS ya está analizando una imagen.'};state.lensBusy=true;setLensUiState('analyzing','Analizando localmente','Buscando código NEXUS, inventario, catálogo y documentos antes de usar servicios externos.');if($('#lensStatus'))$('#lensStatus').textContent='NEXUS LENS: buscando identificación local…';
+ try{
+  const frame=captureLensFrame(source),perception=analyzeLensFrameLocally(frame),raw=await decodeLensCode(frame),indexEvidence=await ensureLensIndexedDocuments();
+  let context=resolveLensLocalSignals({code:raw,indexEvidence,extraEvidence:[perception],expanded:expand});if(context.status==='confirmed'&&!expand)return finalizeLensContext(context,label);
+  let analysis=null;if(context.status!=='confirmed'&&state.web&&navigator.onLine){const provider=getLensVisionProvider();if(provider){setLensUiState('expanding','Ampliando con visión','Se envía una única captura para interpretar el objeto y contrastarlo con NEXUS.');if($('#lensStatus'))$('#lensStatus').textContent='NEXUS LENS: análisis visual multimodal bajo demanda…';const imageDataUrl=lensImageDataUrl(frame),fingerprint=await lensImageFingerprint(imageDataUrl);try{const result=await cachedLensExternal('vision',provider.id+':'+fingerprint,()=>provider.analyze({imageDataUrl,context:lensContextForProvider(context)}));result.provider=provider.id;analysis=result.analysis;context=fuseLensVisualContext(context,result,{expanded:expand})}catch(e){context=buildNexusLensContext([...context.evidences,createLensEvidence({source:provider.id,type:'provider-status',value:'unavailable',confidence:0,local:false,metadata:{error:e.message||String(e)}})],{expanded:expand})}}}
+  const externalQuery=buildLensExternalQuery(context,analysis,raw);if(state.web&&navigator.onLine&&shouldSearchLensWeb(context,{expanded:expand})&&externalQuery){setLensUiState('expanding','Ampliando con Internet','Buscando información adicional sin modificar la evidencia local.');if($('#lensStatus'))$('#lensStatus').textContent='NEXUS LENS: completando información faltante…';const webEvidence=await searchLensExternalEvidence(externalQuery);context=buildNexusLensContext([...context.evidences,...webEvidence],{expanded:expand})}
+  return finalizeLensContext(context,label);
+ }catch(e){const message=e.message||String(e);setLensUiState('unavailable','No se pudo completar el análisis','La cámara y las funciones locales siguen disponibles.');if($('#lensStatus'))$('#lensStatus').textContent='NEXUS LENS no pudo completar el análisis.';toast('NEXUS LENS: '+message);return {ok:false,error:message}}
+ finally{state.lensBusy=false;}
+}
+async function analyzeCurrentLensCamera(options={}){const v=$('#lensVideo');if(!v||!state.lensStream||v.readyState<2){toast('Primero concedé el permiso e iniciá la cámara NEXUS LENS.');return {ok:false,error:'Cámara NEXUS LENS no iniciada'}}return runNexusLensPipeline(v,'cámara',options);}
+async function analyzeLensImageFile(file,options={}){if(!file)return {ok:false,error:'No se recibió una imagen.'};const url=URL.createObjectURL(file);try{const image=await new Promise((resolve,reject)=>{const img=new Image();img.onload=()=>resolve(img);img.onerror=()=>reject(new Error('No se pudo abrir la imagen.'));img.src=url;});return await runNexusLensPipeline(image,file.name,options)}finally{URL.revokeObjectURL(url)}}
 function localAssistantResponse(q){const n=norm(q);if(/\b(hola|buenas|hey|hola nexus)\b/.test(n))return'Hola. Soy NEXUS-X. Puedo buscar en el inventario, abrir módulos, analizar documentos y conversar cuando Gemini está conectado.';if(/quien eres|que eres|como te llamas/.test(n))return'Soy NEXUS-X, el asistente del sistema de gestión e investigación del laboratorio.';if(/cuantos registros|cantidad de registros|inventario/.test(n)&&!/buscar|investigar/.test(n))return`El inventario cargado contiene ${state.inventory.length} registros.`;if(/estado|diagnostico|integridad/.test(n)){const x=runIntegrity();return`Integridad local: ${x.ok?'correcta':'requiere revisión'}. Registros: ${x.recordCount}. IDs únicos: ${x.uniqueIds}.`;}return'Puedo ejecutar comandos locales como “Nexus, abrir inventario” o “Nexus, investigar ácido nítrico”. Para conversación libre y análisis profundo, conectá Gemini en Ajustes.';}
 async function showInventoryQuery(query,{openFirst=false,speak=false}={}){
   const q=String(query||'').trim();
@@ -804,9 +876,9 @@ function fastAgentAnswer(action,result){
   if(action.action==='sequence')return result.ok?'Listo. Ejecuté la secuencia.':'No pude completar la secuencia.';
   return result.ok?'Listo.':'No pude completar la orden.';
 }
-const NEXUS_AGENT_ACTIONS=new Set(['open_view','search_inventory','open_item','search_documents','open_document','research','open_qr','start_camera','stop_camera','analyze_camera','open_vision','start_vision_camera','stop_vision_camera','analyze_vision_camera','open_calendar','create_calendar_event','delete_calendar_event','sync_repository','export_inventory','export_report','toggle_web','status','diagnostics','clear_chat','start_voice','stop_voice','web_search','get_inventory','create_inventory_item','update_inventory_item','delete_inventory_item','get_documents','get_activity','get_state','sequence']);
+const NEXUS_AGENT_ACTIONS=new Set(['open_view','search_inventory','open_item','search_documents','open_document','research','open_qr','start_camera','stop_camera','analyze_camera','open_lens','start_lens_camera','stop_lens_camera','analyze_lens_camera','identify_lens_code','get_lens_context','open_calendar','create_calendar_event','delete_calendar_event','sync_repository','export_inventory','export_report','toggle_web','status','diagnostics','clear_chat','start_voice','stop_voice','web_search','get_inventory','create_inventory_item','update_inventory_item','delete_inventory_item','get_documents','get_activity','get_state','sequence']);
 const NEXUS_AGENT_TOOL_DEFS=[
-{name:'open_view',description:'Abrir cualquier módulo de NEXUS-X.',parameters:{type:'object',properties:{view:{type:'string',enum:['dashboard','inventory','research','ai','qr','vision','documents','reports','settings']}},required:['view']}},
+{name:'open_view',description:'Abrir cualquier módulo de NEXUS-X.',parameters:{type:'object',properties:{view:{type:'string',enum:['dashboard','inventory','research','ai','qr','lens','documents','reports','settings']}},required:['view']}},
 {name:'search_inventory',description:'Buscar sustancias, materiales, fórmulas, IDs o ubicaciones en el inventario local.',parameters:{type:'object',properties:{query:{type:'string'}},required:['query']}},
 {name:'open_item',description:'Buscar y abrir una ficha del inventario.',parameters:{type:'object',properties:{query:{type:'string'}},required:['query']}},
 {name:'search_documents',description:'Buscar en documentos indexados.',parameters:{type:'object',properties:{query:{type:'string'}},required:['query']}},
@@ -815,7 +887,7 @@ const NEXUS_AGENT_TOOL_DEFS=[
 {name:'open_qr',description:'Abrir QR/cámara.',parameters:{type:'object',properties:{},required:[]}},
 {name:'start_camera',description:'Abrir QR e iniciar cámara.',parameters:{type:'object',properties:{},required:[]}},
 {name:'stop_camera',description:'Detener cámara.',parameters:{type:'object',properties:{},required:[]}},
-{name:'analyze_camera',description:'Analizar lo que ve la cámara de visión con OCR y visión.',parameters:{type:'object',properties:{},required:[]}},{name:'open_vision',description:'Abrir el módulo independiente de visión/OCR.',parameters:{type:'object',properties:{},additionalProperties:false}},{name:'start_vision_camera',description:'Solicitar permiso e iniciar la cámara independiente de visión/OCR.',parameters:{type:'object',properties:{},additionalProperties:false}},{name:'stop_vision_camera',description:'Detener la cámara independiente de visión/OCR.',parameters:{type:'object',properties:{},additionalProperties:false}},{name:'analyze_vision_camera',description:'Analizar la imagen actual de la cámara independiente con OCR/visión.',parameters:{type:'object',properties:{},additionalProperties:false}},
+{name:'analyze_camera',description:'Capturar una imagen y analizarla mediante NEXUS LENS.',parameters:{type:'object',properties:{expand:{type:'boolean'}},required:[]}},{name:'open_lens',description:'Abrir NEXUS LENS.',parameters:{type:'object',properties:{},additionalProperties:false}},{name:'start_lens_camera',description:'Solicitar permiso e iniciar la cámara de NEXUS LENS.',parameters:{type:'object',properties:{},additionalProperties:false}},{name:'stop_lens_camera',description:'Detener la cámara de NEXUS LENS.',parameters:{type:'object',properties:{},additionalProperties:false}},{name:'analyze_lens_camera',description:'Capturar una imagen y resolverla local-first; expand permite ampliar un resultado exacto bajo petición.',parameters:{type:'object',properties:{expand:{type:'boolean'}},required:[]}},{name:'identify_lens_code',description:'Resolver un código NEXUS contra IndexedDB, inventario, catálogo y documentos locales.',parameters:{type:'object',properties:{code:{type:'string'}},required:['code']}},{name:'get_lens_context',description:'Consultar el último contexto normalizado generado por NEXUS LENS.',parameters:{type:'object',properties:{},additionalProperties:false}},
 {name:'open_calendar',description:'Abrir calendario.',parameters:{type:'object',properties:{},required:[]}},
 {name:'create_calendar_event',description:'Crear evento local.',parameters:{type:'object',properties:{date:{type:'string',description:'YYYY-MM-DD'},text:{type:'string'}},required:['date','text']}},
 {name:'delete_calendar_event',description:'Eliminar evento local por fecha y texto. Requiere confirm:true solo después de una confirmación explícita del usuario.',parameters:{type:'object',properties:{date:{type:'string'},text:{type:'string'},confirm:{type:'boolean'}},required:['date','text']}},
@@ -841,12 +913,13 @@ const NEXUS_AGENT_TOOL_DEFS=[
 const ACTION_PERMISSIONS={
  write:new Set(['create_inventory_item','update_inventory_item','delete_inventory_item','create_calendar_event','delete_calendar_event']),
  destructive:new Set(['delete_inventory_item','delete_calendar_event']),
- hardware:new Set(['start_camera','start_vision_camera','start_voice']),
- external:new Set(['web_search','sync_repository'])
+ hardware:new Set(['start_camera','start_lens_camera','start_voice']),
+ external:new Set(['web_search','sync_repository']),
+ conditionalExternal:new Set(['analyze_camera','analyze_lens_camera'])
 };
 const ActionRegistry=new Map(NEXUS_AGENT_TOOL_DEFS.map(def=>[def.name,Object.freeze({
  id:def.name,description:def.description,parameters:def.parameters,
- permissions:ACTION_PERMISSIONS.write.has(def.name)?['local:write']:ACTION_PERMISSIONS.hardware.has(def.name)?['device:permission']:ACTION_PERMISSIONS.external.has(def.name)?['network']:['local:read'],
+ permissions:ACTION_PERMISSIONS.write.has(def.name)?['local:write']:ACTION_PERMISSIONS.hardware.has(def.name)?['device:permission']:ACTION_PERMISSIONS.external.has(def.name)?['network']:ACTION_PERMISSIONS.conditionalExternal.has(def.name)?['local:read','network:conditional']:['local:read'],
  response:'{ok, action, duration, data?, result?, error?}',
  errors:['INVALID_PARAMETERS','UNKNOWN_ACTION','NOT_AUTHORIZED','CONFIRMATION_REQUIRED','OPERATION_FAILED'],
  execute:(action,options)=>executeRegisteredAction(action,options)
@@ -891,7 +964,7 @@ async function executeAssistantAction(action,{speak=true,origin='local'}={}){
  }catch(e){return agentActionResult(action,{ok:false,error:e.message||'No se pudo completar la acción'},startedAt)}
 }
 
-function nexusAgentToolResult(action){const a=action?.action||'';if(a==='get_inventory'){const q=String(action.query||'').trim();const hits=q?searchLocal(q).slice(0,15):state.inventory.slice(0,20).map(r=>({r,score:0}));return {count:state.inventory.length,results:hits.map(x=>({id:x.r.id,name:x.r.name,formula:x.r.formula,physicalState:x.r.physicalState,location:x.r.location,notes:x.r.notes}))};}if(a==='get_documents'){const q=String(action.query||'').trim();return q?{results:documentSearch(q).slice(0,10).map(h=>({name:h.d.name,path:h.d.path,score:h.score,excerpt:h.chunk.slice(0,1200)}))}:{count:state.docs.length,documents:state.docs.slice(0,30).map(d=>({name:d.name,type:d.type,path:d.path,chunks:d.chunks?.length||0}))};}if(a==='get_activity')return state.activity;if(a==='get_state')return {view:state.view,inventory:state.inventory.length,documents:state.docs.length,camera:Boolean(state.stream),voice:voiceMonitoring,web:state.web,online:navigator.onLine,audit:state.agentAudit.slice(0,10)};if(a==='status'||a==='diagnostics')return {integrity:runIntegrity(),state:nexusAgentToolResult({action:'get_state'}),gemini:Boolean(getGeminiKey()),model:readStorage(GEMINI_MODEL_KEY)||'auto'};return null;}
+function nexusAgentToolResult(action){const a=action?.action||'';if(a==='get_inventory'){const q=String(action.query||'').trim();const hits=q?searchLocal(q).slice(0,15):state.inventory.slice(0,20).map(r=>({r,score:0}));return {count:state.inventory.length,results:hits.map(x=>({id:x.r.id,name:x.r.name,formula:x.r.formula,physicalState:x.r.physicalState,location:x.r.location,notes:x.r.notes}))};}if(a==='get_documents'){const q=String(action.query||'').trim();return q?{results:documentSearch(q).slice(0,10).map(h=>({name:h.d.name,path:h.d.path,score:h.score,excerpt:h.chunk.slice(0,1200)}))}:{count:state.docs.length,documents:state.docs.slice(0,30).map(d=>({name:d.name,type:d.type,path:d.path,chunks:d.chunks?.length||0}))};}if(a==='get_lens_context')return state.lensLastContext;if(a==='get_activity')return state.activity;if(a==='get_state')return {view:state.view,inventory:state.inventory.length,documents:state.docs.length,camera:Boolean(state.stream||state.lensStream),lens:state.lensLastContext?.status||'idle',voice:voiceMonitoring,web:state.web,online:navigator.onLine,audit:state.agentAudit.slice(0,10)};if(a==='status'||a==='diagnostics')return {integrity:runIntegrity(),state:nexusAgentToolResult({action:'get_state'}),gemini:Boolean(getGeminiKey()),model:readStorage(GEMINI_MODEL_KEY)||'auto'};return null;}
 function resolveUniqueInventoryHit(query){
   const q=String(query||'').trim();
   if(!q)return {ok:false,error:'Consulta vacía'};
@@ -953,10 +1026,10 @@ async function executeRegisteredAction(action,{speak=true}={}){
   }
   if(!NEXUS_AGENT_ACTIONS.has(type))return agentActionResult(action,{ok:false,error:`Acción no disponible: ${type}`},startedAt);
   const q=String(action.query||action.target||'').trim();
-  if(['get_inventory','get_documents','get_activity','get_state','status','diagnostics'].includes(type))return agentActionResult(action,{ok:true,data:nexusAgentToolResult(action)},startedAt);
+  if(['get_inventory','get_documents','get_lens_context','get_activity','get_state','status','diagnostics'].includes(type))return agentActionResult(action,{ok:true,data:nexusAgentToolResult(action)},startedAt);
   if(type==='open_view'){
     const v=norm(action.view||q);
-    if(!['dashboard','inventory','research','ai','qr','vision','documents','reports','settings'].includes(v))return agentActionResult(action,{ok:false,error:'Módulo desconocido'},startedAt);
+    if(!['dashboard','inventory','research','ai','qr','lens','documents','reports','settings'].includes(v))return agentActionResult(action,{ok:false,error:'Módulo desconocido'},startedAt);
     setView(v);if(speak)speakText('Módulo abierto.');return agentActionResult(action,{ok:true,result:v},startedAt);
   }
   if(type==='search_inventory'){const r=await showInventoryQuery(q,{speak:false});if(speak)speakText(r.data?.results?.length?`Encontré ${r.data.results.length} coincidencias en el inventario.`:'No encontré coincidencias en el inventario.');return agentActionResult(action,r,startedAt);}
@@ -994,11 +1067,11 @@ async function executeRegisteredAction(action,{speak=true}={}){
   if(type==='open_qr'){setView('qr');if(speak)speakText('Escáner QR abierto.');return agentActionResult(action,{ok:true},startedAt);}
   if(type==='start_camera'){setView('qr');const ok=await startQr();if(speak)speakText(ok?'Cámara iniciada.':'No pude iniciar la cámara.');return agentActionResult(action,{ok:Boolean(ok)},startedAt);}
   if(type==='stop_camera'){stopQr();if(speak)speakText('Cámara detenida.');return agentActionResult(action,{ok:true},startedAt);}
-  if(type==='analyze_camera'){setView('vision');const r=await analyzeCurrentVisionCamera();return agentActionResult(action,r,startedAt);}
-  if(type==='open_vision'){setView('vision');if(speak)speakText('Módulo de visión abierto.');return agentActionResult(action,{ok:true},startedAt);}
-  if(type==='start_vision_camera'){const ok=await requestVisionCameraPermission();if(!ok)return agentActionResult(action,{ok:false,error:'Permiso de cámara no concedido'},startedAt);const started=await startVisionCamera();if(speak)speakText(started?'Cámara de visión iniciada.':'No pude iniciar la cámara de visión.');return agentActionResult(action,{ok:Boolean(started)},startedAt);}
-  if(type==='stop_vision_camera'){stopVisionCamera();if(speak)speakText('Cámara de visión detenida.');return agentActionResult(action,{ok:true},startedAt);}
-  if(type==='analyze_vision_camera'){setView('vision');const r=await analyzeCurrentVisionCamera();return agentActionResult(action,r,startedAt);}
+  if(type==='analyze_camera'||type==='analyze_lens_camera'){setView('lens');const r=await analyzeCurrentLensCamera({expand:Boolean(action.expand)});return agentActionResult(action,r,startedAt);}
+  if(type==='open_lens'){setView('lens');if(speak)speakText('NEXUS LENS abierto.');return agentActionResult(action,{ok:true},startedAt);}
+  if(type==='start_lens_camera'){const ok=await requestLensCameraPermission();if(!ok)return agentActionResult(action,{ok:false,error:'Permiso de cámara no concedido'},startedAt);const started=await startLensCamera();if(speak)speakText(started?'Cámara NEXUS LENS iniciada.':'No pude iniciar la cámara NEXUS LENS.');return agentActionResult(action,{ok:Boolean(started)},startedAt);}
+  if(type==='stop_lens_camera'){stopLensCamera();if(speak)speakText('Cámara NEXUS LENS detenida.');return agentActionResult(action,{ok:true},startedAt);}
+  if(type==='identify_lens_code'){const context=await identifyLensCode(action.code);if(speak)speakText(context.status==='confirmed'?'Código NEXUS confirmado localmente.':'El código no tiene una coincidencia local confirmada.');return agentActionResult(action,{ok:true,data:context},startedAt);}
   if(type==='open_calendar'){openCalendar();if(speak)speakText('Abriendo calendario.');return agentActionResult(action,{ok:true},startedAt);}
   if(type==='create_calendar_event'){const date=String(action.date||''),text=String(action.text||'').trim();if(!/^\d{4}-\d{2}-\d{2}$/.test(date)||!text)return agentActionResult(action,{ok:false,error:'Fecha o texto inválidos'},startedAt);const events=calendarEvents();events.push({date,text});events.sort((a,b)=>a.date.localeCompare(b.date));saveCalendarEvents(events);renderCalendar();saveActivity(`Evento agregado: ${text}`);if(speak)speakText('Evento agregado.');return agentActionResult(action,{ok:true,result:{date,text}},startedAt);}
   if(type==='delete_calendar_event'){if(action.confirm!==true)return agentActionResult(action,{ok:false,error:'Confirmación requerida para eliminar un evento.'},startedAt);const date=String(action.date||''),text=norm(action.text||''),events=calendarEvents(),next=events.filter(e=>!(e.date===date&&norm(e.text)===text));if(next.length===events.length)return agentActionResult(action,{ok:false,error:'Evento no encontrado'},startedAt);saveCalendarEvents(next);renderCalendar();if(speak)speakText('Evento eliminado.');return agentActionResult(action,{ok:true,result:{date,text:action.text}},startedAt);}
@@ -1070,7 +1143,7 @@ function parseLocalAssistantAction(q){
   if(/^(?:(?:decime|dime|muestra|mostrame)\s+)?(?:el\s+)?estado(?:\s+del\s+sistema)?$/.test(n))return {action:'status'};
   const openPrefix='(?:abrir|abre|abri|abrime|ir a|ir al|ve a|ve al|anda a|anda al|andá a|andá al|entrar a|entrar al|entra a|entra al|mostrar|mostrame|muestrame|muéstrame|volver a|volver al|volve a|volve al|volvé a|volvé al)';
   const targetPrefix='(?:el|la|los|las|al|a|del|de)?\\s*';
-  const views={inicio:'dashboard',home:'dashboard',panel:'dashboard',dashboard:'dashboard',inventario:'inventory',material:'inventory',materiales:'inventory',stock:'inventory',investigacion:'research',investigar:'research',ia:'ai','nexus ia':'ai',asistente:'ai','asistente ia':'ai',qr:'qr','codigo qr':'qr',codigo:'qr',escaner:'qr',scanner:'qr',camara:'qr',cámara:'qr',vision:'vision','visión':'vision',ocr:'vision','vision ocr':'vision','visión ocr':'vision',documentos:'documents',archivos:'documents',ficheros:'documents',informes:'reports',reportes:'reports',ajustes:'settings',configuracion:'settings','configuración':'settings'};
+ const views={inicio:'dashboard',home:'dashboard',panel:'dashboard',dashboard:'dashboard',inventario:'inventory',material:'inventory',materiales:'inventory',stock:'inventory',investigacion:'research',investigar:'research',ia:'ai','nexus ia':'ai',asistente:'ai','asistente ia':'ai',qr:'qr','codigo qr':'qr',codigo:'qr',escaner:'qr',scanner:'qr',camara:'qr',cámara:'qr',documentos:'documents',archivos:'documents',ficheros:'documents',informes:'reports',reportes:'reports',ajustes:'settings',configuracion:'settings','configuración':'settings'};
   for(const [label,view] of Object.entries(views)){
     const m=n.match(new RegExp('^'+openPrefix+'\\s+'+targetPrefix+'('+label.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+')$'));
     if(m)return view==='qr'?{action:'open_qr'}:{action:'open_view',query:view};
@@ -1090,10 +1163,12 @@ function parseLocalAssistantAction(q){
   if(m)return {action:'search_documents',query:m[1].trim()};
   m=n.match(/^(?:abrir|abre|abri|abrime|mostrar|muestra|mostrame|muéstrame)\s+(?:el\s+)?(?:archivo|documento|fichero)\s+(.+)$/);
   if(m)return {action:'open_document',query:m[1].trim()};
-  if(/^(?:abrir|abre|abrime|mostrar|mostrame|muestra)\s+(?:el\s+)?(?:modulo\s+de\s+)?(?:vision|visión|ocr)$/.test(n))return {action:'open_vision'};
-  if(/^(?:inicia|iniciar|iniciá|enciende|prende|activar|activa|abre|abrir)\s+(?:la\s+)?(?:camara|cámara)\s+(?:de\s+)?(?:vision|visión|ocr)$/.test(n))return {action:'start_vision_camera'};
-  if(/^(?:detener|detene|detén|apagar|apaga|parar|para)\s+(?:la\s+)?(?:camara|cámara)\s+(?:de\s+)?(?:vision|visión|ocr)$/.test(n))return {action:'stop_vision_camera'};
-  if(/^(?:analiza|analizar|analizá|escanea|escanear|escané)\s+(?:lo\s+que\s+ve|la\s+camara|la\s+cámara)\s+(?:de\s+)?(?:vision|visión|ocr)$/.test(n))return {action:'analyze_vision_camera'};
+ m=n.match(/^(?:identifica|identificar|identificá|resolver|resolve|resolvé|buscar|busca|buscá)\s+(?:el\s+)?(?:codigo|código)\s+((?:nexus[- ]?x|nx)[- :#]*\d{1,4})$/);
+ if(m)return {action:'identify_lens_code',code:m[1].trim()};
+ if(/^(?:abrir|abre|abri|abrime|mostrar|mostrame|muestra)\s+(?:el\s+)?(?:modulo\s+de\s+)?(?:nexus\s+)?(?:lens|vision|visión)$/.test(n))return {action:'open_lens'};
+ if(/^(?:inicia|iniciar|iniciá|enciende|prende|activar|activa|abre|abrir)\s+(?:la\s+)?(?:camara|cámara)\s+(?:de\s+)?(?:nexus\s+)?(?:lens|vision|visión)$/.test(n))return {action:'start_lens_camera'};
+ if(/^(?:detener|detene|detén|apagar|apaga|parar|para)\s+(?:la\s+)?(?:camara|cámara)\s+(?:de\s+)?(?:nexus\s+)?(?:lens|vision|visión)$/.test(n))return {action:'stop_lens_camera'};
+ if(/^(?:analiza|analizar|analizá|escanea|escanear|escané)\s+(?:lo\s+que\s+ve|la\s+camara|la\s+cámara)\s+(?:de\s+)?(?:nexus\s+)?(?:lens|vision|visión)$/.test(n))return {action:'analyze_lens_camera'};
   if(/^(?:abrir|abre|abrime|mostrar|mostrame|muestra)\s+(?:el\s+)?(?:calendario|agenda)$/.test(n))return {action:'open_calendar'};
   m=n.match(/^(?:crear|crea|agrega|agregar|añade|anade)\s+(?:un\s+)?(?:evento|recordatorio)\s+(?:el\s+)?(\d{4}-\d{2}-\d{2})\s+(?:de\s+)?(.+)$/);
   if(m)return {action:'create_calendar_event',date:m[1],text:m[2].trim()};
@@ -1192,11 +1267,11 @@ function bind(){
  if(!key){health.gemini={status:'no configurada'};renderGeminiSettings();return toast('Clave eliminada.');}
  $('#saveAiBtn').disabled=true;toast('Comprobando Gemini…');const result=await testGeminiKey(key);renderGeminiSettings();renderDiagnostics();toast(result.message);
  }catch(e){toast(e.message)}finally{$('#saveAiBtn').disabled=false}};$('#clearLocalBtn').onclick=restoreMaster;
- $$('[data-close]').forEach(b=>b.onclick=()=>hideModal(b.dataset.close));$('#calendarBtn').onclick=openCalendar;$('#calPrev').onclick=()=>{calCursor.setMonth(calCursor.getMonth()-1);renderCalendar()};$('#calNext').onclick=()=>{calCursor.setMonth(calCursor.getMonth()+1);renderCalendar()};$('#calToday').onclick=()=>{calCursor=new Date();renderCalendar()};$('#calAdd').onclick=addCalendarEvent;$('#calEvent').addEventListener('keydown',e=>{if(e.key==='Enter')addCalendarEvent()});$('#downloadDocumentBtn').onclick=()=>{if(activeDocument?.blob)download(activeDocument.name,activeDocument.blob)};$('#documentViewerClose').onclick=closeDocumentViewer;$('#documentViewerAIButton').onclick=()=>$('#documentViewerAI').classList.toggle('open');$('#documentAIAsk').onclick=askDocumentAI;$('#documentAIInput').addEventListener('keydown',e=>{if(e.key==='Enter')askDocumentAI()});$('#ocrImageBtn').onclick=()=>$('#ocrImageInput').click();$('#ocrPdfBtn').onclick=()=>$('#ocrPdfInput').click();$('#ocrImageInput').onchange=e=>{const f=e.target.files[0];if(f)ocrImageFile(f);e.target.value=''};$('#ocrPdfInput').onchange=e=>{const f=e.target.files[0];if(f)ocrPdfFile(f);e.target.value=''};$('#ocrIndexBtn').onclick=indexOcrText;$('#ocrCopyBtn').onclick=copyOcrText;$('#visionPermissionBtn').onclick=async()=>{const ok=await requestVisionCameraPermission();if(ok)await startVisionCamera()};$('#visionStartBtn').onclick=async()=>{const ok=await requestVisionCameraPermission();if(ok)await startVisionCamera()};$('#visionStopBtn').onclick=stopVisionCamera;$('#visionAnalyzeBtn').onclick=analyzeCurrentVisionCamera;initVoice();window.addEventListener('beforeunload',()=>{stopQr();stopVisionCamera();stopVoiceRecognition();if(globalThis.speechSynthesis)globalThis.speechSynthesis.cancel()});
+ $$('[data-close]').forEach(b=>b.onclick=()=>hideModal(b.dataset.close));$('#calendarBtn').onclick=openCalendar;$('#calPrev').onclick=()=>{calCursor.setMonth(calCursor.getMonth()-1);renderCalendar()};$('#calNext').onclick=()=>{calCursor.setMonth(calCursor.getMonth()+1);renderCalendar()};$('#calToday').onclick=()=>{calCursor=new Date();renderCalendar()};$('#calAdd').onclick=addCalendarEvent;$('#calEvent').addEventListener('keydown',e=>{if(e.key==='Enter')addCalendarEvent()});$('#downloadDocumentBtn').onclick=()=>{if(activeDocument?.blob)download(activeDocument.name,activeDocument.blob)};$('#documentViewerClose').onclick=closeDocumentViewer;$('#documentViewerAIButton').onclick=()=>$('#documentViewerAI').classList.toggle('open');$('#documentAIAsk').onclick=askDocumentAI;$('#documentAIInput').addEventListener('keydown',e=>{if(e.key==='Enter')askDocumentAI()});$('#lensImageBtn').onclick=()=>$('#lensImageInput').click();$('#lensImageInput').onchange=async e=>{const f=e.target.files[0];if(f)await analyzeLensImageFile(f);e.target.value=''};$('#lensPermissionBtn').onclick=async()=>{const ok=await requestLensCameraPermission();if(ok)await startLensCamera()};$('#lensStartBtn').onclick=async()=>{const ok=await requestLensCameraPermission();if(ok)await startLensCamera()};$('#lensStopBtn').onclick=stopLensCamera;$('#lensAnalyzeBtn').onclick=()=>analyzeCurrentLensCamera();$('#lensSearchBtn').onclick=lensSearchInNexus;$('#lensInventoryBtn').onclick=()=>lensOpenInventory();$('#lensDocumentsBtn').onclick=()=>lensOpenDocuments();$('#lensInternetBtn').onclick=()=>lensInvestigateInternet();$('#lensFichaBtn').onclick=lensOpenFicha;lensSetContextActions(state.lensLastContext);initVoice();window.addEventListener('beforeunload',()=>{stopQr();stopLensCamera();stopVoiceRecognition();if(globalThis.speechSynthesis)globalThis.speechSynthesis.cancel()});
 }
 let bootPromise=null;
 function boot(){if(bootPromise)return bootPromise;bootPromise=(async()=>{
- try{bind();health.boot='STORAGE';renderGeminiSettings();renderActivity();await loadMaster();health.boot='DOCUMENTS';await loadCachedDocumentIndex();health.boot=state.inventoryError||!state.docIndexReady?'DEGRADED':'READY';renderDiagnostics();
+ try{bind();health.boot='STORAGE';renderGeminiSettings();renderActivity();await loadMaster();await loadCatalogMaster();health.boot='DOCUMENTS';await loadCachedDocumentIndex();health.boot=state.inventoryError||!state.docIndexReady?'DEGRADED':'READY';renderDiagnostics();
  setupServiceWorker();
  if(state.docIndexReady)$('#repoStatus').textContent=navigator.onLine?'Documentos locales listos':'Sin conexión · documentos locales';
  if(navigator.onLine&&githubRepo.repo)syncRepository().catch(e=>{health.errors.push({domain:'GitHub',message:e.message})});

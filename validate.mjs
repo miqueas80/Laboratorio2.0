@@ -3,7 +3,7 @@ import path from 'node:path';
 import vm from 'node:vm';
 
 const root=path.resolve(new URL('.',import.meta.url).pathname);
-const required=['index.html','app.js','manifest.webmanifest','sw.js','inventory.json','icon.svg'];
+const required=['index.html','app.js','manifest.webmanifest','sw.js','inventory.json','catalogo_maestro.json','icon.svg'];
 const errors=[];
 
 for(const f of required){
@@ -39,7 +39,7 @@ const domRefs=[
   ...js.matchAll(/\$\(['"]#([^'"\$]+)['"]\)/g),
   ...js.matchAll(/\$\$\(['"]#([^'"\$]+)['"]\)/g)
 ].map(m=>m[1]);
-for(const id of new Set(domRefs))if(!seen.has(id) && !['qrOpenResult'].includes(id))errors.push('Referencia DOM inexistente: '+id);
+for(const id of new Set(domRefs))if(!seen.has(id) && !['qrOpenResult','lensOpenResult'].includes(id))errors.push('Referencia DOM inexistente: '+id);
 
 for(const fn of ['loadMaster','importExcel','importWord','startQr','processQr','runResearch','runIntegrity']){
   if(!new RegExp(`function\\s+${fn}\\s*\\(`).test(js)&&!js.includes(`async function ${fn}(`))errors.push('Función crítica ausente: '+fn);
@@ -47,6 +47,8 @@ for(const fn of ['loadMaster','importExcel','importWord','startQr','processQr','
 
 if(/function\s+geminiGenerate\s*\([^)]*\bdocument\s*=/.test(js))errors.push('geminiGenerate vuelve a sombrear document global');
 if(/\basync\s+const\b/.test(js))errors.push('Declaración async const inválida detectada');
+if(/Tesseract|LENS_TEXT_ENGINE|extractLensTextSignal|getLensTextWorker|preprocessLensTextSource/i.test(js))errors.push('NEXUS LENS volvió a incluir un motor OCR/Tesseract separado');
+if(/\bOCR\b/i.test(html))errors.push('La interfaz volvió a exponer OCR como módulo o concepto visible');
 
 for(const ref of ['app.js','manifest.webmanifest'])if(!html.includes(ref))errors.push('Referencia ausente: '+ref);
 

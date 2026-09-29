@@ -16,11 +16,13 @@ Errores declarados: parámetros inválidos, acción inexistente, origen no autor
 | `open_qr` | Abrir QR/cámara. | local:read | steps:array * (sequence) |
 | `start_camera` | Abrir QR e iniciar cámara. | device:permission | steps:array * (sequence) |
 | `stop_camera` | Detener cámara. | local:read | steps:array * (sequence) |
-| `analyze_camera` | Analizar lo que ve la cámara de visión con OCR y visión. | local:read | steps:array * (sequence) |
-| `open_vision` | Abrir el módulo independiente de visión/OCR. | local:read | steps:array * (sequence) |
-| `start_vision_camera` | Solicitar permiso e iniciar la cámara independiente de visión/OCR. | device:permission | steps:array * (sequence) |
-| `stop_vision_camera` | Detener la cámara independiente de visión/OCR. | local:read | steps:array * (sequence) |
-| `analyze_vision_camera` | Analizar la imagen actual de la cámara independiente con OCR/visión. | local:read | steps:array * (sequence) |
+| `analyze_camera` | Capturar una imagen y analizarla mediante NEXUS LENS. | local:read; network:conditional | expand:boolean |
+| `open_lens` | Abrir NEXUS LENS. | local:read | steps:array * (sequence) |
+| `start_lens_camera` | Solicitar permiso e iniciar la cámara de NEXUS LENS. | device:permission | steps:array * (sequence) |
+| `stop_lens_camera` | Detener la cámara de NEXUS LENS. | local:read | steps:array * (sequence) |
+| `analyze_lens_camera` | Capturar una imagen y resolverla local-first; expand permite ampliar un resultado exacto bajo petición. | local:read; network:conditional | expand:boolean |
+| `identify_lens_code` | Resolver un código NEXUS contra IndexedDB, inventario, catálogo y documentos locales. | local:read | code:string * |
+| `get_lens_context` | Consultar el último contexto normalizado generado por NEXUS LENS. | local:read | — |
 | `open_calendar` | Abrir calendario. | local:read | steps:array * (sequence) |
 | `create_calendar_event` | Crear evento local. | local:write | date:string *; text:string * |
 | `delete_calendar_event` | Eliminar evento local por fecha y texto. Requiere confirm:true solo después de una confirmación explícita del usuario. | local:write | date:string *; text:string *; confirm:boolean |
