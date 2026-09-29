@@ -52,7 +52,6 @@ button:focus-visible,a:focus-visible{outline:3px solid #157d93;outline-offset:3p
   <button class="nav-btn" data-view="settings"><span>⚙</span><span>Ajustes</span></button>
 </aside>
 <main class="main">
-<div id="geminiNotice" class="notice" role="status" aria-live="polite" hidden style="max-width:1180px;margin:0 auto 12px"></div>
 <section id="view-dashboard" class="view active">
   <div class="page-head"><div><h1>Dashboard</h1><p>Estado general de NEXUS-X y del laboratorio.</p></div><div class="toolbar"><button class="btn" id="calendarBtn">▣ Calendario</button></div></div>
   <div class="grid stats">
@@ -80,9 +79,9 @@ button:focus-visible,a:focus-visible{outline:3px solid #157d93;outline-offset:3p
 </section>
 <section id="view-ai" class="view">
   <div class="page-head"><div><h1>NEXUS IA</h1><p>Centro de mando inteligente de NEXUS-X. La IA interpreta objetivos, ejecuta herramientas y puede encadenar acciones sobre toda la aplicación.</p></div><div class="toolbar"><span id="agentStatePill" class="system-pill">● Agente listo</span></div></div>
-  <div class="card section"><div class="grid two"><div><h2>⚡ Agente operativo</h2><p class="muted">NEXUS IA es la capa de control de la aplicación: recibe una intención, selecciona herramientas, las ejecuta y usa sus resultados para continuar.</p><div class="toolbar"><span class="badge ok">Control de módulos</span><span class="badge ok">Acciones locales</span><span class="badge ok">Acciones encadenadas</span><span class="badge ok">Contexto local</span></div></div><div><h2>⌘ Ejemplos</h2><div class="footer-note">“Abrí QR y empezá la cámara” · “Buscá la fórmula del sodio” · “Abrí el archivo de formulación” · “Creá un evento para mañana” · “Analizá lo que ve la cámara” · “Decime el estado del sistema”.</div></div></div></div><div class="card section"><h2>⚡ Telemetría del agente</h2><div class="grid three"><div class="notice"><strong>Modo</strong><br><span id="agentMode">READY</span></div><div class="notice"><strong>Latencia</strong><br><span id="agentLatency">—</span></div><div class="notice"><strong>Herramientas ejecutadas</strong><br><span id="agentActions">0</span></div></div><div class="footer-note">Las órdenes simples de control se resuelven localmente sin esperar a Gemini. Las consultas externas pasan a Gemini cuando activás Internet.</div></div>
+  <div class="card section"><div class="grid two"><div><h2>⚡ Agente operativo</h2><p class="muted">NEXUS IA es la capa de control de la aplicación: recibe una intención, selecciona herramientas, las ejecuta y usa sus resultados para continuar.</p><div class="toolbar"><span class="badge ok">Control de módulos</span><span class="badge ok">Acciones locales</span><span class="badge ok">Acciones encadenadas</span><span class="badge ok">Contexto local</span></div></div><div><h2>⌘ Ejemplos</h2><div class="footer-note">“Abrí QR y empezá la cámara” · “Buscá la fórmula del sodio” · “Abrí el archivo de formulación” · “Creá un evento para mañana” · “Analizá lo que ve la cámara” · “Decime el estado del sistema”.</div></div></div></div><div class="card section"><h2>⚡ Telemetría del agente</h2><div class="grid three"><div class="notice"><strong>Modo</strong><br><span id="agentMode">READY</span></div><div class="notice"><strong>Latencia</strong><br><span id="agentLatency">—</span></div><div class="notice"><strong>Herramientas ejecutadas</strong><br><span id="agentActions">0</span></div></div><div class="footer-note">Las órdenes simples de control se resuelven localmente sin esperar a xkiro. Las consultas externas pasan a xkiro cuando activás Internet.</div></div>
   <div class="grid two">
-    <div class="card"><h2>🧠 Conversación inteligente</h2><p class="muted">NEXUS controla acciones locales sin API. Gemini recibe sólo la consulta externa y, en consultas híbridas, los nombres y fórmulas relevantes.</p><div class="chat" id="aiChat"></div><div class="search-row section"><input id="aiInput" placeholder="Decile a NEXUS-X qué necesitás…"><button class="btn teal" id="aiBtn">Enviar</button></div><div class="footer-note">Ejemplos: “¿Qué tenemos de ácido sulfúrico?”, “buscá el archivo de formulación”, “analizá lo que está frente a la cámara”.</div></div>
+    <div class="card"><h2>🧠 Conversación inteligente</h2><p class="muted">NEXUS controla acciones locales sin API. xkiro recibe sólo la consulta externa y, en consultas híbridas, los nombres y fórmulas relevantes.</p><div class="chat" id="aiChat"></div><div class="search-row section"><input id="aiInput" placeholder="Decile a NEXUS-X qué necesitás…"><button class="btn teal" id="aiBtn">Enviar</button></div><div class="footer-note">Ejemplos: “¿Qué tenemos de ácido sulfúrico?”, “buscá el archivo de formulación”, “analizá lo que está frente a la cámara”.</div></div>
     <div class="card"><h2>🎙 Control por voz</h2><p class="muted">Una vez concedido el micrófono, NEXUS-X puede permanecer dormido y despertar con <strong>“Nexus”</strong>. Mientras habla, decir nuevamente <strong>“Nexus”</strong> lo interrumpe y vuelve a escuchar.</p><div id="voiceStatus" class="voice-status"><span class="pulse"></span><span id="voiceStatusText">Vigilancia dormida · esperando “Nexus”</span></div><div id="voiceTranscript" class="voice-transcript">Sin comando de voz todavía.</div><div class="toolbar section"><button class="btn primary" id="voiceToggleBtn">🎙 Activar una vez</button><button class="btn" id="voicePermissionBtn">🔐 Permitir micrófono</button><button class="btn" id="voiceSpeakBtn">🔊 Probar voz</button></div><div class="notice section"><strong>Agente global:</strong> la voz puede abrir módulos, buscar inventario, fórmulas y archivos, iniciar investigaciones, controlar NEXUS LENS, calendario, sincronización y exportaciones. No necesita estar dentro de Investigación ni de Internet.</div></div>
   </div>
   <div class="card section"><h2>⚙ Herramientas disponibles</h2><div class="grid two"><div><div class="task"><span>Navegación completa</span><span class="ok">✓</span></div><div class="task"><span>Inventario, fórmulas y fichas</span><span class="ok">✓</span></div><div class="task"><span>Documentos y archivos indexados</span><span class="ok">✓</span></div><div class="task"><span>Investigación local-first</span><span class="ok">✓</span></div><div class="task"><span>Búsqueda web bajo demanda</span><span class="ok">✓</span></div></div><div><div class="task"><span>QR, cámara y NEXUS LENS</span><span class="ok">✓</span></div><div class="task"><span>Calendario: crear / eliminar</span><span class="ok">✓</span></div><div class="task"><span>Repositorio y exportaciones</span><span class="ok">✓</span></div><div class="task"><span>Voz global y estado del sistema</span><span class="ok">✓</span></div><div class="task"><span>Planificación multiacción</span><span class="ok">✓</span></div></div></div></div>
@@ -152,49 +151,7 @@ button:focus-visible,a:focus-visible{outline:3px solid #157d93;outline-offset:3p
 
   <div class="grid two">
 
-    <!-- GEMINI -->
-    <div class="card">
-      <h2>Gemini AI</h2>
-
-      <p class="muted">
-        Pegá tu clave personal para consultar información externa.
-        Se conserva en esta sesión salvo que elijas recordarla.
-        La conexión se confirma mediante una respuesta real.
-      </p>
-
-      <div class="field">
-        <label>API Key de Gemini</label>
-        <input
-          id="aiKey"
-          type="password"
-          autocomplete="off"
-          placeholder="Pegá tu clave aquí"
-        >
-      </div>
-
-      <div class="notice">
-        <strong>Configuración automática</strong><br>
-        NEXUS-X consulta los modelos disponibles con tu clave
-        y cambia de modelo ante fallos temporales,
-        sin afectar el núcleo local.<br>
-        <span id="geminiStatus"></span>
-      </div>
-
-      <label>
-        <input type="checkbox" id="rememberAiKey">
-        Recordar la clave en este navegador
-      </label>
-
-      <p class="footer-note">
-        La clave personal es accesible al código de este origen.
-        Usá restricciones del proveedor.
-        Sin esta opción se conserva sólo durante la sesión.
-      </p>
-
-      <button class="btn primary section" id="saveAiBtn">
-        Guardar y conectar
-      </button>
-    </div>
+    
 
     <!-- DIAGNÓSTICO -->
     <div class="card">
@@ -288,7 +245,6 @@ button:focus-visible,a:focus-visible{outline:3px solid #157d93;outline-offset:3p
 </section>
 </main>
 </div>
-<div id="documentViewerModal" class="modal-backdrop"><div class="modal document-viewer-modal"><div class="modal-head"><div><h2 id="documentViewerTitle">Documento</h2><div id="documentViewerMeta" class="muted"></div></div><div class="toolbar"><button class="btn" id="downloadDocumentBtn">Descargar original</button><button class="ai-circle" id="documentViewerAIButton" title="Preguntar a Gemini">AI</button><button class="close" id="documentViewerClose">Cerrar</button></div></div><div id="documentViewerAI" class="document-ai-panel"><div class="chat" id="documentAIChat"></div><div class="search-row section"><input id="documentAIInput" placeholder="Preguntale a Gemini sobre este documento…"><button class="btn teal" id="documentAIAsk">Preguntar</button></div><div class="footer-note">Al preguntar a Gemini se envían hasta seis extractos relevantes del documento abierto (máximo 12.000 caracteres). El archivo completo permanece local.</div></div><div id="documentViewerBody" class="document-viewer-body"></div></div></div>
 <div id="calendarModal" class="modal-backdrop"><div class="modal calendar-modal"><div class="modal-head"><h2>Calendario NEXUS-X</h2><button class="close" data-close="calendarModal">Cerrar</button></div><div class="calendar-toolbar"><button class="btn" id="calPrev">‹</button><strong id="calTitle"></strong><button class="btn" id="calNext">›</button><button class="btn teal" id="calToday">Hoy</button></div><div id="calGrid" class="calendar-grid"></div><div class="section"><h3>Agregar evento</h3><div class="form-grid"><div class="field"><label>Fecha</label><input id="calDate" type="date"></div><div class="field"><label>Evento / tarea</label><input id="calEvent" placeholder="Ej.: revisar inventario"></div></div><button class="btn primary" id="calAdd">Agregar</button></div><div class="section"><h3>Eventos</h3><div id="calEvents" class="notice">Sin eventos.</div></div></div></div>
 <div id="itemModal" class="modal-backdrop"><div class="modal"><div class="modal-head"><h2 id="itemModalTitle">Registro</h2><button class="close" data-close="itemModal">Cerrar</button></div><div class="form-grid"><div class="field"><label>ID NEXUS-X</label><input id="fId" placeholder="NEXUS-X-0001"></div><div class="field"><label>Nº original</label><input id="fOriginal"></div><div class="field"><label>Sustancia / mezcla / material</label><input id="fName"></div><div class="field"><label>Fórmula</label><input id="fFormula"></div><div class="field"><label>Estado físico</label><input id="fState"></div><div class="field"><label>Presentación</label><input id="fPresentation"></div><div class="field"><label>Envase original</label><input id="fPackage"></div><div class="field"><label>Fecha / vencimiento</label><input id="fExpiry"></div><div class="field"><label>Ubicación / armario</label><input id="fLocation"></div><div class="field wide"><label>Observaciones</label><textarea id="fNotes" rows="3"></textarea></div></div><div class="toolbar"><button class="btn primary" id="saveItemBtn">Guardar</button><button class="btn danger" id="deleteItemBtn">Eliminar</button></div></div></div>
 <div id="resultModal" class="modal-backdrop"><div class="modal"><div class="modal-head"><h2>Resultado NEXUS-X</h2><button class="close" data-close="resultModal">Cerrar</button></div><div id="resultBody"></div></div></div>
