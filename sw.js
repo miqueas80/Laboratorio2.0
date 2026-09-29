@@ -1,6 +1,6 @@
 'use strict';
 // Incrementar VERSION junto con APP_VERSION cuando cambie cualquier recurso CORE.
-const VERSION='2026.09.29-r8';
+const VERSION='2026.09.29-r9';
 const SCOPE=new URL(self.registration.scope);
 const PREFIX='nexus-x-shell:'+encodeURIComponent(SCOPE.pathname)+':';
 const CACHE=PREFIX+VERSION;

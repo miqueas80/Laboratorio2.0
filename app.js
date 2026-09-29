@@ -16,7 +16,7 @@ const REPO_OWNER='miqueas80';
 const REPO_NAME='';
 const REPO_BRANCH='';
 const DOC_MAX_BYTES=16*1024*1024;
-const APP_VERSION='2026.09.29-r8';
+const APP_VERSION='2026.09.29-r9';
 const INVENTORY_RECOVERY_KEY='nexus_x_inventory_recovery_v1';
 const health={storage:'sin comprobar',documents:'sin comprobar',errors:[],boot:'BOOT'};
 const LENS_EXTERNAL_CACHE_TTL=30*60*1000;
@@ -685,16 +685,19 @@ function buildNexusLensContext(evidences,{expanded=false}={}){
  const externalRows=rows.filter(e=>!e.local);
  return {ok:true,status,classification,identity:candidate?{source:candidate.source,record:candidate.metadata.record,confidence:candidate.confidence,confirmed:Boolean(confirmed)}:null,evidences:rows,evidenceGroups:{confirmedLocal:confirmed?[confirmed]:[],probableMatches:identities.filter(e=>e!==confirmed),visualHypotheses:visual,externalInformation},documents,local:externalRows.length===0,localFirst:true,external:{requested:externalRows.length>0,allowed:!confirmed||expanded,blocked:Boolean(confirmed&&!expanded),reason:confirmed&&!expanded?'Coincidencia exacta de código NEXUS en datos locales.':'La evidencia local no produjo una identificación exacta o se solicitó ampliación.'}};
 }
-function resolveLensLocalSignals({code='',indexEvidence=null,extraEvidence=[],expanded=false}={}){
+function resolveLensLocalSignals({code='',text='',textQuality=0,indexEvidence=null,extraEvidence=[],expanded=false}={}){
  const evidences=[];if(indexEvidence)evidences.push(indexEvidence);evidences.push(...extraEvidence);
  const rawCode=String(code||'').trim(),id=rawCode?qrExtractId(rawCode):'';
  if(rawCode)evidences.push(createLensEvidence({source:'camera',type:'code-observation',value:id||rawCode,confidence:100,metadata:{raw:rawCode,format:'qr'}}));
+ if(text)evidences.push(createLensEvidence({source:'camera',type:'text-hypothesis',value:String(text).slice(0,2500),confidence:textQuality,metadata:{auxiliary:true}}));
  const inventoryExact=id?state.inventory.find(r=>r.id===id):null;
  if(inventoryExact)evidences.push(createLensEvidence({source:'inventory',type:'identity',value:{id:inventoryExact.id,name:inventoryExact.name,formula:inventoryExact.formula},confidence:100,metadata:{match:'exact-code',record:inventoryExact}}));
+ else for(const hit of lensMatchesFromText(state.inventory,text).slice(0,3))evidences.push(createLensEvidence({source:'inventory',type:'identity',value:{id:hit.r.id,name:hit.r.name,formula:hit.r.formula},confidence:Math.min(95,Math.round(textQuality*.7+Math.min(hit.score,200)*.12)),metadata:{match:'text-candidate',score:hit.score,record:hit.r}}));
  const catalogExact=id?state.catalog.find(r=>r.id===id||norm(r.originalNumber)===norm(rawCode)):null;
  if(catalogExact)evidences.push(createLensEvidence({source:'catalog',type:'identity',value:{id:catalogExact.id,name:catalogExact.name,formula:catalogExact.formula},confidence:100,metadata:{match:'exact-code',record:catalogExact}}));
+ else for(const hit of lensMatchesFromText(state.catalog,text).slice(0,3))evidences.push(createLensEvidence({source:'catalog',type:'identity',value:{id:hit.r.id,name:hit.r.name,formula:hit.r.formula},confidence:Math.min(92,Math.round(textQuality*.65+Math.min(hit.score,200)*.12)),metadata:{match:'text-candidate',score:hit.score,record:hit.r}}));
  const identity=evidences.filter(e=>e.type==='identity').sort((a,b)=>b.confidence-a.confidence)[0];
- const query=[id,identity?.metadata?.record?.name,identity?.metadata?.record?.formula].filter(Boolean).join(' ');
+ const query=[id,text,identity?.metadata?.record?.name,identity?.metadata?.record?.formula].filter(Boolean).join(' ');
  evidences.push(...searchLensDocuments(query));
  return buildNexusLensContext(evidences,{expanded});
 }
@@ -702,11 +705,12 @@ function captureLensFrame(source){
  const sourceWidth=source?.naturalWidth||source?.videoWidth||source?.width,sourceHeight=source?.naturalHeight||source?.videoHeight||source?.height;if(!sourceWidth||!sourceHeight)throw new Error('La imagen no tiene dimensiones válidas.');
  const scale=Math.min(1,1400/Math.max(sourceWidth,sourceHeight)),canvas=DOM.createElement('canvas');canvas.width=Math.max(1,Math.round(sourceWidth*scale));canvas.height=Math.max(1,Math.round(sourceHeight*scale));canvas.getContext('2d',{willReadFrequently:true}).drawImage(source,0,0,canvas.width,canvas.height);return canvas;
 }
-function analyzeLensFrameLocally(canvas){
- const sample=DOM.createElement('canvas'),max=96,scale=Math.min(1,max/Math.max(canvas.width,canvas.height));sample.width=Math.max(1,Math.round(canvas.width*scale));sample.height=Math.max(1,Math.round(canvas.height*scale));const ctx=sample.getContext('2d',{willReadFrequently:true});ctx.drawImage(canvas,0,0,sample.width,sample.height);const data=ctx.getImageData(0,0,sample.width,sample.height).data;let lum=0,lum2=0,color=0,edges=0,previous=null;
- for(let i=0;i<data.length;i+=4){const r=data[i],g=data[i+1],b=data[i+2],l=.299*r+.587*g+.114*b;lum+=l;lum2+=l*l;color+=Math.max(r,g,b)-Math.min(r,g,b);if(previous!==null&&Math.abs(l-previous)>34)edges++;previous=l}
- const pixels=Math.max(1,data.length/4),brightness=Math.round(lum/pixels),contrast=Math.round(Math.sqrt(Math.max(0,lum2/pixels-(lum/pixels)**2))),colorfulness=Math.round(color/pixels),edgeDensity=Math.round(edges/pixels*100);const usable=brightness>=28&&brightness<=235&&contrast>=18;const quality=Math.max(10,Math.min(100,Math.round(contrast*1.25+Math.min(edgeDensity,30)+20-(brightness<35||brightness>225?25:0))));
- return createLensEvidence({source:'camera',type:'frame-perception',value:{width:canvas.width,height:canvas.height,brightness,contrast,colorfulness,edgeDensity,usable},confidence:quality,metadata:{capturedOnce:true,imageStored:false}});
+function analyzeLensImageQuality(canvas){
+ const sample=DOM.createElement('canvas'),scale=Math.min(1,96/Math.max(canvas.width,canvas.height));sample.width=Math.max(1,Math.round(canvas.width*scale));sample.height=Math.max(1,Math.round(canvas.height*scale));const ctx=sample.getContext('2d',{willReadFrequently:true});ctx.drawImage(canvas,0,0,sample.width,sample.height);const data=ctx.getImageData(0,0,sample.width,sample.height).data;let lum=0,lum2=0;
+ for(let i=0;i<data.length;i+=4){const l=.299*data[i]+.587*data[i+1]+.114*data[i+2];lum+=l;lum2+=l*l}
+ const pixels=Math.max(1,data.length/4),brightness=Math.round(lum/pixels),contrast=Math.round(Math.sqrt(Math.max(0,lum2/pixels-(lum/pixels)**2))),issues=[];
+ if(brightness<28)issues.push('Imagen demasiado oscura');if(brightness>235)issues.push('Imagen sobreexpuesta');if(contrast<18)issues.push('Contraste insuficiente');
+ return createLensEvidence({source:'camera',type:'image-quality',value:{width:canvas.width,height:canvas.height,brightness,contrast,usable:!issues.length,issues},confidence:100,metadata:{capturedOnce:true,imageStored:false,qualityOnly:true}});
 }
 function lensImageDataUrl(canvas){return canvas.toDataURL('image/jpeg',.82)}
 async function lensImageFingerprint(dataUrl){
@@ -726,12 +730,12 @@ function parseLensVisionPayload(value){
  if(!raw||typeof raw!=='object'||Array.isArray(raw))throw new Error('Respuesta visual inválida.');const list=value=>[...(Array.isArray(value)?value:[])].map(x=>String(x||'').trim()).filter(Boolean).slice(0,12),categories=new Set(['reactivo','frasco','instrumental','equipo','componente','codigo','formula','etiqueta','pictograma','objeto-general','desconocido']);
  return {category:categories.has(raw.category)?raw.category:'desconocido',hypothesis:String(raw.hypothesis||'').trim().slice(0,300),confidence:Math.max(0,Math.min(100,Math.round(Number(raw.confidence)||0))),objects:list(raw.objects),visibleText:list(raw.visibleText),formulaCandidates:list(raw.formulaCandidates),codes:list(raw.codes),pictograms:list(raw.pictograms),manufacturer:String(raw.manufacturer||'').trim().slice(0,160),model:String(raw.model||'').trim().slice(0,160),observableEvidence:list(raw.observableEvidence),limitations:list(raw.limitations)};
 }
-function lensVisionPrompt(){return 'Analizá UNA fotografía de laboratorio como un sistema de búsqueda visual multimodal. Devolvé exclusivamente JSON válido, sin markdown, con: category (reactivo|frasco|instrumental|equipo|componente|codigo|formula|etiqueta|pictograma|objeto-general|desconocido), hypothesis, confidence (0-100), objects[], visibleText[], formulaCandidates[], codes[], pictograms[], manufacturer, model, observableEvidence[], limitations[]. Integrá en una sola interpretación los objetos, códigos, fórmulas, pictogramas y texto visible en la imagen. Describí sólo rasgos observables. No confirmes identidad química, composición, concentración, peligros ni contenido por apariencia. Un pictograma sólo se informa si es visible. Si hay duda usá category desconocido y bajá confidence.'}
+function lensVisionPrompt(){return 'Analizá UNA fotografía de laboratorio. Devolvé exclusivamente JSON válido, sin markdown, con: category (reactivo|frasco|instrumental|equipo|componente|codigo|formula|etiqueta|pictograma|objeto-general|desconocido), hypothesis, confidence (0-100), objects[], visibleText[], formulaCandidates[], codes[], pictograms[], manufacturer, model, observableEvidence[], limitations[]. Describí sólo rasgos visibles. El texto es señal auxiliar. No confirmes identidad química, composición, concentración, peligros ni contenido por apariencia. Un pictograma sólo se informa si es visible. Si hay duda usá category desconocido y bajá confidence.'}
 function lensContextForProvider(context){
  const local=(context.evidenceGroups?.probableMatches||[]).slice(0,4).map(e=>({source:e.source,id:e.metadata?.record?.id,name:e.metadata?.record?.name,formula:e.metadata?.record?.formula,confidence:e.confidence}));const documents=(context.documents||[]).slice(0,4).map(e=>({name:e.value?.name,excerpt:e.value?.excerpt?.slice(0,240)}));return JSON.stringify({localCandidates:local,documents,note:'Datos locales no confirmados; sólo sirven para contrastar la imagen.'});
 }
 function getLensVisionProvider(){
- const proxy=configuredLensVisionProxy();if(proxy)return {id:'secure-proxy',async analyze({imageDataUrl,context}){const response=await fetchTimeout(proxy,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({task:'nexus-lens-lab-v1',image:imageDataUrl,context})},25000);if(!response.ok)throw new Error('Proxy visual HTTP '+response.status);const data=await response.json();return {analysis:parseLensVisionPayload(data.analysis??data),model:String(data.model||'proxy')}}};
+ const proxy=configuredLensVisionProxy();if(proxy)return {id:'secure-proxy',async analyze({imageDataUrl,context}){const response=await fetchTimeout(proxy,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({task:'nexus-lens-lab-v1',image:imageDataUrl,context,prompt:lensVisionPrompt()})},25000);if(!response.ok)throw new Error('Proxy visual HTTP '+response.status);const data=await response.json();return {analysis:parseLensVisionPayload(data.analysis??data),model:String(data.model||'proxy')}}};
  if(getGeminiKey())return {id:'gemini-byok',async analyze({imageDataUrl,context}){const result=await geminiGenerate({question:lensVisionPrompt(),context,imageDataUrl,temperature:0.05,maxOutputTokens:900});return {analysis:parseLensVisionPayload(result.answer),model:result.model}}};return null;
 }
 function lensVisionEvidence(providerResult){
@@ -744,11 +748,10 @@ function fuseLensVisualContext(localContext,providerResult,{expanded=false}={}){
  for(const [source,records,cap] of [['inventory',state.inventory,86],['catalog',state.catalog,83]])for(const hit of lensMatchesFromText(records,query).slice(0,3))evidence.push(createLensEvidence({source,type:'identity',value:{id:hit.r.id,name:hit.r.name,formula:hit.r.formula},confidence:Math.min(cap,Math.round(analysis.confidence*.55+Math.min(hit.score,200)*.15)),metadata:{match:'visual-context',score:hit.score,record:hit.r,chemicalCertainty:false}}));
  evidence.push(...searchLensDocuments(query));return buildNexusLensContext(evidence,{expanded});
 }
-function buildLensExternalQuery(context,analysis,code){
- const record=context.identity?.record;const signals=[record?.name,record?.formula,analysis?.hypothesis,...(analysis?.objects||[]),...(analysis?.visibleText||[]),...(analysis?.formulaCandidates||[]),...(analysis?.codes||[]),analysis?.manufacturer,analysis?.model,code].filter(Boolean).join(' ').replace(/\s+/g,' ').trim();
- return signals?(signals+' laboratorio ficha técnica seguridad').slice(0,420):'';
+function buildLensExternalQuery(context,analysis){
+ const record=context.identity?.record;return [record?.name,record?.formula,analysis?lensVisionQuery(analysis):'',context.evidences.find(e=>e.type==='code-observation')?.value].filter(Boolean).join(' ').replace(/\s+/g,' ').trim().slice(0,420);
 }
-function shouldSearchLensWeb(context,{expanded=false}={}){return expanded||(!context.identity?.confirmed&&['hypothesis','unknown'].includes(context.status))}
+function shouldSearchLensWeb(context,{expanded=false}={}){return expanded||(!context.identity&&context.evidenceGroups.visualHypotheses.some(e=>e.value?.hypothesis||e.value?.objects?.length))}
 async function searchLensExternalEvidence(query){
  if(!query||!state.web||!navigator.onLine)return [];const key=norm(query),result=await cachedLensExternal('web',key,()=>searchWebSources(query));return (result.results||[]).slice(0,6).map(item=>createLensEvidence({source:'web:'+String(result.provider||'search'),type:'external-information',value:{title:item.title,snippet:item.snippet,url:safeExternalUrl(item.url)},confidence:40,local:false,metadata:{provider:result.provider,cacheHit:Boolean(result.cacheHit),identityClaim:false}}));
 }
@@ -767,6 +770,8 @@ function lensSetContextActions(context){
  const query=lensContextQuery(context),record=context?.identity?.record,inventoryRecord=record&&state.inventory.some(r=>r.id===record.id),hasDocs=Boolean(context?.documents?.length);for(const [id,enabled] of [['lensSearchBtn',Boolean(query)],['lensInventoryBtn',Boolean(record||query)],['lensDocumentsBtn',hasDocs||Boolean(query)],['lensInternetBtn',Boolean(query)],['lensFichaBtn',Boolean(inventoryRecord)]]){const button=$('#'+id);if(button)button.disabled=!enabled}
 }
 function lensStateFromContext(context){
+ const providerState=context.evidences?.find(e=>e.type==='provider-status'&&['not-configured','disabled'].includes(e.value));if(providerState)return ['unavailable',providerState.value==='not-configured'?'Reconocimiento visual externo no configurado':'Reconocimiento visual externo desactivado','QR y conocimiento local siguen disponibles.'];
+ const quality=context.evidences?.find(e=>e.type==='image-quality');if(context.status==='unknown'&&quality?.value?.usable===false)return ['empty','Captura inutilizable',quality.value.issues.join('. ')+'. Volvé a capturar la imagen.'];
  const unavailable=context.evidences?.some(e=>e.type==='provider-status'&&e.value==='unavailable');if(unavailable)return ['unavailable','Servicio externo no disponible','NEXUS conserva los resultados locales y no bloquea la operación.'];
  if(context.status==='confirmed')return ['local','Encontrado localmente','Código NEXUS confirmado contra datos locales.'];
  if(context.status==='candidate')return ['local','Coincidencia local probable','Requiere verificación física antes de usar el material.'];
@@ -795,12 +800,30 @@ async function lensInvestigateInternet(){
 function finalizeLensContext(context,label){state.lensLastContext=context;renderLensResult(context);saveActivity(`NEXUS LENS analizó ${label}: ${context.status}`);return context;}
 async function identifyLensCode(code,{render=true}={}){const indexEvidence=await ensureLensIndexedDocuments(),context=resolveLensLocalSignals({code,indexEvidence});if(render){setView('lens');finalizeLensContext(context,'código manual')}return context;}
 async function runNexusLensPipeline(source,label='imagen',{expand=false}={}){
- if(state.lensBusy)return {ok:false,error:'NEXUS LENS ya está analizando una imagen.'};state.lensBusy=true;setLensUiState('analyzing','Analizando localmente','Buscando código NEXUS, inventario, catálogo y documentos antes de usar servicios externos.');if($('#lensStatus'))$('#lensStatus').textContent='NEXUS LENS: buscando identificación local…';
+ if(state.lensBusy)return {ok:false,error:'NEXUS LENS ya está analizando una imagen.'};state.lensBusy=true;setLensUiState('analyzing','Analizando localmente','Comprobando captura y código NEXUS antes de usar servicios externos.');
  try{
-  const frame=captureLensFrame(source),perception=analyzeLensFrameLocally(frame),raw=await decodeLensCode(frame),indexEvidence=await ensureLensIndexedDocuments();
-  let context=resolveLensLocalSignals({code:raw,indexEvidence,extraEvidence:[perception],expanded:expand});if(context.status==='confirmed'&&!expand)return finalizeLensContext(context,label);
-  let analysis=null;if(context.status!=='confirmed'&&state.web&&navigator.onLine){const provider=getLensVisionProvider();if(provider){setLensUiState('expanding','Ampliando con visión','Se envía una única captura para interpretar el objeto y contrastarlo con NEXUS.');if($('#lensStatus'))$('#lensStatus').textContent='NEXUS LENS: análisis visual multimodal bajo demanda…';const imageDataUrl=lensImageDataUrl(frame),fingerprint=await lensImageFingerprint(imageDataUrl);try{const result=await cachedLensExternal('vision',provider.id+':'+fingerprint,()=>provider.analyze({imageDataUrl,context:lensContextForProvider(context)}));result.provider=provider.id;analysis=result.analysis;context=fuseLensVisualContext(context,result,{expanded:expand})}catch(e){context=buildNexusLensContext([...context.evidences,createLensEvidence({source:provider.id,type:'provider-status',value:'unavailable',confidence:0,local:false,metadata:{error:e.message||String(e)}})],{expanded:expand})}}}
-  const externalQuery=buildLensExternalQuery(context,analysis,raw);if(state.web&&navigator.onLine&&shouldSearchLensWeb(context,{expanded:expand})&&externalQuery){setLensUiState('expanding','Ampliando con Internet','Buscando información adicional sin modificar la evidencia local.');if($('#lensStatus'))$('#lensStatus').textContent='NEXUS LENS: completando información faltante…';const webEvidence=await searchLensExternalEvidence(externalQuery);context=buildNexusLensContext([...context.evidences,...webEvidence],{expanded:expand})}
+  const frame=captureLensFrame(source),quality=analyzeLensImageQuality(frame),raw=await decodeLensCode(frame),indexEvidence=await ensureLensIndexedDocuments();
+  let context=resolveLensLocalSignals({code:raw,indexEvidence,extraEvidence:[quality],expanded:expand});
+  if(context.status==='confirmed'&&!expand)return finalizeLensContext(context,label);
+  let analysis=null;
+  const provider=getLensVisionProvider();
+  if(!provider)context=buildNexusLensContext([...context.evidences,createLensEvidence({source:'vision',type:'provider-status',value:'not-configured',metadata:{message:'Reconocimiento visual externo no configurado. QR y conocimiento local siguen disponibles.'}})],{expanded:expand});
+  else if(navigator.onLine&&!state.web)context=buildNexusLensContext([...context.evidences,createLensEvidence({source:provider.id,type:'provider-status',value:'disabled'})],{expanded:expand});
+  else if(quality.value.usable&&state.web&&navigator.onLine){
+   setLensUiState('expanding','Analizando imagen con visión','Se envía una única fotografía al proveedor multimodal.');
+   const imageDataUrl=lensImageDataUrl(frame),fingerprint=await lensImageFingerprint(imageDataUrl);
+   try{
+    const result=await cachedLensExternal('vision',provider.id+':'+fingerprint,()=>provider.analyze({imageDataUrl,context:lensContextForProvider(context)}));
+    analysis=parseLensVisionPayload(result.analysis);
+    if(analysis.hypothesis||analysis.objects.length)context=fuseLensVisualContext(context,{...result,analysis,provider:provider.id},{expanded:expand});
+   }catch(e){context=buildNexusLensContext([...context.evidences,createLensEvidence({source:provider.id,type:'provider-status',value:'unavailable',confidence:0,local:false,metadata:{error:e.message||String(e)}})],{expanded:expand})}
+  }
+  const externalQuery=buildLensExternalQuery(context,analysis);
+  if(state.web&&navigator.onLine&&shouldSearchLensWeb(context,{expanded:expand})&&externalQuery){
+   setLensUiState('expanding','Ampliando con Internet','Buscando información a partir de la evidencia identificada.');
+   try{const webEvidence=await searchLensExternalEvidence(externalQuery);context=buildNexusLensContext([...context.evidences,...webEvidence],{expanded:expand})}
+   catch(e){context=buildNexusLensContext([...context.evidences,createLensEvidence({source:'web',type:'provider-status',value:'unavailable',confidence:0,local:false,metadata:{error:e.message||String(e)}})],{expanded:expand})}
+  }
   return finalizeLensContext(context,label);
  }catch(e){const message=e.message||String(e);setLensUiState('unavailable','No se pudo completar el análisis','La cámara y las funciones locales siguen disponibles.');if($('#lensStatus'))$('#lensStatus').textContent='NEXUS LENS no pudo completar el análisis.';toast('NEXUS LENS: '+message);return {ok:false,error:message}}
  finally{state.lensBusy=false;}
@@ -1165,10 +1188,10 @@ function parseLocalAssistantAction(q){
   if(m)return {action:'open_document',query:m[1].trim()};
  m=n.match(/^(?:identifica|identificar|identificá|resolver|resolve|resolvé|buscar|busca|buscá)\s+(?:el\s+)?(?:codigo|código)\s+((?:nexus[- ]?x|nx)[- :#]*\d{1,4})$/);
  if(m)return {action:'identify_lens_code',code:m[1].trim()};
- if(/^(?:abrir|abre|abri|abrime|mostrar|mostrame|muestra)\s+(?:el\s+)?(?:modulo\s+de\s+)?(?:nexus\s+)?(?:lens|vision|visión)$/.test(n))return {action:'open_lens'};
- if(/^(?:inicia|iniciar|iniciá|enciende|prende|activar|activa|abre|abrir)\s+(?:la\s+)?(?:camara|cámara)\s+(?:de\s+)?(?:nexus\s+)?(?:lens|vision|visión)$/.test(n))return {action:'start_lens_camera'};
- if(/^(?:detener|detene|detén|apagar|apaga|parar|para)\s+(?:la\s+)?(?:camara|cámara)\s+(?:de\s+)?(?:nexus\s+)?(?:lens|vision|visión)$/.test(n))return {action:'stop_lens_camera'};
- if(/^(?:analiza|analizar|analizá|escanea|escanear|escané)\s+(?:lo\s+que\s+ve|la\s+camara|la\s+cámara)\s+(?:de\s+)?(?:nexus\s+)?(?:lens|vision|visión)$/.test(n))return {action:'analyze_lens_camera'};
+ if(/^(?:abrir|abre|abri|abrime|mostrar|mostrame|muestra)\s+(?:el\s+)?(?:modulo\s+de\s+)?(?:nexus\s+)?(?:lens|vision|visión|ocr)$/.test(n))return {action:'open_lens'};
+ if(/^(?:inicia|iniciar|iniciá|enciende|prende|activar|activa|abre|abrir)\s+(?:la\s+)?(?:camara|cámara)\s+(?:de\s+)?(?:nexus\s+)?(?:lens|vision|visión|ocr)$/.test(n))return {action:'start_lens_camera'};
+ if(/^(?:detener|detene|detén|apagar|apaga|parar|para)\s+(?:la\s+)?(?:camara|cámara)\s+(?:de\s+)?(?:nexus\s+)?(?:lens|vision|visión|ocr)$/.test(n))return {action:'stop_lens_camera'};
+ if(/^(?:analiza|analizar|analizá|escanea|escanear|escané)\s+(?:lo\s+que\s+ve|la\s+camara|la\s+cámara)\s+(?:de\s+)?(?:nexus\s+)?(?:lens|vision|visión|ocr)$/.test(n))return {action:'analyze_lens_camera'};
   if(/^(?:abrir|abre|abrime|mostrar|mostrame|muestra)\s+(?:el\s+)?(?:calendario|agenda)$/.test(n))return {action:'open_calendar'};
   m=n.match(/^(?:crear|crea|agrega|agregar|añade|anade)\s+(?:un\s+)?(?:evento|recordatorio)\s+(?:el\s+)?(\d{4}-\d{2}-\d{2})\s+(?:de\s+)?(.+)$/);
   if(m)return {action:'create_calendar_event',date:m[1],text:m[2].trim()};
