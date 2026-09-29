@@ -130,9 +130,161 @@ button:focus-visible,a:focus-visible{outline:3px solid #157d93;outline-offset:3p
   <div class="page-head"><div><h1>Informes</h1><p>Resumen exportable y diagnóstico del sistema.</p></div><button class="btn primary" id="exportReportBtn">⇩ Exportar informe</button></div>
   <div class="grid two"><div class="card"><h2>Resumen</h2><div id="reportSummary"></div></div><div class="card"><h2>Integridad</h2><div id="integrityBox" class="diagnostic"></div></div></div>
 </section>
-<section id="view-settings" class="view"><div class="notice"><strong>Reconocimiento de voz</strong> · <span id="localVoiceStatus">Servicio del navegador</span> <button class="btn" id="installVoiceLanguage" hidden>Descargar idioma es-AR</button></div>
-  <div class="page-head"><div><h1>Ajustes</h1><p>Configuración segura y diagnóstico. La API Key se guarda localmente en este navegador una sola vez.</p></div></div>
-  <div class="grid two"><div class="card"><h2>Gemini AI</h2><p class="muted">Pegá tu clave personal para consultar información externa. Se conserva en esta sesión salvo que elijas recordarla. La conexión se confirma mediante una respuesta real.</p><div class="field"><label>API Key de Gemini</label><input id="aiKey" type="password" autocomplete="off" placeholder="Pegá tu clave aquí"></div><div class="notice"><strong>Configuración automática</strong><br>NEXUS-X consulta los modelos disponibles con tu clave y cambia de modelo ante fallos temporales, sin afectar el núcleo local.<br><span id="geminiStatus"></span></div><label><input type="checkbox" id="rememberAiKey"> Recordar la clave en este navegador</label><p class="footer-note">La clave personal es accesible al código de este origen. Usá restricciones del proveedor. Sin esta opción se conserva sólo durante la sesión.</p><button class="btn primary section" id="saveAiBtn">Guardar y conectar</button></div><div class="card"><h2>Diagnóstico</h2><div id="settingsDiag" class="diagnostic" aria-live="polite"></div><div class="toolbar section"><button class="btn" id="diagnosticBtn">Comprobar</button><button class="btn" id="updateAppBtn">Buscar actualización</button><button class="btn" id="persistStorageBtn">Solicitar persistencia</button></div><p id="pwaStatus" class="notice" role="status">Instalación offline sin comprobar.</p><div class="section"><button class="btn danger" id="clearLocalBtn">Restaurar inventario maestro</button><button class="btn" id="restoreInventoryBtn">Recuperar copia anterior</button></div></div></div>
+<section id="view-settings" class="view">
+
+  <div class="notice">
+    <strong>Reconocimiento de voz</strong> ·
+    <span id="localVoiceStatus">Servicio del navegador</span>
+    <button class="btn" id="installVoiceLanguage" hidden>
+      Descargar idioma es-AR
+    </button>
+  </div>
+
+  <div class="page-head">
+    <div>
+      <h1>Ajustes</h1>
+      <p>
+        Configuración segura y diagnóstico.
+        Las API Keys se guardan localmente en este navegador.
+      </p>
+    </div>
+  </div>
+
+  <div class="grid two">
+
+    <!-- GEMINI -->
+    <div class="card">
+      <h2>Gemini AI</h2>
+
+      <p class="muted">
+        Pegá tu clave personal para consultar información externa.
+        Se conserva en esta sesión salvo que elijas recordarla.
+        La conexión se confirma mediante una respuesta real.
+      </p>
+
+      <div class="field">
+        <label>API Key de Gemini</label>
+        <input
+          id="aiKey"
+          type="password"
+          autocomplete="off"
+          placeholder="Pegá tu clave aquí"
+        >
+      </div>
+
+      <div class="notice">
+        <strong>Configuración automática</strong><br>
+        NEXUS-X consulta los modelos disponibles con tu clave
+        y cambia de modelo ante fallos temporales,
+        sin afectar el núcleo local.<br>
+        <span id="geminiStatus"></span>
+      </div>
+
+      <label>
+        <input type="checkbox" id="rememberAiKey">
+        Recordar la clave en este navegador
+      </label>
+
+      <p class="footer-note">
+        La clave personal es accesible al código de este origen.
+        Usá restricciones del proveedor.
+        Sin esta opción se conserva sólo durante la sesión.
+      </p>
+
+      <button class="btn primary section" id="saveAiBtn">
+        Guardar y conectar
+      </button>
+    </div>
+
+    <!-- DIAGNÓSTICO -->
+    <div class="card">
+      <h2>Diagnóstico</h2>
+
+      <div
+        id="settingsDiag"
+        class="diagnostic"
+        aria-live="polite">
+      </div>
+
+      <div class="toolbar section">
+        <button class="btn" id="diagnosticBtn">
+          Comprobar
+        </button>
+
+        <button class="btn" id="updateAppBtn">
+          Buscar actualización
+        </button>
+
+        <button class="btn" id="persistStorageBtn">
+          Solicitar persistencia
+        </button>
+      </div>
+
+      <p
+        id="pwaStatus"
+        class="notice"
+        role="status">
+        Instalación offline sin comprobar.
+      </p>
+
+      <div class="section">
+        <button class="btn danger" id="clearLocalBtn">
+          Restaurar inventario maestro
+        </button>
+
+        <button class="btn" id="restoreInventoryBtn">
+          Recuperar copia anterior
+        </button>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- XKIRO -->
+  <div class="card section">
+
+    <h2>xKiro AI Gateway</h2>
+
+    <p class="muted">
+      Motor externo multi-modelo para NEXUS-X.
+      El catálogo de modelos gratuitos se detecta automáticamente.
+    </p>
+
+    <div class="field">
+      <label>API Key de xKiro</label>
+      <input
+        id="xkiroKey"
+        type="password"
+        autocomplete="off"
+        placeholder="Pegá tu clave de xKiro aquí"
+      >
+    </div>
+
+    <div class="notice">
+      <strong>Selección dinámica de modelos</strong><br>
+      NEXUS-X detectará automáticamente los modelos gratuitos
+      y sus capacidades disponibles.<br>
+      <span id="xkiroStatus">Sin comprobar</span>
+    </div>
+
+    <label>
+      <input type="checkbox" id="rememberXKiroKey">
+      Recordar la clave en este navegador
+    </label>
+
+    <p class="footer-note">
+      La clave queda en este dispositivo si elegís recordarla.
+      No escribas la API Key directamente en app.js ni la publiques en GitHub.
+    </p>
+
+    <button
+      class="btn primary section"
+      id="saveXKiroBtn">
+      Guardar y conectar xKiro
+    </button>
+
+  </div>
+
 </section>
 </main>
 </div>
