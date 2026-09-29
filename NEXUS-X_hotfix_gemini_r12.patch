@@ -1,0 +1,26 @@
+diff --git a/app.js b/app.js
+--- a/app.js
++++ b/app.js
+@@
+-const APP_VERSION='2026.09.29-r11';
++const APP_VERSION='2026.09.29-r12';
+@@
+-async function geminiGenerate({question,context='',useSearch=false,currentDocument=null,imageDataUrl=null,temperature=0.15,maxOutputTokens=1600}){
++async function geminiGenerate({question,context='',useSearch=false,currentDocument=null,imageDataUrl=null,temperature=0.15,maxOutputTokens=1600,thinkingLevel=null}){
+@@
+- const body={contents:[{role:'user',parts}],generationConfig:{temperature,maxOutputTokens}};
++ const generationConfig={temperature,maxOutputTokens};
++ if(thinkingLevel)generationConfig.thinkingConfig={thinkingLevel};
++ const body={contents:[{role:'user',parts}],generationConfig};
+@@
+-    throw new Error('Gemini no entregó texto ('+parsed.reason+'). '+localAvailabilityMessage());
++    throw new Error((parsed.reason==='MAX_TOKENS'?'Gemini agotó el límite de salida antes de producir texto (MAX_TOKENS). ':'Gemini no entregó texto ('+parsed.reason+'). ')+localAvailabilityMessage());
+@@
+- try{const previous=sessionGeminiKey;sessionGeminiKey=key;let out;try{out=await geminiGenerate({question:'Respondé solamente: OK',maxOutputTokens:16})}finally{sessionGeminiKey=previous}return {ok:true,message:'Respuesta comprobada · '+out.model}}
++ try{const previous=sessionGeminiKey;sessionGeminiKey=key;let out;try{out=await geminiGenerate({question:'Respondé solamente: OK',maxOutputTokens:256,thinkingLevel:'low'})}finally{sessionGeminiKey=previous}return {ok:true,message:'Respuesta comprobada · '+out.model}}
+diff --git a/sw.js b/sw.js
+--- a/sw.js
++++ b/sw.js
+@@
+-const VERSION='2026.09.29-r11';
++const VERSION='2026.09.29-r12';
