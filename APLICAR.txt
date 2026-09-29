@@ -1,0 +1,15 @@
+NEXUS-X v1.0 — Hotfix r10
+Base verificada: b0ccc5701b4b43213ffe1cf839a34bb3f0779a87
+
+Opción Git, desde la raíz del repositorio:
+git apply --check /ruta/NEXUS-X-r10.patch
+git apply /ruta/NEXUS-X-r10.patch
+
+Opción manual: copiar el contenido de archivos/ a la raíz del repositorio,
+incluida .github/, y ELIMINAR qr-vision-regression.mjs.
+No cargar solamente el ZIP en GitHub: hay que aplicar su contenido.
+
+Pruebas: npm ci y npm test.
+Checklist físico Android: README.md (ONLINE y OFFLINE).
+Estado: candidato estable, validación física pendiente.
+GitHub rechazó la escritura (403); este hotfix NO está publicado.

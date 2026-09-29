@@ -31,6 +31,6 @@ test('quota: sólo se eliminan cachés derivadas propias',async()=>{
  }finally{h.close()}
 });
 test('arranque idempotente con IndexedDB caída conserva inventario y navegación',async()=>{
- const h=harness({stored:master.records,online:false,idb:{open(){throw new Error('fallo simulado')}}});try{await Promise.all([h.api.boot(),h.api.boot()]);assert.equal(h.api.state.inventory.length,111);h.document.querySelector('[data-view="documents"]').click();assert.equal(h.api.state.view,'documents');h.document.querySelector('[data-view="inventory"]').click();assert.equal(h.api.state.view,'inventory');assert.equal(h.calls.length,0);assert.match(h.document.querySelector('#settingsDiag').textContent,/error/);
+ const h=harness({stored:master.records,online:false,idb:{open(){throw new Error('fallo simulado')}}});try{await Promise.all([h.api.boot(),h.api.boot()]);assert.equal(h.api.state.inventory.length,111);h.document.querySelector('[data-view="documents"]').click();assert.equal(h.api.state.view,'documents');h.document.querySelector('[data-view="inventory"]').click();assert.equal(h.api.state.view,'inventory');assert.deepEqual(h.calls,['catalogo_maestro.json']);assert.match(h.document.querySelector('#settingsDiag').textContent,/error/);
  }finally{h.close()}
 });

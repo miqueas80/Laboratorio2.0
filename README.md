@@ -1,4 +1,23 @@
-# Lectores locales
+# NEXUS-X v1.0
+
+Estado: candidato Stable / Local-First; pendiente validación física Android.
+
+Inventario NEXUS-X (111 registros), QR local, NEXUS Lens, documentos indexados,
+búsquedas semánticas locales, agente NEXUS, voz y PWA offline.
+Gemini y búsqueda web son complementarios: el núcleo local funciona sin ellos.
+Sin QR, Lens no identifica objetos offline. Brillo/contraste sólo evalúan calidad.
+Las hipótesis multimodales se cruzan con datos locales sin confirmar composición química.
+
+Gemini consulta `/models` y aplica failover limitado ante errores temporales o modelo
+retirado. `NEXUS_CONFIG.geminiModelChain` permite configurar preferencias; sólo se
+usan modelos disponibles. Sin proveedor operativo se conserva el funcionamiento local.
+Voz local es opcional según soporte de es-AR; su instalación requiere pulsar el botón
+correspondiente en Ajustes. Se conserva SpeechRecognition del navegador como alternativa.
+
+Pruebas: `npm ci` y `npm test` (Node LTS). No hay build ni backend obligatorio.
+Validación manual pendiente: cámara, micrófono y servicios externos reales.
+
+## Lectores locales
 
 Se conservan las bibliotecas utilizadas por la aplicación, servidas ahora
 desde el mismo repositorio. No son dependencias del arranque del inventario.
@@ -36,3 +55,35 @@ GitHub Pages y debe aceptar `{task, image, context}` y devolver
 `{analysis, model}`. No se admite incluir credenciales en la URL. Las imágenes
 no se guardan en caché: sólo se cachea durante 30 minutos el resultado derivado
 asociado a su huella.
+
+## Checklist físico Android pendiente
+
+ONLINE
+
+1. Abrir app.
+2. Comprobar 111 registros.
+3. Buscar ácido nítrico.
+4. QR impreso.
+5. Seleccionar cámara.
+6. Lens + QR.
+7. Lens + objeto sin QR.
+8. Activar Internet.
+9. Reconocer objeto con Gemini.
+10. Abrir coincidencia local.
+11. Buscar evidencia web.
+12. Probar voz.
+13. Abrir documento.
+14. Probar Gemini.
+15. Comprobar diagnóstico.
+
+OFFLINE
+
+1. Activar modo avión.
+2. Cerrar/reabrir PWA.
+3. Comprobar inventario.
+4. Buscar sustancia.
+5. QR.
+6. Lens con código local.
+7. Documentos cacheados.
+8. Comandos NEXUS locales.
+9. Comprobar que Gemini/web fallan sin afectar el sistema.

@@ -3,9 +3,9 @@ import vm from 'node:vm';
 import { JSDOM } from 'jsdom';
 import { IDBFactory } from 'fake-indexeddb';
 
-export const root = new URL('../', import.meta.url);
+export const root = new URL('./', import.meta.url);
 export const master = JSON.parse(fs.readFileSync(new URL('inventory.json', root), 'utf8'));
-const apiNames = ['state','bind','boot','loadMaster','loadCatalogMaster','saveInventory','saveItem','newItem','openItem','deleteItem','searchLocal','documentSearch','indexLocalFile','indexDocument','putDoc','getCachedDocs','loadCachedDocumentIndex','parseLocalAssistantAction','fastAgentPlan','executeAssistantAction','nexusAgentTurn','assistantAsk','aiQuery','runIntegrity','syncRepository','validateInventory','renderDocuments','renderAll','setView','calendarEvents','saveCalendarEvents','importExcel','importWord','geminiGenerate','testGeminiKey','resolveGeminiModel','renderDiagnostics','exportCsv','exportReport','processQr','runResearch','stopQr','stopLensCamera','createLensEvidence','buildNexusLensContext','resolveLensLocalSignals','searchLensDocuments','ensureLensIndexedDocuments','captureLensFrame','analyzeLensFrameLocally','parseLensVisionPayload','fuseLensVisualContext','shouldSearchLensWeb','searchLensExternalEvidence','getLensVisionProvider','identifyLensCode','runNexusLensPipeline'];
+const apiNames = ['state','bind','boot','loadMaster','loadCatalogMaster','saveInventory','saveItem','newItem','openItem','deleteItem','searchLocal','documentSearch','indexLocalFile','indexDocument','putDoc','getCachedDocs','loadCachedDocumentIndex','parseLocalAssistantAction','fastAgentPlan','executeAssistantAction','nexusAgentTurn','assistantAsk','aiQuery','runIntegrity','syncRepository','validateInventory','renderDocuments','renderAll','setView','calendarEvents','saveCalendarEvents','importExcel','importWord','geminiGenerate','testGeminiKey','resolveGeminiModel','renderDiagnostics','exportCsv','exportReport','processQr','runResearch','stopQr','stopLensCamera','createLensEvidence','buildNexusLensContext','resolveLensLocalSignals','searchLensDocuments','ensureLensIndexedDocuments','captureLensFrame','analyzeLensImageQuality','decodeLensCode','startLensCamera','requestLensCameraPermission','health','refreshLocalVoiceStatus','installLocalVoiceLanguage','parseLensVisionPayload','fuseLensVisualContext','shouldSearchLensWeb','searchLensExternalEvidence','getLensVisionProvider','identifyLensCode','runNexusLensPipeline'];
 export function harness({stored,fetcher,online=true,idb=new IDBFactory(),source}={}) {
   const dom = new JSDOM(fs.readFileSync(new URL('index.html', root), 'utf8'), {url:'https://miqueas80.github.io/laboratorio/',runScripts:'outside-only',pretendToBeVisual:true});
   const w=dom.window, calls=[], errors=[];
@@ -19,5 +19,5 @@ export function harness({stored,fetcher,online=true,idb=new IDBFactory(),source}
   const injected=app.replace(/\nboot\(\);\s*\n\}\)\(\);\s*$/,`\nglobalThis.__test={toggleFavorite,checkStorageCapacity,csvCell,restoreInventoryBackup,showModal,hideModal,openDocumentViewer,closeDocumentViewer,collectDiagnostics,resolveIntent,ActionRegistry,${apiNames.join(',')}};\n})();`);
   if(injected===app)throw new Error('No se encontró el arranque para aislar la prueba');
   vm.runInContext(injected,dom.getInternalVMContext(),{filename:'app.js'});
-  return {window:w,document:w.document,api:w.__test,calls,errors,loadVendor:(file)=>vm.runInContext(fs.readFileSync(new URL('vendor/'+file,root),'utf8'),dom.getInternalVMContext()),close:()=>w.close()};
+  return {window:w,document:w.document,api:w.__test,calls,errors,loadVendor:(file)=>vm.runInContext(fs.readFileSync(new URL(file,root),'utf8'),dom.getInternalVMContext()),close:()=>w.close()};
 }

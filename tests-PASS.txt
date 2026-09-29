@@ -1,0 +1,221 @@
+npm warn Unknown env config "http-proxy". This will stop working in the next major version of npm.
+
+> nexus-x-laboratorio@1.0.0 test
+> node --check app.js && node validate.mjs && node agent-regression.mjs && node final-audit.mjs && node lens-regression.mjs && node --test *.test.mjs
+
+{
+  "ok": true,
+  "root": "/workspace/scratch/489c7c6288ca/Laboratorio2.0",
+  "records": 111,
+  "uniqueIds": 111,
+  "first": "NEXUS-X-0001",
+  "last": "NEXUS-X-0111",
+  "htmlIds": 174,
+  "errors": []
+}
+PASS JavaScript syntax
+PASS inventory records array
+PASS inventory has 111 baseline records
+PASS inventory IDs unique
+PASS inventory IDs canonical
+PASS agent action registry found
+PASS no stale chat action
+PASS no standalone OCR/Tesseract engine
+PASS executor branch open_view
+PASS executor branch search_inventory
+PASS executor branch open_item
+PASS executor branch search_documents
+PASS executor branch open_document
+PASS executor branch research
+PASS executor branch open_qr
+PASS executor branch start_camera
+PASS executor branch stop_camera
+PASS executor branch analyze_camera
+PASS executor branch open_lens
+PASS executor branch start_lens_camera
+PASS executor branch stop_lens_camera
+PASS executor branch analyze_lens_camera
+PASS executor branch identify_lens_code
+PASS executor branch open_calendar
+PASS executor branch create_calendar_event
+PASS executor branch delete_calendar_event
+PASS executor branch sync_repository
+PASS executor branch export_inventory
+PASS executor branch export_report
+PASS executor branch toggle_web
+PASS executor branch clear_chat
+PASS executor branch start_voice
+PASS executor branch stop_voice
+PASS executor branch web_search
+PASS executor branch create_inventory_item
+PASS executor branch update_inventory_item
+PASS executor branch delete_inventory_item
+PASS tool registered open_view
+PASS tool registered search_inventory
+PASS tool registered open_item
+PASS tool registered search_documents
+PASS tool registered open_document
+PASS tool registered research
+PASS tool registered open_qr
+PASS tool registered start_camera
+PASS tool registered stop_camera
+PASS tool registered analyze_camera
+PASS tool registered open_lens
+PASS tool registered start_lens_camera
+PASS tool registered stop_lens_camera
+PASS tool registered analyze_lens_camera
+PASS tool registered identify_lens_code
+PASS tool registered get_lens_context
+PASS tool registered open_calendar
+PASS tool registered create_calendar_event
+PASS tool registered delete_calendar_event
+PASS tool registered sync_repository
+PASS tool registered export_inventory
+PASS tool registered export_report
+PASS tool registered toggle_web
+PASS tool registered web_search
+PASS tool registered get_inventory
+PASS tool registered create_inventory_item
+PASS tool registered update_inventory_item
+PASS tool registered delete_inventory_item
+PASS tool registered get_documents
+PASS tool registered get_activity
+PASS tool registered get_state
+PASS tool registered status
+PASS tool registered diagnostics
+PASS tool registered clear_chat
+PASS tool registered start_voice
+PASS tool registered stop_voice
+PASS sequence executor requires all steps
+PASS destructive inventory delete requires confirmation
+PASS destructive calendar delete requires confirmation
+PASS inventory integrity is not hard-coded to 111
+PASS camera auto-selection penalizes ultra-wide
+PASS camera auto-selection prefers telephoto
+PASS voice wake word exists
+PASS voice auto-restart exists
+PASS voice barge-in exists
+PASS parser abre inventario
+PASS parser abrí documentos
+PASS parser mostrame qr
+PASS parser abrí nexus lens
+PASS parser abrí ocr
+PASS parser identificá código NEXUS-X-0001
+PASS parser buscá en inventario alcohol
+PASS parser dónde está ácido nítrico
+PASS parser abrí la ficha alcohol
+PASS parser abrí el documento química
+PASS parser prendé la cámara
+PASS parser analizá lo que ves
+PASS parser activá la voz
+PASS parser confirmo eliminar alcohol
+
+ALL REGRESSION CHECKS PASSED (37 actions, 36 tools)
+PASS app.js syntax
+PASS inventory 111 baseline — 111
+PASS inventory IDs unique
+PASS inventory IDs canonical
+PASS no legacy document.createElement bug
+PASS DOM createElement shim present
+PASS single central executor
+PASS sequence all-steps semantics
+PASS destructive inventory confirmation schema
+PASS destructive calendar confirmation schema
+PASS agent audit ring
+PASS local chained commands
+PASS calendar local command
+PASS repository result propagated
+PASS NEXUS LENS local evidence gate
+PASS NEXUS LENS without standalone OCR/Tesseract
+PASS NEXUS LENS multimodal visual path
+PASS camera avoids ultra-wide
+PASS voice wake word
+PASS voice auto restart
+PASS voice barge-in
+PASS service worker core cache
+PASS manifest present
+PASS no demo mode added
+
+FINAL AUDIT: 24 checks passed, 0 failed
+✔ QR/Lens DOM, recursos locales, sin OCR y versiones sincronizadas (3.450546ms)
+✔ QR stops tracks, clears video, no retained image; Lens remains independent (441.352457ms)
+✔ Lens permission, selected camera, start and stop all tracks (98.733549ms)
+✔ Lens native BarcodeDetector then jsQR fallback (79.822925ms)
+✔ Lens pipeline exact (295.178899ms)
+✔ Lens pipeline offline (273.001901ms)
+✔ Lens pipeline disabled (239.614764ms)
+✔ Lens pipeline no-key (262.501325ms)
+✔ Lens pipeline visual (266.172206ms)
+✔ Lens pipeline failed (281.865387ms)
+✔ Lens pipeline poor (205.822526ms)
+✔ quality is metadata, visual fusion cannot replace confirmed code; web gate (54.972754ms)
+✔ catálogo real inicia y conserva los IDs NEXUS (123.992002ms)
+ℹ tests 13
+ℹ suites 0
+ℹ pass 13
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 2639.409196
+✔ registro rechaza acciones, parámetros, fechas y secuencias inválidos antes de ejecutar (1690.127603ms)
+✔ una respuesta remota no obtiene permisos locales aunque declare confirm=true (1125.260415ms)
+✔ el boolean confirm no reemplaza la confirmación real del usuario (838.091408ms)
+✔ una secuencia válida conserva orden y un fallo de guardado detiene el resto (1039.015141ms)
+✔ diagnóstico usa almacenamiento y datos reales sin afirmar offline ni revelar clave (1037.613353ms)
+✔ fallos de almacenamiento y APIs opcionales quedan visibles sin perder navegación (442.871778ms)
+✔ rechaza vacío, formato no permitido, PDF falso y tamaño excesivo (402.81732ms)
+✔ un archivo dañado no bloquea la siguiente carga y los homónimos no se sobrescriben (388.005487ms)
+✔ Word maestro real se lee con JSZip local, conserva 111 IDs y separa observaciones (1607.14414ms)
+✔ Excel original se lee con SheetJS local e importa nombres no vacíos (1268.605406ms)
+✔ failover runtime 200 (2257.358452ms)
+✔ failover runtime 429,200 (1181.189625ms)
+✔ failover runtime 503,503,200 (778.325538ms)
+✔ failover runtime 401 (745.363354ms)
+✔ failover runtime 403 (2051.893174ms)
+✔ failover runtime 400 (432.246715ms)
+✔ failover runtime 404,200 (270.499787ms)
+✔ failover runtime 429,503,503 (257.958081ms)
+✔ sólo modelos disponibles, preferencia exitosa y abort sin failover (49.052808ms)
+✔ router: controles de Internet son locales y el híbrido busca antes de consultar fuera (1682.372834ms)
+✔ Gemini: no configurado, offline, 403, 500, timeout, JSON y respuesta inválidos no dañan el núcleo (4059.268868ms)
+✔ documento: sólo extractos limitados, sin subir binario ni ejecutar salida remota (65.457126ms)
+✔ notificación opcional denegada no bloquea arranque ni guardado documental (1632.021687ms)
+✔ cambio entre pestañas actualiza lecturas y protege un formulario en edición (1398.86604ms)
+✔ offline/cuota: investigación no depende de guardar historial ni puede mentir sobre favoritos (1268.312523ms)
+✔ órdenes rápidas y repetidas no acumulan listeners ni activan Internet al desactivarlo (2191.364628ms)
+✔ cargas concurrentes homónimas no sobrescriben y persisten ambas (70.130513ms)
+✔ dos pestañas con índice obsoleto no sobrescriben un documento local (73.937311ms)
+✔ quota: sólo se eliminan cachés derivadas propias (136.455678ms)
+✔ arranque idempotente con IndexedDB caída conserva inventario y navegación (292.115359ms)
+✔ actualización IndexedDB de v2 a v3 preserva documentos preexistentes (410.193955ms)
+✔ el arranque conserva altas y ediciones locales antes de consultar red (505.580827ms)
+✔ inventario vacío guardado es un estado válido, no reinstala 111 filas (242.858086ms)
+✔ quota: no se publica un alta ni se cierra el formulario si el guardado falla (456.181988ms)
+✔ IndexedDB fallida no se anuncia como documento persistido (77.066613ms)
+✔ texto del chat ejecuta navegación local sin API key (1670.833039ms)
+✔ datos corruptos se preservan y bloquean sobrescrituras (922.402481ms)
+✔ conflicto entre pestañas no sobrescribe una versión más nueva (573.285506ms)
+✔ un alta con ID existente no modifica ese registro (173.263438ms)
+✔ guardar edición crea una copia anterior y sobrevive a reapertura (489.090712ms)
+✔ una transacción documental confirmada se recupera de IndexedDB (95.470587ms)
+✔ restauración: fallo de la segunda copia no deja memoria divergente ni pierde la versión previa (1776.330394ms)
+✔ restauración: no reemplaza inventario si no puede proteger la versión actual (405.043519ms)
+✔ CSV neutraliza fórmulas ejecutables; entradas HTML siguen siendo texto (563.61958ms)
+✔ modales asocian títulos, mantienen foco y restauran el control de origen (588.805324ms)
+✔ visor: apertura antigua de PDF no reemplaza el documento elegido después (59.355383ms)
+✔ inventario: acentos, palabras parciales y plural conservan el resultado real (1331.438376ms)
+✔ documentos: nombre, contenido y plural; relaciones no inventan coincidencias (106.494578ms)
+✔ las tres órdenes exigidas se resuelven localmente y abren la vista real (705.787757ms)
+✔ PWA: instalación local completa, navegación /Laboratorio2.0/ y lectores disponibles sin red (59.269728ms)
+✔ PWA: activación sólo retira cachés del ámbito propio (4.227759ms)
+✔ PWA: actualización incompleta conserva versión anterior y no fuerza activación (4.608507ms)
+✔ voz local detecta, instala bajo petición y conserva alternativa (756.348795ms)
+ℹ tests 53
+ℹ suites 0
+ℹ pass 53
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 8793.389115
