@@ -8,12 +8,7 @@ const DB_KEY='nexus_x_inventory_v1';
 const DOC_DB='NEXUS_X_DOCUMENTS_V2';
 const DOC_STORE='documents';
 const DOC_CACHE_VERSION=3;
-const GEMINI_MODEL='gemini-3.8-flash';
-const GEMINI_FALLBACK_MODEL='gemini-3.7-flash';
-const GEMINI_MODEL_CHAIN=[GEMINI_MODEL,GEMINI_FALLBACK_MODEL,'gemini-3.6-flash'];
-const GEMINI_MODEL_KEY='nexus_gemini_model_v1';
-const GEMINI_ENDPOINT='https://generativelanguage.googleapis.com/v1beta/models';
- const XKIRO_API='https://nexus-xkiro-gateway.proyectomj11.workers.dev';
+const XKIRO_API='https://nexus-xkiro-gateway.proyectomj11.workers.dev';
 const XKIRO_KEY='nexus_xkiro_api_key_v1';
 const XKIRO_MODEL_CACHE_MS=10*60*1000;
 const REPO_OWNER='miqueas80';
@@ -28,7 +23,6 @@ const LENS_EXTERNAL_CACHE_LIMIT=20;
 const VOICE_WAKE=/\bnexus(?:[- ]?x)?\b/i;
 let voiceRecognition=null;let voiceListening=false;let voiceMonitoring=false;let voiceSpeaking=false;let voiceAwaitingCommand=false;let voiceWakeTimer=null;let voiceRestartTimer=null;let voiceCommandQueue=Promise.resolve();
 const lensExternalCache=new Map(),lensExternalPending=new Map();
-const GEMINI_KEY='nexus_gemini_api_key_v1';
 const WEB_TIMEOUT=6500;
 function storageFailure(error){
  health.storage='error';
@@ -1003,7 +997,6 @@ try{const useSearch=/actualiz|actualidad|actuales|hoy|reciente|vigente|internet|
  }catch(e){if(epoch===documentViewEpoch)chat.insertAdjacentHTML('beforeend',`<div class="msg bot">No se pudo consultar xkiro: ${escapeHtml(e.message)}. El documento sigue disponible para lectura local.</div>`)}
  finally{documentAIBusy=false;$('#documentAIAsk').disabled=false;chat.scrollTop=chat.scrollHeight}
 }
-function renderGeminiSettings(){renderGeminiNotice();const key=getGeminiKey()||'';const model=readStorage(GEMINI_MODEL_KEY)||'detección automática';const input=$('#aiKey');if(input)input.value=key;if($('#rememberAiKey'))$('#rememberAiKey').checked=Boolean(readStorage(GEMINI_KEY));const status=$('#geminiStatus');if(status)status.innerHTML=key?`<span class="status-dot" style="background:${health.gemini?.status==='respuesta recibida'?'var(--ok)':'#b27b26'}"></span>${readStorage(GEMINI_KEY)?'Clave guardada':'Clave en sesión'} · ${escapeHtml(health.gemini?.status||'sin comprobar')} · ${escapeHtml(health.gemini?.model||model)}`:'<span class="status-dot" style="background:#d89632"></span>Sin clave configurada'}
 const CAL_KEY='nexus_x_calendar_v1';let calCursor=new Date();
 function isValidCalendarDate(date){return /^\d{4}-\d{2}-\d{2}$/.test(String(date))&&!Number.isNaN(Date.parse(date))&&new Date(date+'T12:00:00Z').toISOString().slice(0,10)===date}
 function calendarEvents(){const rows=readJsonStorage(CAL_KEY,[]);return Array.isArray(rows)?rows.filter(e=>e&&typeof e.text==='string'&&isValidCalendarDate(e.date)):[]}
