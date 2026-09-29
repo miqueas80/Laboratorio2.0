@@ -917,6 +917,133 @@ function lensVisionPrompt(){return 'Analizá UNA fotografía de laboratorio. Dev
 function lensContextForProvider(context){
  const local=(context.evidenceGroups?.probableMatches||[]).slice(0,4).map(e=>({source:e.source,id:e.metadata?.record?.id,name:e.metadata?.record?.name,formula:e.metadata?.record?.formula,confidence:e.confidence}));const documents=(context.documents||[]).slice(0,4).map(e=>({name:e.value?.name,excerpt:e.value?.excerpt?.slice(0,240)}));return JSON.stringify({localCandidates:local,documents,note:'Datos locales no confirmados; sólo sirven para contrastar la imagen.'});
 }
+ async function xkiroVisionAnalyze({imageDataUrl,context=''}) {
+ const catalog=await loadXKiroModels();
+ const candidates=(catalog.vision||[]).slice(0,8);
+
+ if(!candidates.length){
+  throw new Error('xKiro no encontró modelos gratuitos con visión.');
+ }
+
+ const attempted=[];
+ let lastError='';
+
+ for(const entry of candidates){
+  attempted.push(entry.id);
+
+  try{
+   const response=await fetchTimeout(
+    `${XKIRO_API}/chat/completions`,
+    {
+     method:'POST',
+     headers:{
+      'Content-Type':'application/json'
+     },
+     body:JSON.stringify({
+      model:entry.id,
+      messages:[
+       {
+        role:'user',
+        content:[
+         {
+          type:'image_url',
+          image_url:{
+           url:imageDataUrl
+          }
+         },
+         {
+          type:'text',
+          text:
+           lensVisionPrompt()+
+           '\n\nCONTEXTO LOCAL NO CONFIRMADO:\n'+
+           String(context||'').slice(0,6000)
+         }
+        ]
+       }
+      ],
+      temperature:0.05,
+      max_tokens:1200
+     })
+    },
+    30000
+   );
+
+   if(response.status===401||response.status===403){
+    throw new Error(
+     'xKiro rechazó la credencial protegida del Gateway (HTTP '+
+     response.status+
+     ').'
+    );
+   }
+
+   if(!response.ok){
+    lastError='HTTP '+response.status;
+
+    if([408,429,500,502,503,504].includes(response.status)){
+     continue;
+    }
+
+    throw new Error('xKiro Vision '+lastError);
+   }
+
+   const data=await response.json();
+
+   const rawContent=data?.choices?.[0]?.message?.content;
+
+   const answer=Array.isArray(rawContent)
+    ? rawContent
+       .map(part=>typeof part==='string'
+        ? part
+        : String(part?.text||''))
+       .join('')
+       .trim()
+    : String(rawContent||'').trim();
+
+   if(!answer){
+    lastError='respuesta vacía';
+    continue;
+   }
+
+   const analysis=parseLensVisionPayload(answer);
+
+   health.xkiro={
+    ...(health.xkiro||{}),
+    status:'conectado',
+    model:entry.id,
+    freeModels:catalog.models.length,
+    visionModels:catalog.vision.length,
+    visionModel:entry.id,
+    visionAttemptedModels:[...attempted],
+    checkedAt:new Date().toISOString()
+   };
+
+   return {
+    analysis,
+    model:entry.id,
+    attemptedModels:attempted
+   };
+
+  }catch(error){
+   lastError=error.message||String(error);
+
+   if(
+    /HTTP (408|429|500|502|503|504)/i.test(lastError) ||
+    /respuesta vacía/i.test(lastError)
+   ){
+    continue;
+   }
+
+   throw error;
+  }
+ }
+
+ throw new Error(
+  'xKiro Vision no obtuvo respuesta después de '+
+  attempted.length+
+  ' modelos. Último error: '+
+  (lastError||'desconocido')
+ );
+}
 function getLensVisionProvider(){
  const proxy=configuredLensVisionProxy();if(proxy)return {id:'secure-proxy',async analyze({imageDataUrl,context}){const response=await fetchTimeout(proxy,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({task:'nexus-lens-lab-v1',image:imageDataUrl,context,prompt:lensVisionPrompt()})},25000);if(!response.ok)throw new Error('Proxy visual HTTP '+response.status);const data=await response.json();return {analysis:parseLensVisionPayload(data.analysis??data),model:String(data.model||'proxy')}}};
  if(getGeminiKey())return {id:'gemini-byok',async analyze({imageDataUrl,context}){const result=await geminiGenerate({question:lensVisionPrompt(),context,imageDataUrl,temperature:0.05,maxOutputTokens:900});return {analysis:parseLensVisionPayload(result.answer),model:result.model}}};return null;
