@@ -975,7 +975,7 @@ let diagnosticSnapshot=null,diagnosticJob=null;
 async function collectDiagnostics(){
  if(diagnosticJob)return diagnosticJob;
  diagnosticJob=(async()=>{
-  const checks={version:APP_VERSION,checkedAt:new Date().toISOString(),boot:health.boot,network:{onlineHint:navigator.onLine,meaning:'Estado informado por el navegador; no prueba acceso a Internet'},inventory:runIntegrity(),documents:{loaded:state.docs.length},nexus:{actions:ActionRegistry.size,local:true},gemini:{configured:Boolean(getGeminiKey()),keyStorage:readStorage(GEMINI_KEY)?'navegador':getGeminiKey()?'sesión':'ninguna',...(health.gemini||{status:'sin comprobar'})}};
+xkiro:{gateway:XKIRO_API,status:health.xkiro?.status||'sin comprobar',model:health.xkiro?.model||null,freeModels:health.xkiro?.freeModels||null,visionModels:health.xkiro?.visionModels||null}
   const probe='nexus_x_storage_probe_'+Date.now();
   try{localStorage.setItem(probe,'ok');checks.storage={writable:localStorage.getItem(probe)==='ok'};localStorage.removeItem(probe)}catch(e){checks.storage={writable:false,error:e.name}}
   try{if(navigator.storage?.estimate)checks.storage.estimate=await navigator.storage.estimate();if(navigator.storage?.persisted)checks.storage.persistent=await navigator.storage.persisted()}catch(e){checks.storage.estimateError=e.message}
@@ -994,9 +994,9 @@ async function collectDiagnostics(){
  })();try{return await diagnosticJob}finally{diagnosticJob=null}
 }
 function renderDiagnostics(){
- const snapshot=diagnosticSnapshot||{version:APP_VERSION,boot:health.boot,storage:health.storage,indexedDB:health.documents,inventory:runIntegrity(),documents:state.docs.length,nexus:{actions:ActionRegistry.size},gemini:health.gemini||{status:'sin comprobar'},note:'Ejecutá Comprobar para verificar almacenamiento, Service Worker y caché.'};
- $('#settingsDiag').textContent=JSON.stringify(snapshot,null,2);renderGeminiSettings();
- const status=$('#pwaStatus');if(status)status.textContent=diagnosticSnapshot?.serviceWorker?.updateWaiting?'Actualización lista. Cerrá todas las pestañas de NEXUS-X y volvé a abrir.':diagnosticSnapshot?.offlineCache?.complete?'Recursos locales comprobados en caché. Los documentos deben haberse guardado en este dispositivo.':'Instalación offline todavía sin comprobar.';
+xkiro:health.xkiro||{status:'sin comprobar'}
+$('#settingsDiag').textContent=JSON.stringify(snapshot,null,2);renderXKiroSettings();
+const status=$('#pwaStatus');if(status)status.textContent=diagnosticSnapshot?.serviceWorker?.updateWaiting?'Actualización lista. Cerrá todas las pestañas de NEXUS-X y volvé a abrir.':diagnosticSnapshot?.offlineCache?.complete?'Recursos locales comprobados en caché. Los documentos deben haberse guardado en este dispositivo.':'Instalación offline todavía sin comprobar.';
 }
 async function setupServiceWorker(){
  if(!('serviceWorker' in navigator)){health.errors.push({domain:'Service Worker',message:'API no disponible'});return}
@@ -1934,16 +1934,12 @@ function bind(){
  $('#researchBtn').onclick=runResearch;$('#researchInput').addEventListener('keydown',e=>{if(e.key==='Enter')runResearch()});$('#aiBtn').onclick=aiQuery;$('#aiInput').addEventListener('keydown',e=>{if(e.key==='Enter')aiQuery()});
  $('#startQrBtn').onclick=startQr;$('#stopQrBtn').onclick=stopQr;$('#qrCameraSelect').onchange=e=>{if(e.target.value)switchQrCamera(e.target.value)};$('#qrImage').onchange=e=>{const f=e.target.files[0];if(f)decodeQrImage(f);e.target.value=''};$('#manualQrBtn').onclick=()=>{if($('#manualQr').value.trim())processQr($('#manualQr').value)};
  $('#loadWordBtn').onclick=()=>$('#wordInput').click();$('#wordInput').onchange=e=>{const f=e.target.files[0];if(f)importWord(f);e.target.value=''};$('#loadPdfBtn').onclick=()=>$('#pdfInput').click();$('#pdfInput').onchange=e=>{const f=e.target.files[0];if(f)importPdf(f);e.target.value=''};$('#loadDocumentBtn').onclick=()=>$('#documentInput').click();$('#documentInput').onchange=e=>{const f=e.target.files[0];if(f)importDocumentFile(f);e.target.value=''};$('#resetMasterBtn').onclick=restoreMaster;
- $('#exportReportBtn').onclick=exportReport;$('#settingsBtn').onclick=()=>setView('settings');$('#saveAiBtn').onclick=async()=>{const key=$('#aiKey').value.trim();sessionGeminiKey=key;geminiModelCache=null;
- try{if($('#rememberAiKey').checked&&key)writeStorage(GEMINI_KEY,key);else removeStorage(GEMINI_KEY);
- if(!key){health.gemini={status:'no configurada'};renderGeminiSettings();return toast('Clave eliminada.');}
- $('#saveAiBtn').disabled=true;toast('Comprobando Gemini…');const result=await testGeminiKey(key);renderGeminiSettings();renderDiagnostics();toast(result.message);
- }catch(e){toast(e.message)}finally{$('#saveAiBtn').disabled=false}};$('#clearLocalBtn').onclick=restoreMaster;
+$('#exportReportBtn').onclick=exportReport;$('#settingsBtn').onclick=()=>setView('settings');$('#clearLocalBtn').onclick=restoreMaster;
  $$('[data-close]').forEach(b=>b.onclick=()=>hideModal(b.dataset.close));$('#calendarBtn').onclick=openCalendar;$('#calPrev').onclick=()=>{calCursor.setMonth(calCursor.getMonth()-1);renderCalendar()};$('#calNext').onclick=()=>{calCursor.setMonth(calCursor.getMonth()+1);renderCalendar()};$('#calToday').onclick=()=>{calCursor=new Date();renderCalendar()};$('#calAdd').onclick=addCalendarEvent;$('#calEvent').addEventListener('keydown',e=>{if(e.key==='Enter')addCalendarEvent()});$('#downloadDocumentBtn').onclick=()=>{if(activeDocument?.blob)download(activeDocument.name,activeDocument.blob)};$('#documentViewerClose').onclick=closeDocumentViewer;$('#documentViewerAIButton').onclick=()=>$('#documentViewerAI').classList.toggle('open');$('#documentAIAsk').onclick=askDocumentAI;$('#documentAIInput').addEventListener('keydown',e=>{if(e.key==='Enter')askDocumentAI()});$('#lensImageBtn').onclick=()=>$('#lensImageInput').click();$('#lensImageInput').onchange=async e=>{const f=e.target.files[0];if(f)await analyzeLensImageFile(f);e.target.value=''};$('#lensPermissionBtn').onclick=async()=>{const ok=await requestLensCameraPermission();if(ok)await startLensCamera()};$('#lensStartBtn').onclick=async()=>{const ok=await requestLensCameraPermission();if(ok)await startLensCamera()};$('#lensCameraSelect').onchange=()=>{if(state.lensStream)startLensCamera()};$('#lensStopBtn').onclick=stopLensCamera;$('#lensAnalyzeBtn').onclick=()=>analyzeCurrentLensCamera();$('#lensSearchBtn').onclick=lensSearchInNexus;$('#lensInventoryBtn').onclick=()=>lensOpenInventory();$('#lensDocumentsBtn').onclick=()=>lensOpenDocuments();$('#lensInternetBtn').onclick=()=>lensInvestigateInternet();$('#lensFichaBtn').onclick=lensOpenFicha;lensSetContextActions(state.lensLastContext);initVoice();window.addEventListener('beforeunload',()=>{stopQr();stopLensCamera();stopVoiceRecognition();if(globalThis.speechSynthesis)globalThis.speechSynthesis.cancel()});
 }
 let bootPromise=null;
 function boot(){if(bootPromise)return bootPromise;bootPromise=(async()=>{
-try{bind();bindXKiroSettings();health.boot='STORAGE';renderGeminiSettings();renderActivity();await loadMaster();await loadCatalogMaster();health.boot='DOCUMENTS';await loadCachedDocumentIndex();health.boot=state.inventoryError||!state.docIndexReady?'DEGRADED':'READY';renderDiagnostics();
+try{bind();bindXKiroSettings();health.boot='STORAGE';renderXKiroSettings();renderActivity();await loadMaster();
  setupServiceWorker();
  if(state.docIndexReady)$('#repoStatus').textContent=navigator.onLine?'Documentos locales listos':'Sin conexión · documentos locales';
  if(navigator.onLine&&githubRepo.repo)syncRepository().catch(e=>{health.errors.push({domain:'GitHub',message:e.message})});
