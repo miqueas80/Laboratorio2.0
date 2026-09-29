@@ -1045,8 +1045,83 @@ function lensContextForProvider(context){
  );
 }
 function getLensVisionProvider(){
- const proxy=configuredLensVisionProxy();if(proxy)return {id:'secure-proxy',async analyze({imageDataUrl,context}){const response=await fetchTimeout(proxy,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({task:'nexus-lens-lab-v1',image:imageDataUrl,context,prompt:lensVisionPrompt()})},25000);if(!response.ok)throw new Error('Proxy visual HTTP '+response.status);const data=await response.json();return {analysis:parseLensVisionPayload(data.analysis??data),model:String(data.model||'proxy')}}};
- if(getGeminiKey())return {id:'gemini-byok',async analyze({imageDataUrl,context}){const result=await geminiGenerate({question:lensVisionPrompt(),context,imageDataUrl,temperature:0.05,maxOutputTokens:900});return {analysis:parseLensVisionPayload(result.answer),model:result.model}}};return null;
+ const proxy=configuredLensVisionProxy();
+
+ if(proxy){
+  return {
+   id:'secure-proxy',
+   async analyze({imageDataUrl,context}){
+    const response=await fetchTimeout(
+     proxy,
+     {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+       task:'nexus-lens-lab-v1',
+       image:imageDataUrl,
+       context,
+       prompt:lensVisionPrompt()
+      })
+     },
+     25000
+    );
+
+    if(!response.ok){
+     throw new Error('Proxy visual HTTP '+response.status);
+    }
+
+    const data=await response.json();
+
+    return {
+     analysis:parseLensVisionPayload(data.analysis??data),
+     model:String(data.model||'proxy'),
+     provider:'secure-proxy'
+    };
+   }
+  };
+ }
+
+ return {
+  id:'xkiro-gateway',
+
+  async analyze({imageDataUrl,context}){
+   try{
+    const result=await xkiroVisionAnalyze({
+     imageDataUrl,
+     context
+    });
+
+    return {
+     ...result,
+     provider:'xkiro-gateway'
+    };
+
+   }catch(xkiroError){
+
+    // Gemini queda únicamente como respaldo.
+    if(!getGeminiKey()){
+     throw xkiroError;
+    }
+
+    const result=await geminiGenerate({
+     question:lensVisionPrompt(),
+     context,
+     imageDataUrl,
+     temperature:0.05,
+     maxOutputTokens:1600,
+     thinkingLevel:'low'
+    });
+
+    return {
+     analysis:parseLensVisionPayload(result.answer),
+     model:result.model,
+     provider:'gemini-byok',
+     fallbackFrom:'xkiro-gateway',
+     xkiroError:xkiroError.message||String(xkiroError)
+    };
+   }
+  }
+ };
 }
 function lensVisionEvidence(providerResult){
  const analysis=providerResult.analysis,evidence=[createLensEvidence({source:providerResult.provider,type:'visual-hypothesis',value:analysis,confidence:Math.min(90,analysis.confidence),local:false,metadata:{tier:'visual-hypothesis',model:providerResult.model,cacheHit:Boolean(providerResult.cacheHit),chemicalCertainty:false}})];
