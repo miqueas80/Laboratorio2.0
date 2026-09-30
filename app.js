@@ -138,7 +138,7 @@ function documentSearch(q){const nq=norm(q),terms=searchTerms(q);if(!nq||!terms.
  }return grouped.sort((a,b)=>b.score-a.score||a.d.name.localeCompare(b.d.name,'es')).slice(0,20);
 }
 function crossRelations(docHits,invHits){const map=new Map();for(const h of docHits){for(const r of h.d.relations||[]){const key=r.entityId;map.set(key,(map.get(key)||0)+1)}}for(const h of invHits){const key=h.r.id;map.set(key,(map.get(key)||0)+2)}return [...map.entries()].sort((a,b)=>b[1]-a[1]).map(([id,score])=>({id,score,r:state.inventory.find(x=>x.id===id)})).filter(x=>x.r)}
-const DOCUMENT_TYPES=new Set(['PDF','DOCX','XLSX','XLS','CSV','TXT','MD']);
+const DOCUMENT_TYPES=new Set(['PDF','DOCX','XLSX','XLS']);
 let documentJob=null,documentQueue=Promise.resolve();
 function documentProgress(text){const el=$('#documentProgress');if(el)el.textContent=text;}
 function cancelDocuments(){if(documentJob){documentJob.cancelled=true;documentJob.cancel?.();documentProgress('Cancelando procesamiento…')}}
@@ -146,7 +146,7 @@ function checkDocumentCancellation(){if(documentJob?.cancelled)throw new Error('
 async function yieldToUI(){await new Promise(resolve=>setTimeout(resolve,0));checkDocumentCancellation()}
 async function validateDocumentFile(file){
  if(!file||typeof file.name!=='string'||!file.name.trim()||file.name.length>240||/[\x00-\x1f]/.test(file.name))throw new Error('Nombre de archivo inválido.');
- const type=docType(file.name);if(!DOCUMENT_TYPES.has(type))throw new Error('Formato no admitido. Usá PDF, DOCX, XLSX, XLS, CSV, TXT o MD.');
+const type=docType(file.name);if(!DOCUMENT_TYPES.has(type))throw new Error('Formato no admitido. Usá PDF, DOCX, XLSX o XLS.');
  if(!file.size)throw new Error('El archivo está vacío.');
  if(file.size>DOC_MAX_BYTES)throw new Error(`Límite ${DOC_MAX_BYTES/1048576} MB por documento.`);
  const head=new Uint8Array(await file.slice(0,512).arrayBuffer());
@@ -235,8 +235,19 @@ async function indexDocxDocument(file){return indexLocalFile(file)}
 async function indexPdfDocument(file){return indexLocalFile(file)}
 async function indexSpreadsheetDocument(file){return indexLocalFile(file)}
 
-async function loadCachedDocumentIndex(){try{state.docs=await getCachedDocs();state.docIndexReady=true}catch(e){health.documents='error';health.errors.push({domain:'Documents',message:e.message});$('#repoStatus').textContent='Lectura local no disponible: '+e.message}renderDocuments();renderDashboard()}
-function validateInventory(records, expected=111){
+async function loadCachedDocumentIndex(){
+ try{
+  state.docs=(await getCachedDocs()).filter(d=>DOCUMENT_TYPES.has(String(d.type||'').toUpperCase()));
+  state.docIndexReady=true;
+ }catch(e){
+  health.documents='error';
+  health.errors.push({domain:'Documents',message:e.message});
+  $('#repoStatus').textContent='Lectura local no disponible: '+e.message;
+ }
+ renderDocuments();
+ renderDashboard();
+}
+ function validateInventory(records, expected=111){
  if(!Array.isArray(records))throw new Error('La base no contiene un arreglo de registros.');
  if(records.some(r=>!r||typeof r!=='object'||!String(r.name||'').trim()))throw new Error('Hay registros sin nombre válido.');
  const ids=records.map(x=>x.id); const dup=ids.filter((x,i)=>ids.indexOf(x)!==i); if(dup.length)throw new Error(`IDs duplicados: ${[...new Set(dup)].join(', ')}`);
@@ -967,7 +978,10 @@ async function syncRepository(){
   if(!detected.repo)throw new Error('No se pudo determinar el repositorio desde la URL de GitHub Pages.');
   const found=await listGitHubFiles(detected.owner,detected.repo,detected.branch);
   saveGitHubRepo({owner:detected.owner,repo:detected.repo,branch:found.branch});renderRepoLabel();
-  const files=found.files.filter(x=>/\.(pdf|docx|xlsx|xls|csv|txt|md)$/i.test(x.path)&&!x.path.startsWith('vendor/')&&!x.path.startsWith('docs/'));
+const files=found.files.filter(x=>
+ /\.(pdf|docx|xlsx|xls)$/i.test(x.path) &&
+ !x.path.startsWith('vendor/')
+);
   if(!files.length){state.docSyncing=false;renderDocuments();status.textContent=`Sin documentos compatibles · ${githubLabel()}`;saveActivity(`GitHub conectado: ${githubLabel()} · 0 documentos compatibles`);return {ok:true,owner:detected.owner,repo:detected.repo,branch:found.branch,files:0,indexed:0,failed:[]};}
   let ok=0,failed=[];status.textContent=`${files.length} documentos detectados · indexando…`;
   for(const f of files){try{
