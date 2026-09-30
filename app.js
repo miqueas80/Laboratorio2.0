@@ -15,7 +15,7 @@ const REPO_OWNER='miqueas80';
 const REPO_NAME='';
 const REPO_BRANCH='';
 const DOC_MAX_BYTES=16*1024*1024;
-const APP_VERSION='2026.09.29-r20';
+const APP_VERSION='2026.09.29-r21';
 const INVENTORY_RECOVERY_KEY='nexus_x_inventory_recovery_v1';
 const health={storage:'sin comprobar',documents:'sin comprobar',errors:[],boot:'BOOT'};
 const LENS_EXTERNAL_CACHE_TTL=30*60*1000;
@@ -929,8 +929,8 @@ const checks={version:APP_VERSION,checkedAt:new Date().toISOString(),boot:health
  })();try{return await diagnosticJob}finally{diagnosticJob=null}
 }
 function renderDiagnostics(){
-xkiro:health.xkiro||{status:'sin comprobar'}
-$('#settingsDiag').textContent=JSON.stringify(snapshot,null,2);renderXKiroSettings();
+ const snapshot=diagnosticSnapshot||{version:APP_VERSION,boot:health.boot,storage:health.storage,indexedDB:health.documents,inventory:runIntegrity(),documents:state.docs.length,nexus:{actions:ActionRegistry.size},xkiro:health.xkiro||{status:'sin comprobar'},note:'Ejecutá Comprobar para verificar almacenamiento, Service Worker y caché.'};
+ $('#settingsDiag').textContent=JSON.stringify(snapshot,null,2);renderXKiroSettings();
 const status=$('#pwaStatus');if(status)status.textContent=diagnosticSnapshot?.serviceWorker?.updateWaiting?'Actualización lista. Cerrá todas las pestañas de NEXUS-X y volvé a abrir.':diagnosticSnapshot?.offlineCache?.complete?'Recursos locales comprobados en caché. Los documentos deben haberse guardado en este dispositivo.':'Instalación offline todavía sin comprobar.';
 }
 async function setupServiceWorker(){
@@ -1874,7 +1874,7 @@ $('#exportReportBtn').onclick=exportReport;$('#settingsBtn').onclick=()=>setView
 }
 let bootPromise=null;
 function boot(){if(bootPromise)return bootPromise;bootPromise=(async()=>{
-try{bind();bindXKiroSettings();health.boot='STORAGE';renderXKiroSettings();renderActivity();await loadMaster();
+try{bind();bindXKiroSettings();health.boot='STORAGE';renderXKiroSettings();renderActivity();await loadMaster();await loadCatalogMaster();health.boot='DOCUMENTS';await loadCachedDocumentIndex();health.boot=state.inventoryError||!state.docIndexReady?'DEGRADED':'READY';renderDiagnostics();
  setupServiceWorker();
  if(state.docIndexReady)$('#repoStatus').textContent=navigator.onLine?'Documentos locales listos':'Sin conexión · documentos locales';
  if(navigator.onLine&&githubRepo.repo)syncRepository().catch(e=>{health.errors.push({domain:'GitHub',message:e.message})});

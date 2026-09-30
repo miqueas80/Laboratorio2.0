@@ -1,0 +1,8 @@
+NEXUS-X r21 HOTFIX
+===================
+✓ app.js pasa node --check.
+✓ renderDiagnostics usa diagnosticSnapshot correctamente.
+✓ boot restaura catálogo maestro e índice de documentos.
+✓ APP_VERSION y Service Worker en 2026.09.29-r21.
+✓ index.html sin IDs duplicados.
+✓ Integración xKiro no modificada.
