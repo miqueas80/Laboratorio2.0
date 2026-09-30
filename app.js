@@ -15,7 +15,7 @@ const REPO_OWNER='miqueas80';
 const REPO_NAME='';
 const REPO_BRANCH='';
 const DOC_MAX_BYTES=16*1024*1024;
-const APP_VERSION='2026.09.29-r19';
+const APP_VERSION='2026.09.29-r20';
 const INVENTORY_RECOVERY_KEY='nexus_x_inventory_recovery_v1';
 const health={storage:'sin comprobar',documents:'sin comprobar',errors:[],boot:'BOOT'};
 const LENS_EXTERNAL_CACHE_TTL=30*60*1000;
@@ -910,7 +910,7 @@ let diagnosticSnapshot=null,diagnosticJob=null;
 async function collectDiagnostics(){
  if(diagnosticJob)return diagnosticJob;
  diagnosticJob=(async()=>{
-xkiro:{gateway:XKIRO_API,status:health.xkiro?.status||'sin comprobar',model:health.xkiro?.model||null,freeModels:health.xkiro?.freeModels||null,visionModels:health.xkiro?.visionModels||null}
+const checks={version:APP_VERSION,checkedAt:new Date().toISOString(),boot:health.boot,network:{onlineHint:navigator.onLine,meaning:'Estado informado por el navegador; no prueba acceso a Internet'},inventory:runIntegrity(),documents:{loaded:state.docs.length},nexus:{actions:ActionRegistry.size,local:true},xkiro:{gateway:XKIRO_API,status:health.xkiro?.status||'sin comprobar',model:health.xkiro?.model||null,freeModels:health.xkiro?.freeModels||null,visionModels:health.xkiro?.visionModels||null}};
   const probe='nexus_x_storage_probe_'+Date.now();
   try{localStorage.setItem(probe,'ok');checks.storage={writable:localStorage.getItem(probe)==='ok'};localStorage.removeItem(probe)}catch(e){checks.storage={writable:false,error:e.name}}
   try{if(navigator.storage?.estimate)checks.storage.estimate=await navigator.storage.estimate();if(navigator.storage?.persisted)checks.storage.persistent=await navigator.storage.persisted()}catch(e){checks.storage.estimateError=e.message}
@@ -1303,9 +1303,10 @@ function getLensVisionProvider(){
      provider:'xkiro-gateway'
     };
 
- }catch(xkiroError){
- throw xkiroError;
-}
+   }catch(xkiroError){
+    throw xkiroError;
+   }
+  }
  };
 }
 function lensVisionEvidence(providerResult){
@@ -1557,7 +1558,7 @@ async function executeAssistantAction(action,{speak=true,origin='local'}={}){
  }catch(e){return agentActionResult(action,{ok:false,error:e.message||'No se pudo completar la acción'},startedAt)}
 }
 
-function nexusAgentToolResult(action){const a=action?.action||'';if(a==='get_inventory'){const q=String(action.query||'').trim();const hits=q?searchLocal(q).slice(0,15):state.inventory.slice(0,20).map(r=>({r,score:0}));return {count:state.inventory.length,results:hits.map(x=>({id:x.r.id,name:x.r.name,formula:x.r.formula,physicalState:x.r.physicalState,location:x.r.location,notes:x.r.notes}))};}if(a==='get_documents'){const q=String(action.query||'').trim();return q?{results:documentSearch(q).slice(0,10).map(h=>({name:h.d.name,path:h.d.path,score:h.score,excerpt:h.chunk.slice(0,1200)}))}:{count:state.docs.length,documents:state.docs.slice(0,30).map(d=>({name:d.name,type:d.type,path:d.path,chunks:d.chunks?.length||0}))};}if(a==='get_lens_context')return state.lensLastContext;if(a==='get_activity')return state.activity;if(a==='get_state')return {view:state.view,inventory:state.inventory.length,documents:state.docs.length,camera:Boolean(state.stream||state.lensStream),lens:state.lensLastContext?.status||'idle',voice:voiceMonitoring,web:state.web,online:navigator.onLine,audit:state.agentAudit.slice(0,10)};if(a==='status'||a==='diagnostics')return {integrity:runIntegrity(),state:nexusAgentToolResult({action:'get_state'}),xkiro:health.xkiro?.status==='conectado',model:health.xkiro?.model||'auto'}
+function nexusAgentToolResult(action){const a=action?.action||'';if(a==='get_inventory'){const q=String(action.query||'').trim();const hits=q?searchLocal(q).slice(0,15):state.inventory.slice(0,20).map(r=>({r,score:0}));return {count:state.inventory.length,results:hits.map(x=>({id:x.r.id,name:x.r.name,formula:x.r.formula,physicalState:x.r.physicalState,location:x.r.location,notes:x.r.notes}))};}if(a==='get_documents'){const q=String(action.query||'').trim();return q?{results:documentSearch(q).slice(0,10).map(h=>({name:h.d.name,path:h.d.path,score:h.score,excerpt:h.chunk.slice(0,1200)}))}:{count:state.docs.length,documents:state.docs.slice(0,30).map(d=>({name:d.name,type:d.type,path:d.path,chunks:d.chunks?.length||0}))};}if(a==='get_lens_context')return state.lensLastContext;if(a==='get_activity')return state.activity;if(a==='get_state')return {view:state.view,inventory:state.inventory.length,documents:state.docs.length,camera:Boolean(state.stream||state.lensStream),lens:state.lensLastContext?.status||'idle',voice:voiceMonitoring,web:state.web,online:navigator.onLine,audit:state.agentAudit.slice(0,10)};if(a==='status'||a==='diagnostics')return {integrity:runIntegrity(),state:nexusAgentToolResult({action:'get_state'}),xkiro:health.xkiro?.status==='conectado',model:health.xkiro?.model||'auto'};return null;}
 function resolveUniqueInventoryHit(query){
   const q=String(query||'').trim();
   if(!q)return {ok:false,error:'Consulta vacía'};

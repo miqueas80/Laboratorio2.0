@@ -1,0 +1,17 @@
+NEXUS-X r20 · paquete de recuperación
+
+{
+  "node_check": "OK",
+  "app_version_r20": true,
+  "sw_version_r20": true,
+  "duplicate_ids": [],
+  "missing_required_ids": [],
+  "missing_static_dom_ids": [],
+  "gemini_refs_app": 0,
+  "gemini_refs_index": 0,
+  "xkiro_status_count": 1,
+  "save_xkiro_count": 1,
+  "syntax_fix_agent": true,
+  "syntax_fix_lens": true,
+  "diagnostics_checks_restored": true
+}
