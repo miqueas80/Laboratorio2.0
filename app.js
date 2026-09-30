@@ -840,12 +840,14 @@ async function testXKiroKey(key){
   }catch(error){
    lastError=error.message||String(error);
 
-   if(
-    /HTTP (408|429|500|502|503|504)/i.test(lastError) ||
-    /respuesta vacía/i.test(lastError)
-   ){
-    continue;
-   }
+ if(
+ error?.name==='AbortError' ||
+ /aborted|timeout|tiempo de espera/i.test(lastError) ||
+ /HTTP (408|429|500|502|503|504)/i.test(lastError) ||
+ /respuesta vacía/i.test(lastError)
+){
+ continue;
+}
 
    throw error;
   }
@@ -1233,12 +1235,14 @@ function lensContextForProvider(context){
   }catch(error){
    lastError=error.message||String(error);
 
-   if(
-    /HTTP (408|429|500|502|503|504)/i.test(lastError) ||
-    /respuesta vacía/i.test(lastError)
-   ){
-    continue;
-   }
+if(
+ error?.name==='AbortError' ||
+ /aborted|timeout|tiempo de espera/i.test(lastError) ||
+ /HTTP (408|429|500|502|503|504)/i.test(lastError) ||
+ /respuesta vacía/i.test(lastError)
+){
+ continue;
+}
 
    throw error;
   }
