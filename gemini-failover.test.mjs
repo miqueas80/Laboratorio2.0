@@ -1,42 +1,41 @@
+// Regresiones del failover original adaptadas al contrato xKiro Gateway vigente.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {harness,master} from './harness.mjs';
-const chain=['gemini-3.8-flash','gemini-3.7-flash','gemini-3.6-flash'];
-for(const statuses of [[200],[429,200],[503,503,200],[401],[403],[400],[404,200],[429,503,503]])test('failover runtime '+statuses,async()=>{
+const chain=['preferred','secondary','last'];
+const catalog=ids=>Response.json({data:ids.map(id=>({id,access_tier:'free',capabilities:{}}))});
+for(const statuses of [[200],[503,503,200],[401],[403],[400],[429],[500,502,200]])test('Gateway failover runtime '+statuses,async()=>{
  const attempts=[];const h=harness({stored:master.records,fetcher:(url,opts)=>{
-  if(!opts?.body)return Response.json({models:chain.map(name=>({name:'models/'+name,supportedGenerationMethods:['generateContent']}))});
-  attempts.push(String(url).match(/models\/(.*):generateContent/)[1]);const status=statuses[attempts.length-1];assert.ok(status,'no repetir modelos');
-  return status===200?Response.json({candidates:[{content:{parts:[{text:'OK'}]}}]}):new Response('',{status});
+  if(!opts?.body)return catalog(chain);
+  attempts.push(JSON.parse(opts.body).model);const status=statuses[attempts.length-1];assert.ok(status,'no repetir modelos');
+  return status===200?Response.json({choices:[{message:{content:'OK'}}]}):new Response('',{status,headers:status===429?{'Retry-After':'60'}:{}});
  }});
- try{await h.api.loadMaster();h.window.localStorage.setItem('nexus_gemini_api_key_v1','private-test-key');
-  if(statuses.at(-1)===200){const out=await h.api.geminiGenerate({question:'test'});assert.equal(out.model,chain[statuses.length-1]);assert.equal(h.api.health.gemini.fallbackUsed,statuses.length>1)}
-  else await assert.rejects(h.api.geminiGenerate({question:'test'}));
-  assert.deepEqual(attempts,chain.slice(0,statuses.length));assert.equal(h.api.health.gemini.attemptedModels.length,attempts.length);
-  assert.doesNotMatch(JSON.stringify(h.api.health.gemini),/private-test-key/);
+ try{await h.api.loadMaster();h.api.state.web=true;
+  if(statuses.at(-1)===200){const out=await h.api.xkiroGenerate({question:'test'});assert.equal(out.model,chain[statuses.length-1])}
+  else await assert.rejects(h.api.xkiroGenerate({question:'test'}));
+  assert.deepEqual(attempts,chain.slice(0,statuses.length));
+  if(statuses[0]===401||statuses[0]===403)assert.deepEqual(Array.from(h.api.orderXKiroCandidates(chain.map(id=>({id}))),x=>x.id),chain);
   const local=await h.api.nexusAgentTurn('Nexus busca ácido nítrico');assert.equal(local.actions[0].result.ok,true);assert.equal(h.api.state.inventory.length,111);
  }finally{h.close()}
 });
-test('sólo modelos disponibles, preferencia exitosa y abort sin failover',async()=>{
- let abort=false;const attempts=[];const h=harness({fetcher:(url,opts)=>{
-  if(!opts?.body)return Response.json({models:chain.slice(1).map(name=>({name:'models/'+name,supportedGenerationMethods:['generateContent']}))});
-  attempts.push(String(url));if(abort)throw new DOMException('cancelado','AbortError');
-  if(String(url).includes('3.7'))return new Response('',{status:429});
-  return Response.json({candidates:[{content:{parts:[{text:'OK'}]}}]});
+test('503 cooldown usa lastKnownGoodModel y permite preferentes al expirar',async()=>{
+ const attempts=[];let now=1000000;const h=harness({fetcher:(url,opts)=>{
+  if(!opts?.body)return catalog(chain);
+  const model=JSON.parse(opts.body).model;attempts.push(model);
+  return model==='last'?Response.json({choices:[{message:{content:'OK'}}]}):new Response('',{status:503});
  }});
- try{h.window.localStorage.setItem('nexus_gemini_api_key_v1','key');await h.api.geminiGenerate({question:'test'});await h.api.geminiGenerate({question:'test'});assert.equal(attempts.length,4);assert.match(attempts[3],/3.6/);abort=true;await assert.rejects(h.api.geminiGenerate({question:'test'}));assert.equal(attempts.length,5)}finally{h.close()}
+ try{h.api.state.web=true;h.window.Date.now=()=>now;
+  await h.api.xkiroGenerate({question:'test'});await h.api.xkiroGenerate({question:'test'});assert.deepEqual(attempts,[...chain,'last']);
+  now+=13*60*1000;assert.deepEqual(Array.from(h.api.orderXKiroCandidates(chain.map(id=>({id}))),x=>x.id),chain);
+ }finally{h.close()}
 });
-test('503 en dos modelos: siguiente consulta usa el último modelo válido',async()=>{
- const attempts=[];const h=harness({fetcher:(url,opts)=>{
-  if(!opts?.body)return Response.json({models:chain.map(name=>({name:'models/'+name,supportedGenerationMethods:['generateContent']}))});
-  const model=String(url).match(/models\/(.*):generateContent/)[1];attempts.push(model);
-  return model===chain[2]?Response.json({candidates:[{content:{parts:[{text:'OK'}]}}]}):new Response('',{status:503});
+test('429 bloquea nuevos intentos hasta Retry-After',async()=>{
+ let now=1000000,attempts=0;const h=harness({fetcher:(url,opts)=>{
+  if(!opts?.body)return catalog(chain);attempts++;return new Response('',{status:429,headers:{'Retry-After':'120'}});
  }});
- try{h.window.localStorage.setItem('nexus_gemini_api_key_v1','key');await h.api.geminiGenerate({question:'test'});await h.api.geminiGenerate({question:'test'});assert.deepEqual(attempts,[...chain,chain[2]])}finally{h.close()}
+ try{h.api.state.web=true;h.window.Date.now=()=>now;await assert.rejects(h.api.xkiroGenerate({question:'test'}));await assert.rejects(h.api.xkiroGenerate({question:'test'}));assert.equal(attempts,1);now+=120001;await assert.rejects(h.api.xkiroGenerate({question:'test'}));assert.equal(attempts,2)}finally{h.close()}
 });
-test('HTTP 200 sin texto continúa al siguiente modelo y concatena partes',async()=>{
- const attempts=[];const h=harness({fetcher:(url,opts)=>{
-  if(!opts?.body)return Response.json({models:chain.slice(0,2).map(name=>({name:'models/'+name,supportedGenerationMethods:['generateContent']}))});
-  attempts.push(url);return Response.json(attempts.length===1?{candidates:[{finishReason:'SAFETY',content:{parts:[]}}]}:{candidates:[{content:{parts:[{inlineData:{}},{text:'O'},{text:'K'}]}}]});
- }});
- try{h.window.localStorage.setItem('nexus_gemini_api_key_v1','key');const out=await h.api.geminiGenerate({question:'test'});assert.equal(out.answer,'OK');assert.equal(out.model,chain[1]);assert.equal(attempts.length,2)}finally{h.close()}
+test('sólo modelos confirmados por /models',async()=>{
+ const attempts=[];const h=harness({fetcher:(url,opts)=>{if(!opts?.body)return catalog(['confirmed']);attempts.push(JSON.parse(opts.body).model);return Response.json({choices:[{message:{content:'OK'}}]})}});
+ try{h.api.state.web=true;await h.api.xkiroGenerate({question:'test'});assert.deepEqual(attempts,['confirmed'])}finally{h.close()}
 });

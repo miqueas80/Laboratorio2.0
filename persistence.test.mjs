@@ -38,5 +38,5 @@ test('guardar edición crea una copia anterior y sobrevive a reapertura',async()
  const again=harness({stored:raw});try{await again.api.loadMaster();assert.equal(again.api.state.inventory[0].notes,'persistido')}finally{again.close()}
 });
 test('una transacción documental confirmada se recupera de IndexedDB',async()=>{
- const h=harness();try{await h.api.indexDocument({name:'átomos.txt',path:'local:átomos.txt',text:'Estructura del átomo',type:'TXT'});h.api.state.docs=[];await h.api.loadCachedDocumentIndex();assert.equal(h.api.state.docs.length,1);assert.equal(h.api.state.docs[0].text,'Estructura del átomo')}finally{h.close()}
+ const h=harness();try{await h.api.indexDocument({name:'átomos.docx',path:'local:átomos.docx',text:'Estructura del átomo',type:'DOCX'});h.api.state.docs=[];await h.api.loadCachedDocumentIndex();assert.equal(h.api.state.docs.length,1);assert.equal(h.api.state.docs[0].text,'Estructura del átomo')}finally{h.close()}
 });

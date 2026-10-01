@@ -1,11 +1,11 @@
 'use strict';
 // Incrementar VERSION junto con APP_VERSION cuando cambie cualquier recurso CORE.
-const VERSION='2026.09.29-r23';
+const VERSION='2026.10.01-r27-production';
 const SCOPE=new URL(self.registration.scope);
 const PREFIX='nexus-x-shell:'+encodeURIComponent(SCOPE.pathname)+':';
 const CACHE=PREFIX+VERSION;
 const CORE=['./','./index.html','./app.js','./manifest.webmanifest','./icon.svg',
- './icon-192.png','./icon-512.png','./inventory.json','./catalogo_maestro.json','./document-worker.js',
+ './icon-192.png','./icon-512.png','./inventory.json','./catalogo_maestro.json','./documents-manifest.json','./document-worker.js',
  './jszip.min.js','./xlsx.full.min.js','./jsQR.js',
  './pdf.mjs','./pdf.worker.mjs'];
 const URLS=new Set(CORE.map(path=>new URL(path,SCOPE).href));
@@ -15,14 +15,12 @@ self.addEventListener('install',event=>{
  event.waitUntil((async()=>{
   try{const cache=await caches.open(CACHE);await cache.addAll([...URLS].map(url=>new Request(url,{cache:'reload'})))}
   catch(error){await caches.delete(CACHE);throw error}
-  await self.skipWaiting();
  })());
 });
 self.addEventListener('activate',event=>{
  event.waitUntil((async()=>{
   const keys=await caches.keys();
   await Promise.all(keys.filter(key=>key.startsWith(PREFIX)&&key!==CACHE).map(key=>caches.delete(key)));
-  await self.clients.claim();
  })());
 });
 self.addEventListener('fetch',event=>{

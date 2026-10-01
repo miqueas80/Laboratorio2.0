@@ -13,9 +13,9 @@ test('rechaza vacío, formato no permitido, PDF falso y tamaño excesivo',async(
 test('un archivo dañado no bloquea la siguiente carga y los homónimos no se sobrescriben',async()=>{
  const h=harness();try{
   await assert.rejects(h.api.indexLocalFile(new File(['no ZIP'],'mal.docx')));
-  const a=await h.api.indexLocalFile(new File(['Átomos y materia'],'seguridad.txt',{type:'text/plain'}));
-  const duplicate=await h.api.indexLocalFile(new File(['Átomos y materia'],'seguridad.txt',{type:'text/plain'}));assert.equal(duplicate.duplicate,true);
-  const b=await h.api.indexLocalFile(new File(['Contenido diferente'],'seguridad.txt',{type:'text/plain'}));assert.notEqual(a.path,b.path);
+  const a=await h.api.indexLocalFile(new File(['PK\x03\x04Átomos y materia'],'seguridad.docx'), 'Átomos y materia');
+  const duplicate=await h.api.indexLocalFile(new File(['PK\x03\x04Átomos y materia'],'seguridad.docx'), 'Átomos y materia');assert.equal(duplicate.duplicate,true);
+  const b=await h.api.indexLocalFile(new File(['PK\x03\x04Contenido diferente'],'seguridad.docx'), 'Contenido diferente');assert.notEqual(a.path,b.path);
   const docs=await h.api.getCachedDocs();assert.equal(docs.length,2);assert.ok(docs.some(x=>x.text==='Átomos y materia'));
  }finally{h.close()}
 });

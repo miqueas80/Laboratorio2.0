@@ -18,7 +18,7 @@ test('PWA: instalación local completa, navegación /Laboratorio2.0/ y lectores 
  const w=worker();await w.lifecycle('install');await w.lifecycle('activate');
  for(const path of ['./','./?source=pwa','./documents','./app.js?v=123','./catalogo_maestro.json','./pdf.mjs','./pdf.worker.mjs','./document-worker.js','./jszip.min.js','./xlsx.full.min.js']){
   const res=await w.request(path,/documents|source|^\.\/$/.test(path)?'navigate':undefined);assert.equal(res?.status,200,path);
- }assert.equal(w.network,0);assert.equal(w.claimed,1);assert.equal(await w.request('/otra-app/app.js'),null);assert.equal(await w.request('https://cdn.example.org/x.js'),null);
+ }assert.equal(w.network,0);assert.equal(w.claimed,0);assert.equal(await w.request('/otra-app/app.js'),null);assert.equal(await w.request('https://cdn.example.org/x.js'),null);
 });
 test('PWA: activación sólo retira cachés del ámbito propio',async()=>{
  const w=worker();w.stores.set('otra-app-cache',new Map());w.stores.set('nexus-x-shell:%2Fotra%2F:old',new Map());w.stores.set('nexus-x-shell:%2FLaboratorio2.0%2F:old',new Map());await w.lifecycle('install');await w.lifecycle('activate');

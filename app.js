@@ -9,13 +9,14 @@ const DOC_DB='NEXUS_X_DOCUMENTS_V2';
 const DOC_STORE='documents';
 const DOC_CACHE_VERSION=3;
 const XKIRO_API='https://nexus-xkiro-gateway.proyectomj11.workers.dev';
-const XKIRO_KEY='nexus_xkiro_api_key_v1';
+// Eliminar credenciales heredadas; el secreto sólo pertenece al Worker.
+try{localStorage.removeItem('nexus_xkiro_api_key_v1')}catch{}
 const XKIRO_MODEL_CACHE_MS=10*60*1000;
 const REPO_OWNER='miqueas80';
 const REPO_NAME='';
 const REPO_BRANCH='';
 const DOC_MAX_BYTES=16*1024*1024;
-const APP_VERSION='2026.09.29-r23';
+const APP_VERSION='2026.10.01-r27-production';
 const INVENTORY_RECOVERY_KEY='nexus_x_inventory_recovery_v1';
 const health={storage:'sin comprobar',documents:'sin comprobar',errors:[],boot:'BOOT'};
 const LENS_EXTERNAL_CACHE_TTL=30*60*1000;
@@ -37,6 +38,8 @@ function readJsonStorage(key,fallback){try{const raw=readStorage(key);return raw
 const state={agentTelemetry:{mode:'READY',ms:0,actions:0},agentAudit:[],agentHistory:[],inventory:[],catalog:[],view:'dashboard',web:false,stream:null,scanBusy:false,lensStream:null,lensBusy:false,lensLastContext:null,docs:[],lastQuery:'',activity:[],favorites:new Set(Array.isArray(readJsonStorage('nexus_x_favorites_v1',[]))?readJsonStorage('nexus_x_favorites_v1',[]):[]),docIndexReady:false,docSyncing:false};
 const MASTER_URL='inventory.json';
 const CATALOG_URL='catalogo_maestro.json';
+const DOC_MANIFEST_URL='./documents-manifest.json';
+const DOC_FETCH_TIMEOUT=30000;
 function detectGitHubRepo(){
  const host=location.hostname.toLowerCase();
  const parts=location.pathname.split('/').filter(Boolean);
@@ -237,7 +240,7 @@ async function indexSpreadsheetDocument(file){return indexLocalFile(file)}
 
 async function loadCachedDocumentIndex(){
  try{
-  state.docs=(await getCachedDocs()).filter(d=>DOCUMENT_TYPES.has(String(d.type||'').toUpperCase()));
+  state.docs=(await getCachedDocs()).filter(d=>DOCUMENT_TYPES.has(String(d.type||'').toUpperCase())&&!String(d.path||'').startsWith('history:'));
   state.docIndexReady=true;
  }catch(e){
   health.documents='error';
@@ -439,8 +442,34 @@ async function runResearchAI(q,hits=[],docHits=[]){
    '. La evidencia local y web sigue disponible.';
  }
 }
-async function fetchTimeout(url,options={},ms=WEB_TIMEOUT){const c=new AbortController();const t=setTimeout(()=>c.abort(),ms);try{return await fetch(url,{...options,signal:c.signal})}finally{clearTimeout(t)}}
+const externalRequests=new Set();
+const xkiroAvailability=new Map();
+let lastKnownGoodModel='',xkiroRetryAt=0;
+function orderXKiroCandidates(models){
+ const now=Date.now();if(xkiroRetryAt>now)return [];
+ const cooling=[...xkiroAvailability.values()].some(until=>until>now);
+ const ready=models.filter(m=>(xkiroAvailability.get(m.id)||0)<=now);
+ return cooling&&lastKnownGoodModel?[...ready].sort((a,b)=>Number(b.id===lastKnownGoodModel)-Number(a.id===lastKnownGoodModel)):ready;
+}
+function retryDelay(value){const seconds=Number(value);return value&&Number.isFinite(seconds)?Math.max(0,seconds*1000):Math.max(0,Date.parse(value||'')-Date.now())||60000}
+async function fetchTimeout(url,options={},ms=WEB_TIMEOUT){
+ const target=new URL(url,location.href),external=target.origin!==location.origin;
+ if(external&&(!state.web||!navigator.onLine))throw new Error('Internet desactivado o sin conexión; NEXUS sigue local.');
+ const gateway=target.origin===new URL(XKIRO_API).origin;
+ let model='';if(gateway&&options.body){try{model=JSON.parse(options.body).model||''}catch{}}
+ if(gateway&&xkiroRetryAt>Date.now())throw new Error('xKiro HTTP 429: backoff activo');
+ const c=new AbortController(),t=setTimeout(()=>c.abort(),ms);if(external)externalRequests.add(c);
+ try{
+  const response=await fetch(url,{...options,signal:c.signal});
+  if(gateway){
+   if(response.status===429)xkiroRetryAt=Date.now()+retryDelay(response.headers.get('Retry-After'));
+   if(model&&response.status===503)xkiroAvailability.set(model,Date.now()+12*60*1000);
+  }
+  return response;
+ }finally{clearTimeout(t);externalRequests.delete(c)}
+}
 async function searchWebSources(q){
+ if(!state.web)return {provider:'',results:[],error:'disabled'};
  if(!navigator.onLine)return {provider:'',results:[],error:'offline'};
  const providers=[
   ['Jina/Google','https://r.jina.ai/http://www.google.com/search?q='+encodeURIComponent(q)],
@@ -541,7 +570,7 @@ function importDocumentFile(file){
  finally{documentJob=null;if($('#cancelDocumentBtn'))$('#cancelDocumentBtn').disabled=true}
  };const result=documentQueue.then(job,job);documentQueue=result.catch(()=>{});return result;
 }
-let sessionXKiroKey='',xkiroModelCache=null;
+let xkiroModelCache=null;
 
 function localAvailabilityMessage(){
  return state.docIndexReady&&
@@ -560,10 +589,6 @@ function safeExternalUrl(value){
   return '';
  }
 }
-function getXKiroKey(){
- return sessionXKiroKey||readStorage(XKIRO_KEY)||'';
-}
-
 async function loadXKiroModels({force=false}={}){
  if(!force&&xkiroModelCache?.expiresAt>Date.now())return xkiroModelCache;
 
@@ -597,77 +622,6 @@ async function loadXKiroModels({force=false}={}){
  return xkiroModelCache;
 }
 
-async function testXKiroKey(key){
-// La API key ya está protegida en Cloudflare; el navegador no necesita enviarla.
- try{
-  const catalog=await loadXKiroModels({force:true});
-  const candidates=catalog.text.slice(0,6);
-  const attempted=[];
-
-  for(const entry of candidates){
-   attempted.push(entry.id);
-
-   const res=await fetchTimeout(
-    `${XKIRO_API}/chat/completions`,
-    {
-     method:'POST',
-          headers:{
-       'Content-Type':'application/json'
-     },
-     body:JSON.stringify({
-      model:entry.id,
-      messages:[
-       {role:'user',content:'Respondé solamente: OK'}
-      ],
-      max_tokens:64,
-      temperature:0
-     })
-    },
-    20000
-   );
-
-   if(res.status===401||res.status===403){
-    throw new Error('xKiro rechazó la clave (HTTP '+res.status+').');
-   }
-
-   if(!res.ok){
-    if([429,500,502,503,504].includes(res.status))continue;
-    throw new Error('xKiro HTTP '+res.status);
-   }
-
-   const data=await res.json();
-   const answer=String(data?.choices?.[0]?.message?.content||'').trim();
-
-   if(!answer)continue;
-
-   health.xkiro={
-    status:'conectado',
-    model:entry.id,
-    freeModels:catalog.models.length,
-    visionModels:catalog.vision.length,
-    attemptedModels:attempted,
-    checkedAt:new Date().toISOString()
-   };
-
-   return {
-    ok:true,
-    message:`xKiro conectado · ${entry.id} · ${catalog.models.length} free · ${catalog.vision.length} visión`
-   };
-  }
-
-  throw new Error('Ningún modelo gratuito de prueba respondió.');
-
- }catch(e){
-  health.xkiro={
-   status:'error',
-   message:e.message,
-   checkedAt:new Date().toISOString()
-  };
-
-  return {ok:false,message:e.message};
- }
-}
-
  async function xkiroGenerate({
  question,
  context='',
@@ -677,6 +631,7 @@ async function testXKiroKey(key){
  temperature=0.15,
  preferReasoning=false
 }={}){
+ if(!state.web)throw new Error('Internet está desactivado; activalo para usar xKiro.');
  if(!navigator.onLine){
   throw new Error('Sin conexión; NEXUS sigue disponible en modo local.');
  }
@@ -693,7 +648,7 @@ async function testXKiroKey(key){
   );
  }
 
- candidates=candidates.slice(0,10);
+ candidates=orderXKiroCandidates(candidates).slice(0,10);
 
  if(!candidates.length){
   throw new Error('xKiro no encontró modelos gratuitos de texto.');
@@ -769,6 +724,7 @@ async function testXKiroKey(key){
  let lastError='';
 
  for(const entry of candidates){
+  if(!state.web||!navigator.onLine||xkiroRetryAt>Date.now())break;
   attempted.push(entry.id);
 
   try{
@@ -829,6 +785,7 @@ async function testXKiroKey(key){
     continue;
    }
 
+   lastKnownGoodModel=entry.id;xkiroAvailability.delete(entry.id);
    health.xkiro={
     ...(health.xkiro||{}),
     status:'conectado',
@@ -871,39 +828,164 @@ async function testXKiroKey(key){
   (lastError||'desconocido')
  );
 }
+let internetActivationEpoch=0;
+let internetActivationPromise=null;
+
+function renderInternetToggle(){
+ const btn=$('#webToggle');
+ if(!btn)return;
+ btn.setAttribute('aria-pressed',String(Boolean(state.web)));
+ if(!state.web){
+  btn.textContent='🌐 Internet: OFF';
+  btn.title='Activar Internet, Gateway xKiro y servicios externos';
+  return;
+ }
+ const status=health.xkiro?.status||'';
+ if(!navigator.onLine){
+  btn.textContent='🌐 Internet: ON · sin red';
+  btn.title='Internet habilitado en NEXUS-X; el dispositivo está sin conexión';
+ }else if(status==='conectando'){
+  btn.textContent='🌐 Internet: ON · conectando…';
+  btn.title='Inicializando automáticamente el Gateway xKiro';
+ }else if(status==='listo'||status==='conectado'){
+  btn.textContent='🌐 Internet: ON · listo';
+  btn.title='Internet y Gateway xKiro listos';
+ }else if(status==='error'){
+  btn.textContent='🌐 Internet: ON · degradado';
+  btn.title='Internet habilitado; Gateway xKiro no disponible. El modo local sigue activo.';
+ }else{
+  btn.textContent='🌐 Internet: ON';
+  btn.title='Internet habilitado; comprobando servicios externos';
+ }
+}
+
+function setXKiroHealth(status,extra={}){
+ health.xkiro={...(health.xkiro||{}),status,...extra,checkedAt:new Date().toISOString()};
+ renderXKiroSettings();
+ renderInternetToggle();
+}
+
+async function probeXKiroGateway({force=false,epoch=internetActivationEpoch}={}){
+ if(!navigator.onLine){
+  if(epoch===internetActivationEpoch&&state.web)setXKiroHealth('offline',{message:'Dispositivo sin conexión'});
+  return {ok:false,offline:true,message:'Dispositivo sin conexión'};
+ }
+ if(epoch===internetActivationEpoch&&state.web)setXKiroHealth('conectando',{message:'Inicializando Gateway automáticamente'});
+ try{
+  const healthResponse=await fetchTimeout(`${XKIRO_API}/health`,{headers:{Accept:'application/json'}},5000);
+  if(!healthResponse.ok)throw new Error('Gateway health HTTP '+healthResponse.status);
+  const gateway=await healthResponse.json();
+  if(!gateway?.ok)throw new Error('Gateway no confirmó estado saludable.');
+
+  if(epoch!==internetActivationEpoch||!state.web)return {ok:false,cancelled:true};
+  const catalog=await loadXKiroModels({force:true});
+  if(epoch!==internetActivationEpoch||!state.web)return {ok:false,cancelled:true};
+  const selected=orderXKiroCandidates(catalog.text)[0];
+  if(!selected)throw new Error('Sin modelos utilizables; respetando cooldown/backoff.');
+  setXKiroHealth('listo',{model:selected.id,
+   gateway:'conectado',
+   freeModels:catalog.models.length,
+   visionModels:catalog.vision.length,
+   message:'Gateway y catálogo xKiro listos'
+  });
+  return {ok:true,freeModels:catalog.models.length,visionModels:catalog.vision.length};
+ }catch(error){
+  if(epoch!==internetActivationEpoch||!state.web)return {ok:false,cancelled:true};
+  setXKiroHealth('error',{message:error.message||String(error)});
+  return {ok:false,message:error.message||String(error)};
+ }
+}
+
+async function setInternetMode(enabled,{source='ui',runLastQuery=true,force=false,silent=false}={}){
+ const next=Boolean(enabled);
+ if(next&&state.web&&internetActivationPromise&&!force)return internetActivationPromise;
+ internetActivationEpoch++;
+ const epoch=internetActivationEpoch;
+ state.web=next;
+ webQueryEpoch++;
+ if(!next){
+  internetActivationPromise=null;
+  for(const c of externalRequests)c.abort();
+  health.xkiro={...(health.xkiro||{}),status:'desactivado',message:'Internet desactivado por el operador',checkedAt:new Date().toISOString()};
+  renderXKiroSettings();
+  renderInternetToggle();
+  if(!silent)toast('Internet y servicios externos desactivados. NEXUS sigue en modo local.');
+  return {ok:true,enabled:false};
+ }
+ renderInternetToggle();
+ if(!navigator.onLine){
+  setXKiroHealth('offline',{message:'Internet habilitado en NEXUS-X, pero el dispositivo está sin conexión'});
+  if(!silent)toast('Internet habilitado, pero el dispositivo está sin conexión. NEXUS sigue local.');
+  return {ok:false,enabled:true,offline:true};
+ }
+ const activation=(async()=>{
+  const result=await probeXKiroGateway({force,epoch});
+  if(epoch!==internetActivationEpoch||!state.web)return {ok:false,cancelled:true};
+  if(result.ok){
+   if(!silent)toast('Internet listo · Gateway xKiro activado automáticamente.');
+   if(runLastQuery&&state.lastQuery)runWeb(state.lastQuery).catch(()=>{});
+  }else if(!silent){
+   toast('Internet externo degradado. '+localAvailabilityMessage());
+  }
+  return {...result,enabled:true,source};
+ })();
+ internetActivationPromise=activation;
+ try{return await activation}finally{if(internetActivationPromise===activation)internetActivationPromise=null}
+}
+
+async function handleNetworkChange(){
+ updateNetworkStatus();
+ if(!state.web){renderInternetToggle();return;}
+ if(!navigator.onLine){
+  internetActivationEpoch++;
+  internetActivationPromise=null;
+  for(const c of externalRequests)c.abort();
+  setXKiroHealth('offline',{message:'Conexión de red perdida; NEXUS continúa en modo local'});
+  return;
+ }
+ await setInternetMode(true,{source:'network',runLastQuery:false,force:false,silent:true});
+}
+
 function renderXKiroSettings(){
  const status=$('#xkiroStatus');
  if(!status)return;
-
- if(health.xkiro?.status==='conectado'){
+ const current=health.xkiro?.status||'sin comprobar';
+ if(current==='conectado'){
   status.textContent=
    `CONECTADO · ${health.xkiro.model} · `+
    `${health.xkiro.freeModels} modelos free · `+
    `${health.xkiro.visionModels} con visión`;
- }else{
+ }else if(current==='listo'){
   status.textContent=
-   `Gateway seguro · ${health.xkiro?.status||'sin comprobar'}`;
+   `LISTO AUTOMÁTICAMENTE · ${health.xkiro.freeModels} modelos free · `+
+   `${health.xkiro.visionModels} con visión`;
+ }else if(current==='conectando'){
+  status.textContent='Gateway seguro · conectando automáticamente…';
+ }else if(current==='offline'){
+  status.textContent='Gateway seguro · sin red · modo local disponible';
+ }else if(current==='desactivado'){
+  status.textContent='Gateway seguro · Internet OFF';
+ }else if(current==='error'){
+  status.textContent='Internet externo degradado · modo local activo';
+ }else{
+  status.textContent=`Gateway seguro · ${current}`;
  }
 }
 
 function bindXKiroSettings(){
  const btn=$('#saveXKiroBtn');
  if(!btn)return;
-
  renderXKiroSettings();
-
+ renderInternetToggle();
  btn.onclick=async()=>{
+  if(!state.web){toast('Activá Internet: el Gateway se inicializa automáticamente.');return;}
   xkiroModelCache=null;
-
   try{
    btn.disabled=true;
-   toast('Comprobando xKiro…');
-
-   const result=await testXKiroKey('');
-
+   toast('Reintentando Gateway xKiro…');
+   const result=await setInternetMode(true,{source:'diagnostics',runLastQuery:false,force:true,silent:true});
    renderXKiroSettings();
-   toast(result.message);
-
+   toast(result.ok?'Gateway xKiro listo.':'Gateway xKiro no disponible: '+(result.message||'error desconocido'));
   }catch(e){
    toast('xKiro: '+e.message);
   }finally{
@@ -933,7 +1015,7 @@ const checks={version:APP_VERSION,checkedAt:new Date().toISOString(),boot:health
   try{
    if(!globalThis.caches)checks.offlineCache={supported:false,complete:false};
    else{const scope=new URL(registration?.scope||'./',location.href),name='nexus-x-shell:'+encodeURIComponent(scope.pathname)+':'+APP_VERSION;
-    const required=['./','index.html','app.js','manifest.webmanifest','icon.svg','icon-192.png','icon-512.png','inventory.json','catalogo_maestro.json','document-worker.js','jszip.min.js','xlsx.full.min.js','jsQR.js','pdf.mjs','pdf.worker.mjs'];
+    const required=['./','index.html','app.js','manifest.webmanifest','icon.svg','icon-192.png','icon-512.png','inventory.json','catalogo_maestro.json','documents-manifest.json','document-worker.js','jszip.min.js','xlsx.full.min.js','jsQR.js','pdf.mjs','pdf.worker.mjs'];
     const exists=(await caches.keys()).includes(name),missing=[];if(exists){const cache=await caches.open(name);for(const path of required)if(!await cache.match(new URL(path,scope).href))missing.push(path)}else missing.push(...required);
     checks.offlineCache={supported:true,cache:name,complete:exists&&!missing.length,missing};
    }
@@ -970,38 +1052,47 @@ async function listGitHubFiles(owner,repo,branch){
  const chosenBranch=branch||info.default_branch||'main';
  try{const tree=await githubRequest(`${apiBase}/git/trees/${encodeURIComponent(chosenBranch)}?recursive=1`);if(Array.isArray(tree.tree)&&!tree.truncated)return {files:tree.tree.filter(x=>x.type==='blob'),branch:chosenBranch};}catch(e){console.warn('Git tree falló, usando Contents API',e)}
  const out=[];async function walk(path=''){const url=path?`${apiBase}/contents/${path.split('/').map(encodeURIComponent).join('/')}?ref=${encodeURIComponent(chosenBranch)}`:`${apiBase}/contents?ref=${encodeURIComponent(chosenBranch)}`;const rows=await githubRequest(url);for(const x of Array.isArray(rows)?rows:[]){if(x.type==='file')out.push({path:x.path,type:'blob',size:x.size||0,download_url:x.download_url});else if(x.type==='dir')await walk(x.path)}}await walk();return {files:out,branch:chosenBranch};}
+async function syncPublishedDocuments(){
+ if(!navigator.onLine)return {ok:false,error:'Sin conexión; documentos locales disponibles'};
+ const status=$('#repoStatus');
+ if(status)status.textContent='Comprobando documentos publicados…';
+ const manifestUrl=new URL(DOC_MANIFEST_URL,location.href).href;
+ const manifestResponse=await fetchTimeout(manifestUrl,{cache:'no-store'},10000);
+ if(!manifestResponse.ok)throw new Error(`Manifiesto documental HTTP ${manifestResponse.status}`);
+ const manifest=await manifestResponse.json();
+ const files=(Array.isArray(manifest?.documents)?manifest.documents:[]).filter(entry=>entry&&typeof entry.path==='string'&&/\.(pdf|docx|xlsx|xls)$/i.test(entry.path));
+ if(files.length!==6||new Set(files.map(x=>x.path)).size!==6)throw new Error('Manifiesto canónico inválido: se requieren 6 rutas únicas.');
+ let ok=0;const failed=[];
+ if(status)status.textContent=`${files.length} documentos publicados · comprobando…`;
+ for(const entry of files){try{
+  const path=String(entry.path||'').replace(/^\.?\//,'');
+  if(!path||/[:\\?#]/.test(path)||path.startsWith('/')||path.split('/').includes('..'))throw new Error('Ruta documental inválida');
+  if(Number(entry.size||0)>DOC_MAX_BYTES)throw new Error('Archivo demasiado grande: límite '+DOC_MAX_BYTES/1048576+' MB');
+  const revision=String(entry.revision||'');
+  const cached=state.docs.find(d=>d.path===path);
+  if(cached?.blob&&revision&&cached.revision===revision){ok++;continue}
+  const url=new URL('./'+path,new URL('./',location.href)).href;
+  const response=await fetchTimeout(url,{cache:'no-store'},DOC_FETCH_TIMEOUT);
+  if(!response.ok)throw new Error(`archivo HTTP ${response.status}`);
+  const blob=await response.blob(),file=new File([blob],path.split('/').pop(),{type:blob.type}),type=await validateDocumentFile(file);let text='';
+  if(type==='DOCX')text=(await JSZipReady(file)).text;
+  else if(type==='PDF')text=await extractPdfText(file);
+  else if(type==='XLSX'||type==='XLS')text=(await extractSpreadsheet(file)).text;
+  else text=await file.text();
+  await indexDocument({name:file.name,path,type,size:blob.size,text,source:'Repositorio publicado',url,mime:blob.type,blob,revision});ok++;
+ }catch(e){failed.push(`${entry.path}: ${e.message||e}`)}}
+ renderDocuments();renderDashboard();
+ if(status){status.textContent=`${ok}/${files.length} documentos disponibles${failed.length?` · ${failed.length} con error`:''}`;status.title=failed.join('\n')}
+ saveActivity(`Documentos publicados: ${ok}/${files.length} disponibles`);
+ return {ok:failed.length===0,files:files.length,indexed:ok,failed,source:'published-manifest'};
+}
 async function syncRepository(){
- if(state.docSyncing)return {ok:false,error:'Ya hay una sincronización en curso'};if(!navigator.onLine)return {ok:false,error:'Sin conexión; documentos locales disponibles'};
- const status=$('#repoStatus');status.textContent='Detectando repositorio de esta página…';state.docSyncing=true;renderDocuments();renderRepoLabel();
- try{
-  const detected=detectGitHubRepo();
-  if(!detected.repo)throw new Error('No se pudo determinar el repositorio desde la URL de GitHub Pages.');
-  const found=await listGitHubFiles(detected.owner,detected.repo,detected.branch);
-  saveGitHubRepo({owner:detected.owner,repo:detected.repo,branch:found.branch});renderRepoLabel();
-const files=found.files.filter(x=>
- /\.(pdf|docx|xlsx|xls)$/i.test(x.path) &&
- !x.path.startsWith('vendor/')
-);
-  if(!files.length){state.docSyncing=false;renderDocuments();status.textContent=`Sin documentos compatibles · ${githubLabel()}`;saveActivity(`GitHub conectado: ${githubLabel()} · 0 documentos compatibles`);return {ok:true,owner:detected.owner,repo:detected.repo,branch:found.branch,files:0,indexed:0,failed:[]};}
-  let ok=0,failed=[];status.textContent=`${files.length} documentos detectados · indexando…`;
-  for(const f of files){try{
-   if(Number(f.size||0)>DOC_MAX_BYTES)throw new Error('Archivo demasiado grande: límite '+DOC_MAX_BYTES/1048576+' MB');
-   const cached=state.docs.find(d=>d.path===f.path);if(cached?.revision&&cached.revision===f.sha){ok++;continue}
-   const url=f.download_url||`https://raw.githubusercontent.com/${detected.owner}/${detected.repo}/${found.branch}/${f.path.split('/').map(encodeURIComponent).join('/')}`;
-   let res=await fetchTimeout(url,{headers:{Accept:'*/*'}},WEB_TIMEOUT);
-   if(!res.ok){const alt=`https://github.com/${detected.owner}/${detected.repo}/raw/refs/heads/${found.branch}/${f.path.split('/').map(encodeURIComponent).join('/')}`;res=await fetchTimeout(alt,{headers:{Accept:'*/*'}},WEB_TIMEOUT)}
-   if(!res.ok)throw new Error(`archivo HTTP ${res.status}`);
-   const blob=await res.blob(),file=new File([blob],f.path.split('/').pop(),{type:blob.type}),type=await validateDocumentFile(file);let text='';
-   if(type==='DOCX')text=(await JSZipReady(file)).text;
-   else if(type==='PDF')text=await extractPdfText(file);
-   else if(type==='XLSX'||type==='XLS')text=(await extractSpreadsheet(file)).text;
-   else text=await file.text();
-   if(cached&&cached.text===text&&cached.size===f.size){await putDoc({...cached,revision:f.sha});cached.revision=f.sha;ok++;continue}
-   if(cached){const historical={...cached,path:'history:'+cached.path+':'+cached.indexedAt,name:cached.name+' (copia anterior)',source:'histórico local'};await putDoc(historical);if(!state.docs.some(d=>d.path===historical.path))state.docs.push(historical)}
-   await indexDocument({name:file.name,path:f.path,type,size:blob.size,text,source:'GitHub',url,mime:blob.type,blob,revision:f.sha||''});ok++;
-  }catch(e){failed.push(`${f.path}: ${e.message||e}`)}}
-  state.docSyncing=false;renderDocuments();status.textContent=`${githubLabel()} · ${ok}/${files.length} documentos indexados${failed.length?` · ${failed.length} con error`:''}`;if(failed.length)status.title=failed.join('\n');saveActivity(`Repositorio indexado: ${ok}/${files.length} documentos`);renderDashboard();if(failed.length)toast(`GitHub conectado. ${ok}/${files.length} documentos; ${failed.length} con error.`);else toast(`GitHub conectado: ${ok} documento(s) indexado(s).`);return {ok:failed.length===0,owner:detected.owner,repo:detected.repo,branch:found.branch,files:files.length,indexed:ok,failed};
- }catch(e){state.docSyncing=false;renderDocuments();status.textContent='Error de sincronización';status.title=e.message||String(e);saveActivity(`Error GitHub: ${e.message||e}`);toast(`GitHub: ${e.message||'no se pudo sincronizar'}`);return {ok:false,error:e.message||String(e)}}}
+ if(state.docSyncing)return {ok:false,error:'Ya hay una sincronización en curso'};
+ state.docSyncing=true;
+ try{return await syncPublishedDocuments()}
+ catch(e){const status=$('#repoStatus');if(status){status.textContent='Documentos locales conservados';status.title=e.message}return {ok:false,error:e.message}}
+ finally{state.docSyncing=false;renderDocuments()}
+}
 
 let activeDocument=null,documentViewEpoch=0,documentLoadingTask=null;async function openDocumentViewer(path){const epoch=++documentViewEpoch;documentLoadingTask?.destroy().catch(()=>{});documentLoadingTask=null;const d=state.docs.find(x=>x.path===path)||await getCachedDocs().then(a=>a.find(x=>x.path===path));if(epoch!==documentViewEpoch)return;if(!d){toast('Documento no disponible en el caché local.');return}activeDocument=d;$('#documentAIChat').textContent='';$('#downloadDocumentBtn').disabled=!d.blob;$('#documentViewerTitle').textContent=d.name;$('#documentViewerMeta').textContent=`${d.type} · ${d.source||'local'} · ${d.chunks?.length||0} fragmentos`;$('#documentViewerAI').classList.remove('open');$('#documentViewerBody').innerHTML='<div class="notice">Abriendo documento…</div>';showModal('documentViewerModal');if(d.type==='PDF'&&d.blob){await renderPdfViewer(d,$('#documentViewerBody'),epoch)}else{$('#documentViewerBody').innerHTML=`<pre class="doc-text">${escapeHtml(d.text||'Sin texto extraído.')}</pre>`}}function closeDocumentViewer(){hideModal('documentViewerModal');activeDocument=null}async function renderPdfViewer(d,body,epoch=documentViewEpoch){try{await loadScript('./pdf.mjs','pdfjsLib');const bytes=await d.blob.arrayBuffer();if(epoch!==documentViewEpoch)return;documentLoadingTask=pdfjsLib.getDocument({isEvalSupported:false,data:bytes});const pdf=await documentLoadingTask.promise;if(epoch!==documentViewEpoch)return;body.innerHTML='';for(let n=1;n<=pdf.numPages;n++){if(epoch!==documentViewEpoch)return;const page=await pdf.getPage(n),vp=page.getViewport({scale:1.15}),wrap=DOM.createElement('div');wrap.className='pdf-page';const canvas=DOM.createElement('canvas');canvas.width=Math.ceil(vp.width);canvas.height=Math.ceil(vp.height);if(epoch!==documentViewEpoch)return;wrap.appendChild(canvas);body.appendChild(wrap);await page.render({canvasContext:canvas.getContext('2d'),viewport:vp}).promise;page.cleanup();await new Promise(resolve=>setTimeout(resolve,0))}}catch(e){if(epoch!==documentViewEpoch)return;body.innerHTML=`<div class="notice error">No se pudo renderizar el PDF dentro de NEXUS-X: ${escapeHtml(e.message)}</div><pre class="doc-text">${escapeHtml(d.text||'')}</pre>`}}let documentAIBusy=false;
 async function askDocumentAI(){
@@ -1141,8 +1232,9 @@ function lensContextForProvider(context){
  const local=(context.evidenceGroups?.probableMatches||[]).slice(0,4).map(e=>({source:e.source,id:e.metadata?.record?.id,name:e.metadata?.record?.name,formula:e.metadata?.record?.formula,confidence:e.confidence}));const documents=(context.documents||[]).slice(0,4).map(e=>({name:e.value?.name,excerpt:e.value?.excerpt?.slice(0,240)}));return JSON.stringify({localCandidates:local,documents,note:'Datos locales no confirmados; sólo sirven para contrastar la imagen.'});
 }
  async function xkiroVisionAnalyze({imageDataUrl,context=''}) {
+ if(!state.web)throw new Error('Internet está desactivado; NEXUS LENS permanece local.');
  const catalog=await loadXKiroModels();
- const candidates=(catalog.vision||[]).slice(0,8);
+ const candidates=orderXKiroCandidates(catalog.vision||[]).slice(0,8);
 
  if(!candidates.length){
   throw new Error('xKiro no encontró modelos gratuitos con visión.');
@@ -1152,6 +1244,7 @@ function lensContextForProvider(context){
  let lastError='';
 
  for(const entry of candidates){
+  if(!state.web||!navigator.onLine||xkiroRetryAt>Date.now())break;
   attempted.push(entry.id);
 
   try{
@@ -1229,6 +1322,7 @@ function lensContextForProvider(context){
 
    const analysis=parseLensVisionPayload(answer);
 
+   lastKnownGoodModel=entry.id;xkiroAvailability.delete(entry.id);
    health.xkiro={
     ...(health.xkiro||{}),
     status:'conectado',
@@ -1384,7 +1478,7 @@ async function lensOpenDocuments(){const context=state.lensLastContext,query=len
 function lensOpenFicha(){const record=state.lensLastContext?.identity?.record;if(record&&state.inventory.some(r=>r.id===record.id))openItem(record.id)}
 async function lensInvestigateInternet(){
  const context=state.lensLastContext,query=lensContextQuery(context);if(!context||!query)return;if(!navigator.onLine){setLensUiState('offline','Modo local · sin conexión','Internet no está disponible; el contexto local sigue abierto.');return}
- state.web=true;const toggle=$('#webToggle');if(toggle)toggle.textContent='🌐 Internet: ON';setLensUiState('expanding','Ampliando con Internet','Buscando información adicional sin reemplazar la evidencia local.');
+ if(!state.web){setLensUiState('ready','Internet OFF','Activá Internet con el interruptor para ampliar.');return;}setLensUiState('expanding','Ampliando con Internet','Buscando información adicional sin reemplazar la evidencia local.');
  try{const external=await searchLensExternalEvidence(query),next=buildNexusLensContext([...context.evidences,...external],{expanded:true});if(!external.length)next.evidences.push(createLensEvidence({source:'web',type:'provider-status',value:'unavailable',confidence:0,local:false,metadata:{reason:'Sin resultados externos'}}));finalizeLensContext(buildNexusLensContext(next.evidences,{expanded:true}),'ampliación web')}catch(e){const next=buildNexusLensContext([...context.evidences,createLensEvidence({source:'web',type:'provider-status',value:'unavailable',confidence:0,local:false,metadata:{error:e.message||String(e)}})],{expanded:true});finalizeLensContext(next,'ampliación web')}
 }
 function finalizeLensContext(context,label){state.lensLastContext=context;renderLensResult(context);saveActivity(`NEXUS LENS analizó ${label}: ${context.status}`);return context;}
@@ -1398,7 +1492,7 @@ async function runNexusLensPipeline(source,label='imagen',{expand=false}={}){
   let analysis=null;
   const provider=getLensVisionProvider();
   if(!provider)context=buildNexusLensContext([...context.evidences,createLensEvidence({source:'vision',type:'provider-status',value:'not-configured',metadata:{message:'Reconocimiento visual externo no configurado. QR y conocimiento local siguen disponibles.'}})],{expanded:expand});
-  else if(quality.value.usable&&navigator.onLine){
+  else if(quality.value.usable&&state.web&&navigator.onLine){
    setLensUiState('expanding','Analizando imagen con visión','Se envía una única fotografía al proveedor multimodal.');
    const imageDataUrl=lensImageDataUrl(frame),fingerprint=await lensImageFingerprint(imageDataUrl);
    try{
@@ -1690,7 +1784,7 @@ async function executeRegisteredAction(action,{speak=true}={}){
   if(type==='sync_repository'){const r=await syncRepository();if(speak)speakText(r?.ok?'Sincronización completada.':r?.indexed?'Sincronización parcial.':'No pude completar la sincronización.');return agentActionResult(action,r||{ok:false,error:'Sin resultado de sincronización'},startedAt);}
   if(type==='export_inventory'){exportCsv();if(speak)speakText('Inventario exportado.');return agentActionResult(action,{ok:true},startedAt);}
   if(type==='export_report'){exportReport();if(speak)speakText('Informe exportado.');return agentActionResult(action,{ok:true},startedAt);}
-  if(type==='toggle_web'){state.web=Boolean(action.enabled);$('#webToggle').textContent=`🌐 Internet: ${state.web?'ON':'OFF'}`;if(speak)speakText(state.web?'Internet activado.':'Internet desactivado.');return agentActionResult(action,{ok:true,result:state.web},startedAt);}
+  if(type==='toggle_web'){await setInternetMode(Boolean(action.enabled),{source:'agent',runLastQuery:false});if(speak)speakText(state.web?'Internet activado.':'Internet desactivado.');return agentActionResult(action,{ok:true,result:state.web},startedAt);}
   if(type==='web_search'){if(!state.web)return agentActionResult(action,{ok:false,error:'Internet desactivado'},startedAt);return agentActionResult(action,{ok:true,data:await searchWebSources(q)},startedAt);}
   if(type==='clear_chat'){state.agentHistory=[];$('#aiChat').innerHTML='<div class="msg bot">Conversación reiniciada.</div>';if(speak)speakText('Conversación reiniciada.');return agentActionResult(action,{ok:true},startedAt);}
   if(type==='start_voice'){const ok=await startVoiceRecognition();if(speak)speakText(ok?'Vigilancia activada.':'No pude activar la vigilancia.');return agentActionResult(action,{ok:Boolean(ok)},startedAt);}
@@ -1879,10 +1973,10 @@ function bind(){
  if(globalThis.BroadcastChannel){try{state.dataChannel=new BroadcastChannel('nexus-x-documents:'+new URL('./',location.href).pathname);state.dataChannel.onmessage=e=>{if(e.data?.type==='documents-changed')loadCachedDocumentIndex()};window.addEventListener('pagehide',e=>{if(!e.persisted)state.dataChannel?.close()})}catch(e){health.errors.push({domain:'Document notification',message:e.message})}}
  $('#diagnosticBtn').onclick=()=>collectDiagnostics().catch(e=>toast(e.message));$('#updateAppBtn').onclick=checkAppUpdate;$('#persistStorageBtn').onclick=requestPersistentStorage;
  $('#cancelDocumentBtn').onclick=cancelDocuments;$('#restoreInventoryBtn').onclick=restoreInventoryBackup;
- renderRepoLabel(); updateNetworkStatus();window.addEventListener('online',updateNetworkStatus);window.addEventListener('offline',updateNetworkStatus);$('#commandBtn').onclick=openCommandPalette;window.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){e.preventDefault();openCommandPalette()}});renderQueryHistory();
+ renderRepoLabel(); updateNetworkStatus();renderInternetToggle();window.addEventListener('online',()=>handleNetworkChange().catch(()=>{}));window.addEventListener('offline',()=>handleNetworkChange().catch(()=>{}));$('#commandBtn').onclick=openCommandPalette;window.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){e.preventDefault();openCommandPalette()}});renderQueryHistory();
  $$('.nav-btn').forEach(b=>b.addEventListener('click',()=>setView(b.dataset.view)));$$('.research-tab').forEach(b=>b.addEventListener('click',()=>setResearchTab(b.dataset.tab)));$('#syncRepoBtn').onclick=syncRepository;
  $('#globalSearchBtn').onclick=()=>{const q=$('#globalSearch').value.trim();if(q){setView('research');$('#researchInput').value=q;runResearch()}};$('#globalSearch').addEventListener('keydown',e=>{if(e.key==='Enter')$('#globalSearchBtn').click()});
- $('#webToggle').onclick=()=>{state.web=!state.web;$('#webToggle').textContent=`🌐 Internet: ${state.web?'ON':'OFF'}`;toast(state.web?'Búsqueda web activada.':'Búsqueda web desactivada.');if(state.web&&state.lastQuery)runWeb(state.lastQuery)};
+ $('#webToggle').onclick=()=>setInternetMode(!state.web).catch(e=>toast(e.message));
  $('#inventorySearch').oninput=renderInventory;$('#locationFilter').onchange=renderInventory;$('#statusFilter').onchange=renderInventory;$('#newItemBtn').onclick=newItem;$('#saveItemBtn').onclick=saveItem;$('#deleteItemBtn').onclick=deleteItem;$('#exportExcelBtn').onclick=exportCsv;$('#importExcelBtn').onclick=()=>$('#excelInput').click();$('#excelInput').onchange=e=>{const f=e.target.files[0];if(f)importExcel(f);e.target.value=''};
  $('#researchBtn').onclick=runResearch;$('#researchInput').addEventListener('keydown',e=>{if(e.key==='Enter')runResearch()});$('#aiBtn').onclick=aiQuery;$('#aiInput').addEventListener('keydown',e=>{if(e.key==='Enter')aiQuery()});
  $('#startQrBtn').onclick=startQr;$('#stopQrBtn').onclick=stopQr;$('#qrCameraSelect').onchange=e=>{if(e.target.value)switchQrCamera(e.target.value)};$('#qrImage').onchange=e=>{const f=e.target.files[0];if(f)decodeQrImage(f);e.target.value=''};$('#manualQrBtn').onclick=()=>{if($('#manualQr').value.trim())processQr($('#manualQr').value)};
@@ -1895,7 +1989,7 @@ function boot(){if(bootPromise)return bootPromise;bootPromise=(async()=>{
 try{bind();bindXKiroSettings();health.boot='STORAGE';renderXKiroSettings();renderActivity();await loadMaster();await loadCatalogMaster();health.boot='DOCUMENTS';await loadCachedDocumentIndex();health.boot=state.inventoryError||!state.docIndexReady?'DEGRADED':'READY';renderDiagnostics();
  setupServiceWorker();
  if(state.docIndexReady)$('#repoStatus').textContent=navigator.onLine?'Documentos locales listos':'Sin conexión · documentos locales';
- if(navigator.onLine&&githubRepo.repo)syncRepository().catch(e=>{health.errors.push({domain:'GitHub',message:e.message})});
+ if(navigator.onLine)await syncRepository().catch(e=>{health.errors.push({domain:'GitHub',message:e.message})});
  }catch(e){health.boot='ERROR';health.errors.push({domain:'Boot',message:e.message});toast('No se pudo completar el arranque: '+e.message)}
 })();return bootPromise}
 

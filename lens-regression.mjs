@@ -33,16 +33,17 @@ test('Lens native BarcodeDetector then jsQR fallback',async()=>{
  assert.equal(await h.api.decodeLensCode({width:320,height:240}),'NEXUS-X-0001');assert.equal(fallback,1);
  }finally{h.close()}
 });
-for(const mode of ['exact','offline','disabled','no-key','visual','failed','poor'])test('Lens pipeline '+mode,async()=>{
+for(const mode of ['exact','offline','disabled','gateway-unavailable','visual','failed','poor'])test('Lens pipeline '+mode,async()=>{
  let visualCalls=0;const h=harness({stored:master.records,online:mode!=='offline',fetcher:(url,opts)=>{
- if(!opts?.body)return Response.json({models:[{name:'models/gemini-3.8-flash',supportedGenerationMethods:['generateContent']}]});
+ if(mode==='gateway-unavailable')return new Response('',{status:503});
+ if(!opts?.body)return Response.json({data:[{id:'vision-test',access_tier:'free',capabilities:{vision:true}}]});
  visualCalls++;if(mode==='failed')return new Response('',{status:503});
- const body=JSON.parse(opts.body);assert.equal(body.contents[0].parts.filter(p=>p.inlineData).length,1);
- return Response.json({candidates:[{content:{parts:[{text:JSON.stringify({hypothesis:'Ácido Nítrico',confidence:80,formulaCandidates:['HNO3']})}]}}]});
+ const body=JSON.parse(opts.body);assert.equal(body.messages[0].content.filter(p=>p.type==='image_url').length,1);
+ return Response.json({choices:[{message:{content:JSON.stringify({hypothesis:'Ácido Nítrico',confidence:80,formulaCandidates:['HNO3']})}}]});
  }});
  try{await h.api.loadMaster();h.api.state.catalog=[...h.api.state.inventory];await h.api.indexDocument({name:'Nitrico.txt',path:'local:nitrico',type:'TXT',text:'NEXUS-X-0001 Ácido Nítrico HNO3'});h.api.state.docIndexReady=true;
  const count=canvas(h);if(mode==='poor')h.window.HTMLCanvasElement.prototype.getContext=()=>({drawImage(){},getImageData:()=>({data:new Uint8ClampedArray(320*240*4),width:320,height:240})});
- h.window.jsQR=()=>mode==='exact'?{data:'NEXUS-X-0001'}:null;h.api.state.web=mode!=='disabled';if(mode!=='no-key')h.window.localStorage.setItem('nexus_gemini_api_key_v1','key');
+ h.window.jsQR=()=>mode==='exact'?{data:'NEXUS-X-0001'}:null;h.api.state.web=mode!=='disabled';if(mode!=='gateway-unavailable')h.window.localStorage.setItem('nexus_gemini_api_key_v1','key');
  const result=await h.api.runNexusLensPipeline({width:320,height:240});assert.equal(result.ok,true);assert.equal(h.api.state.lensBusy,false);assert.doesNotMatch(JSON.stringify(h.api.state.lensLastContext),/data:image/);
  if(mode==='exact'){assert.equal(result.status,'confirmed');assert.ok(result.evidences.some(e=>e.source==='inventory'));assert.ok(result.evidences.some(e=>e.source==='catalog'));assert.ok(result.documents.length);assert.equal(h.calls.length,0)}
  else if(mode==='visual'){assert.equal(result.status,'candidate');assert.equal(result.identity.confirmed,false);assert.equal(result.identity.record.id,'NEXUS-X-0001');assert.ok(result.documents.length);assert.equal(visualCalls,1);assert.equal(h.api.shouldSearchLensWeb(result),true)}
