@@ -36,7 +36,7 @@ pass('camera auto-selection penalizes ultra-wide', /ultra\.?wide[\s\S]{0,220}sco
 pass('camera auto-selection prefers telephoto', /tele\|telephoto\|zoom\|periscope/.test(app));
 pass('voice wake word exists', /VOICE_WAKE/.test(app));
 pass('voice auto-restart exists', /voiceRestartTimer/.test(app));
-pass('voice barge-in exists', /voiceSpeaking&&wake/.test(app));
+pass('voice barge-in exists', /function receiveVoicePartial[\s\S]{0,250}voiceSpeaking&&VOICE_WAKE\.test\(text\)[\s\S]{0,150}speechSynthesis\?\.cancel\(\)/.test(app));
 
 // Exercise the deterministic parser without booting the browser app.
 const normFn = "function norm(v){return String(v??'').normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').toLowerCase().trim();}";

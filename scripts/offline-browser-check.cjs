@@ -49,6 +49,7 @@ async function launch(offline) {
   await page.evaluate(() => NexusOffline.prepare('voice'));
   await page.evaluate(() => NexusOffline.prepare('vision'));
   assert.equal((await page.evaluate(() => NexusOffline.cacheStatus())).ready, true);
+  await page.waitForFunction(() => document.querySelector('#taskDocs').textContent === '6', {}, {timeout:90000});
   await context.close(); context = null;
 
   // A new Chromium process must boot from its persistent service worker/cache.
@@ -68,7 +69,11 @@ async function launch(offline) {
     const result = await page.locator('#lensResult').innerText();
     assert.ok(result.toLowerCase().includes(label.toLowerCase()), `${file}: ${result}`);
     if (file !== 'nexus-qr.png') assert.match(result, /HIPÓTESIS/i);
-    else assert.match(await page.locator('#lensEvidence').innerText(), /NEXUS-X-0001/);
+    else {
+      assert.match(result, /NEXUS-X-0001/);
+      assert.match(result, /[1-9]\d* documentos/);
+      assert.equal(await page.locator('#lensFichaBtn').isEnabled(), true);
+    }
     console.log('PASS actual offline image:', file, label);
   }
   await page.locator('[data-view="ai"]').click();
@@ -85,7 +90,17 @@ async function launch(offline) {
   console.log('PASS offline microphone stop/restart (synthetic audio device)');
   assert.deepEqual(failures, [], 'Uncaught browser errors');
   console.log('PHYSICAL ANDROID NOT TESTED: human speech, TTS, camera, heat, latency, hardware WebGPU');
-})().catch(error => { console.error(error); process.exitCode = 1; }).finally(async () => {
+})().catch(async error => {
+  console.error(error);
+  if (context) console.error('Browser diagnostics:', await context.pages().at(-1)?.evaluate(() => ({
+    documents: document.querySelector('#taskDocs')?.textContent,
+    repository: document.querySelector('#repoStatus')?.textContent,
+    repositoryError: document.querySelector('#repoStatus')?.title,
+    voice: document.querySelector('#voiceStatusText')?.textContent,
+    transcript: document.querySelector('#voiceTranscript')?.textContent,
+  })).catch(() => ({})), failures);
+  process.exitCode = 1;
+}).finally(async () => {
   if (context) await context.close();
   await new Promise(resolve => server.close(resolve));
   fs.rmSync(profile, {recursive:true, force:true});

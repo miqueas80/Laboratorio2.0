@@ -29,3 +29,14 @@ test('voz: TTS elige español local y nunca usa una voz cloud como fallback',()=
   assert.equal(h.api.speakText('Nexus está listo'),true);assert.equal(said.voice.localService,true);assert.doesNotMatch(said.text,/Nexus/i);
  }finally{h.close();}
 });
+test('voz: Nexus interrumpe TTS local y acepta la orden siguiente sin ejecutar su propio eco',async()=>{
+ const h=harness({stored:master.records,online:false});try{
+  await h.api.loadMaster();const e=engine(h);await h.api.startVoiceRecognition();let cancelled=0;
+  h.window.SpeechSynthesisUtterance=class{constructor(text){this.text=text;}};
+  h.window.speechSynthesis={getVoices:()=>[{lang:'es-AR',localService:true}],cancel(){cancelled++;},speak(){}};
+  assert.equal(h.api.speakText('El sistema está listo'),true);const before=cancelled;
+  await e.callbacks.onTranscript('El sistema está listo');assert.equal(cancelled,before);assert.equal(h.api.state.view,'dashboard');
+  e.callbacks.onPartial('Nexus');assert.equal(cancelled,before+1);assert.match(h.document.querySelector('#voiceStatusText').textContent,/interrumpido/);
+  await e.callbacks.onTranscript('abrí inventario');assert.equal(h.api.state.view,'inventory');assert.equal(h.calls.length,0);
+ }finally{h.api.stopVoiceRecognition();h.close();}
+});
