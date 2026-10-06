@@ -82,7 +82,7 @@ button:focus-visible,a:focus-visible{outline:3px solid #157d93;outline-offset:3p
   <div class="card section"><div class="grid two"><div><h2>⚡ Agente operativo</h2><p class="muted">NEXUS IA es la capa de control de la aplicación: recibe una intención, selecciona herramientas, las ejecuta y usa sus resultados para continuar.</p><div class="toolbar"><span class="badge ok">Control de módulos</span><span class="badge ok">Acciones locales</span><span class="badge ok">Acciones encadenadas</span><span class="badge ok">Contexto local</span></div></div><div><h2>⌘ Ejemplos</h2><div class="footer-note">“Abrí QR y empezá la cámara” · “Buscá la fórmula del sodio” · “Abrí el archivo de formulación” · “Creá un evento para mañana” · “Analizá lo que ve la cámara” · “Decime el estado del sistema”.</div></div></div></div><div class="card section"><h2>⚡ Telemetría del agente</h2><div class="grid three"><div class="notice"><strong>Modo</strong><br><span id="agentMode">READY</span></div><div class="notice"><strong>Latencia</strong><br><span id="agentLatency">—</span></div><div class="notice"><strong>Herramientas ejecutadas</strong><br><span id="agentActions">0</span></div></div><div class="footer-note">Las órdenes simples de control se resuelven localmente sin esperar a xkiro. Las consultas externas pasan a xkiro cuando activás Internet.</div></div>
   <div class="grid two">
     <div class="card"><h2>🧠 Conversación inteligente</h2><p class="muted">NEXUS controla acciones locales sin API. xkiro recibe sólo la consulta externa y, en consultas híbridas, los nombres y fórmulas relevantes.</p><div class="chat" id="aiChat"></div><div class="search-row section"><input id="aiInput" placeholder="Decile a NEXUS-X qué necesitás…"><button class="btn teal" id="aiBtn">Enviar</button></div><div class="footer-note">Ejemplos: “¿Qué tenemos de ácido sulfúrico?”, “buscá el archivo de formulación”, “analizá lo que está frente a la cámara”.</div></div>
-    <div class="card"><h2>🎙 Control por voz</h2><p class="muted">Una vez concedido el micrófono, NEXUS-X puede permanecer dormido y despertar con <strong>“Nexus”</strong>. Mientras habla, decir nuevamente <strong>“Nexus”</strong> lo interrumpe y vuelve a escuchar.</p><div id="voiceStatus" class="voice-status"><span class="pulse"></span><span id="voiceStatusText">Vigilancia dormida · esperando “Nexus”</span></div><div id="voiceTranscript" class="voice-transcript">Sin comando de voz todavía.</div><div class="toolbar section"><button class="btn primary" id="voiceToggleBtn">🎙 Activar una vez</button><button class="btn" id="voicePermissionBtn">🔐 Permitir micrófono</button><button class="btn" id="voiceSpeakBtn">🔊 Probar voz</button></div><div class="notice section"><strong>Agente global:</strong> la voz puede abrir módulos, buscar inventario, fórmulas y archivos, iniciar investigaciones, controlar NEXUS LENS, calendario, sincronización y exportaciones. No necesita estar dentro de Investigación ni de Internet.</div></div>
+    <div class="card"><h2>🎙 Control por voz</h2><p class="muted">Una vez concedido el micrófono, NEXUS-X puede permanecer dormido y despertar con <strong>“Nexus”</strong>. Mientras habla, decir nuevamente <strong>“Nexus”</strong> lo interrumpe y vuelve a escuchar.</p><div id="voiceStatus" class="voice-status"><span class="pulse"></span><span id="voiceStatusText">Vigilancia dormida · esperando “Nexus”</span></div><div id="voiceTranscript" class="voice-transcript">Sin comando de voz todavía.</div><div class="toolbar section"><button class="btn primary" id="voiceToggleBtn">🎙 Activar una vez</button><button class="btn" id="voicePermissionBtn">🔐 Permitir micrófono</button><button class="btn" id="voiceSpeakBtn">🔊 Probar voz</button><button class="btn" id="prepareVoiceBtn">Preparar voz offline</button></div><div class="notice section"><strong>Agente global:</strong> la voz puede abrir módulos, buscar inventario, fórmulas y archivos, iniciar investigaciones, controlar NEXUS LENS, calendario, sincronización y exportaciones. No necesita estar dentro de Investigación ni de Internet.</div></div>
   </div>
   <div class="card section"><h2>⚙ Herramientas disponibles</h2><div class="grid two"><div><div class="task"><span>Navegación completa</span><span class="ok">✓</span></div><div class="task"><span>Inventario, fórmulas y fichas</span><span class="ok">✓</span></div><div class="task"><span>Documentos y archivos indexados</span><span class="ok">✓</span></div><div class="task"><span>Investigación local-first</span><span class="ok">✓</span></div><div class="task"><span>Búsqueda web bajo demanda</span><span class="ok">✓</span></div></div><div><div class="task"><span>QR, cámara y NEXUS LENS</span><span class="ok">✓</span></div><div class="task"><span>Calendario: crear / eliminar</span><span class="ok">✓</span></div><div class="task"><span>Repositorio y exportaciones</span><span class="ok">✓</span></div><div class="task"><span>Voz global y estado del sistema</span><span class="ok">✓</span></div><div class="task"><span>Planificación multiacción</span><span class="ok">✓</span></div></div></div></div>
 </section>
@@ -103,6 +103,8 @@ button:focus-visible,a:focus-visible{outline:3px solid #157d93;outline-offset:3p
         <div class="lens-hud bottom"><div class="lens-target"><span id="lensSelectedObject">Centrar objeto o etiqueta</span></div><span class="lens-hud-chip" id="lensFrameHint">Sin imagen seleccionada</span></div>
       </div>
       <div class="lens-camera-controls"><label for="lensCameraSelect">Cámara Lens</label><select id="lensCameraSelect"><option value="">Automática — principal/teleobjetivo</option></select><div class="toolbar"><button class="btn primary" id="lensAnalyzeBtn">◉ Analizar</button><button class="btn teal" id="lensStartBtn">▶ Iniciar cámara</button><button class="btn" id="lensImageBtn">▧ Analizar foto</button><button class="btn" id="lensStopBtn">■ Detener</button><button class="btn" id="lensPermissionBtn">🔐 Permitir cámara</button></div></div>
+      <div class="toolbar section"><button class="btn" id="prepareVisionBtn">Preparar visión offline</button><span class="muted" id="lensEngineStatus" role="status">Motor local sin preparar</span></div>
+      <div class="footer-note">Centrar un objeto por captura. La similitud visual propone una categoría; verificá etiquetas antes de manipular.</div>
       <input id="lensImageInput" type="file" accept="image/*" hidden>
       <div id="lensStatus" class="notice" hidden>Cámara NEXUS LENS detenida.</div>
     </section>
@@ -116,6 +118,7 @@ button:focus-visible,a:focus-visible{outline:3px solid #157d93;outline-offset:3p
         <button class="btn" id="lensInternetBtn" disabled>🌐 Investigar en Internet</button>
         <button class="btn primary" id="lensFichaBtn" disabled>↗ Ver ficha</button>
       </div>
+      <div class="toolbar section"><select style="max-width:100%;min-width:0" id="lensReferenceRecord" aria-label="Registro para referencia visual"><option value="">Asociar captura con un registro…</option></select><button class="btn" id="lensSaveReferenceBtn" disabled>Guardar referencia visual</button></div>
       <div id="lensEvidence" class="lens-evidence"></div>
     </aside>
   </div>
@@ -133,7 +136,7 @@ button:focus-visible,a:focus-visible{outline:3px solid #157d93;outline-offset:3p
 
   <div class="notice">
     <strong>Reconocimiento de voz</strong> ·
-    <span id="localVoiceStatus">Servicio del navegador</span>
+    <span id="localVoiceStatus">Modelo local sin comprobar</span>
     <button class="btn" id="installVoiceLanguage" hidden>
       Descargar idioma es-AR
     </button>
@@ -248,6 +251,8 @@ button:focus-visible,a:focus-visible{outline:3px solid #157d93;outline-offset:3p
 <div id="documentInputWrap" style="display:none"><input id="documentInput" type="file" accept=".pdf,.docx,.xlsx,.xls"></div>
 <div id="toast" class="toast"></div>
 <div id="commandModal" class="modal-backdrop"><div class="modal" style="max-width:620px"><div class="modal-head"><h2>Paleta de comandos</h2><button class="close" data-close="commandModal">Cerrar</button></div><div class="notice">Atajo: <span class="kbd">Ctrl/⌘ K</span> · Ejecutá acciones sin navegar por los menús.</div><div id="commandList" class="command-list section"></div></div></div>
+<script src="offline/assets.js" defer></script>
+<script src="offline/core.js" defer></script>
 <script src="app.js" defer></script>
 </body>
 </html>

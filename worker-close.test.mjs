@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import worker from './cloudflare/worker.js';
+import worker from './worker.js';
 const origin='https://miqueas80.github.io',env={XKIRO_API_KEY:'private-server-secret'};
 const req=(path,options={})=>new Request('https://gateway.example'+path,{...options,headers:{Origin:origin,...options.headers}});
 const chat=(payload={},headers={})=>req('/chat/completions',{method:'POST',headers:{'Content-Type':'application/json',...headers},body:JSON.stringify({model:'test',messages:[{role:'user',content:'Hola'}],...payload})});
