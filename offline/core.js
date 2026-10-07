@@ -66,9 +66,9 @@
   } catch (_) {}return null;
  }
  function grammar(vocabulary=[]) {
-  const terms=['nexus','nexos','nexo','nexus x','abrir','abrí','abre','cerrar','mostrar','busca','buscar','buscá','inventario','documentos','ficha','cámara','lens','analizar','analiza','analizá','esto','escáner','internet','estado','diagnóstico','ácido nítrico','ácido clorhídrico','ácido sulfúrico','hidróxido','sodio','potasio','reactivo','probeta','pipeta','bureta','matraz','erlenmeyer','vaso','microscopio','balanza','agitador','mechero','y','el','la','los','las','de','en','qué','tenemos'];
+  const terms=['nexus','nexos','nexo','nexus x','abrir','abrí','abre','cerrar','mostrar','busca','buscar','buscá','inventario','documentos','ficha','cámara','lens','analizar','analiza','analizá','esto','escáner','internet','estado','diagnóstico','calendario','agenda','agendá','agendar','agrega','agregá','recordame','tarea','evento','recordatorio','hoy','mañana','pasado mañana','lunes','martes','miércoles','jueves','viernes','sábado','domingo','preparar','revisar','reactivos','expo','ácido nítrico','ácido clorhídrico','ácido sulfúrico','hidróxido','sodio','potasio','reactivo','probeta','pipeta','bureta','matraz','erlenmeyer','vaso','microscopio','balanza','agitador','mechero','y','el','la','los','las','de','en','para','qué','tenemos'];
   const clean=s=>String(s).toLowerCase().replace(/[^a-záéíóúüñ\s]/g,' ').replace(/\s+/g,' ').trim();
-  const commands=['nexus abre inventario','nexus abrir inventario','nexus abrí inventario','nexus abre documentos','nexus abre lens','nexus analiza esto'];
+  const commands=['nexus abre inventario','nexus abrir inventario','nexus abrí inventario','nexus abre documentos','nexus abre lens','nexus analiza esto','nexus abre calendario','nexus agrega una tarea','nexus recordame mañana revisar inventario','nexus agenda preparar reactivos mañana'];
   for(const name of vocabulary.slice(0,111).map(clean).filter(Boolean))commands.push('nexus busca '+name,'nexus abre inventario y busca '+name);
   return JSON.stringify([...new Set([...terms,...commands,...vocabulary.slice(0,250).flatMap(v=>[clean(v),...clean(v).split(' ')])].filter(Boolean)), '[unk]']);
  }
