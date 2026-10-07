@@ -14,7 +14,7 @@ test('QR/Lens DOM, recursos locales, OCR sin Tesseract y versiones sincronizadas
  assert.match(app,/function parseLensOcrResult/);assert.match(app,/source:'local-ocr'/);
  assert.match(app,/loadScript\('\.\/jsQR.js','jsQR'\)/);assert.ok(fs.existsSync(new URL('jsQR.js',import.meta.url)));
  assert.match(app,/if\(!raw\)raw=await decodeQrVideoFrame/);assert.match(app,/if\(raw\)\{state.scanBusy=true;processQr\(raw\);return\}/);
- const sw=fs.readFileSync(new URL('sw.js',import.meta.url),'utf8'),version='2026.10.07-r30-lens-final';assert.match(sw,/'\.\/jsQR.js'/);assert.equal(app.match(/APP_VERSION='([^']+)'/)[1],version);assert.equal(sw.match(/VERSION='([^']+)'/)[1],version);
+ const sw=fs.readFileSync(new URL('sw.js',import.meta.url),'utf8');assert.match(sw,/'\.\/jsQR.js'/);const appVersion=app.match(/APP_VERSION='([^']+)'/)?.[1],swVersion=sw.match(/VERSION='([^']+)'/)?.[1];assert.ok(appVersion);assert.ok(swVersion);assert.equal(appVersion,swVersion);
 });
 test('QR stops tracks, clears video, no retained image; Lens remains independent',async()=>{
  const h=harness({stored:master.records});try{await h.api.loadMaster();let qr=0,lens=0;h.api.state.stream={getTracks:()=>[{stop:()=>qr++},{stop:()=>qr++}]};h.api.state.lensStream={getTracks:()=>[{stop:()=>lens++}]};

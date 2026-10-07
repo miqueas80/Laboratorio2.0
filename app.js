@@ -16,13 +16,13 @@ const REPO_OWNER='miqueas80';
 const REPO_NAME='';
 const REPO_BRANCH='';
 const DOC_MAX_BYTES=16*1024*1024;
-const APP_VERSION='2026.10.07-r30-lens-final';
+const APP_VERSION='2026.10.07-r31.1-local-first-invariant';
 const INVENTORY_RECOVERY_KEY='nexus_x_inventory_recovery_v1';
 const health={storage:'sin comprobar',documents:'sin comprobar',errors:[],boot:'BOOT'};
 const LENS_EXTERNAL_CACHE_TTL=30*60*1000;
 const LENS_EXTERNAL_CACHE_LIMIT=20;
 const VOICE_WAKE=/\bnexus(?:[- ]?x)?\b/i;
-let voiceRecognition=null;let voiceListening=false;let voiceMonitoring=false;let voiceSpeaking=false;let voiceAwaitingCommand=false;let voiceWakeTimer=null;let voiceRestartTimer=null;let voiceCommandQueue=Promise.resolve();
+let voiceRecognition=null;let voiceListening=false;let voiceMonitoring=false;let voiceSpeaking=false;let voiceAwaitingCommand=false;let voiceWakeTimer=null;let voiceRestartTimer=null;let voicePendingIntent=null;let voicePendingTimer=null;let voiceCommandQueue=Promise.resolve();
 const lensExternalCache=new Map(),lensExternalPending=new Map();
 const WEB_TIMEOUT=6500;
 function storageFailure(error){
@@ -1798,9 +1798,64 @@ async function searchAndOpenDocument(query,{openFirst=false,speak=false}={}){
   if(speak)speakText(hits.length?`Encontré ${hits.length} documentos relacionados.`:'No encontré ese archivo en los documentos indexados.');
   return {ok:true,data:{count:hits.length,results:hits.slice(0,10).map(h=>({name:h.d.name,path:h.d.path,score:h.score,excerpt:h.chunk.slice(0,1200)}))}};
 }
+
+const NEXUS_CALENDAR_MONTHS=Object.freeze({enero:0,febrero:1,marzo:2,abril:3,mayo:4,junio:5,julio:6,agosto:7,septiembre:8,setiembre:8,octubre:9,noviembre:10,diciembre:11});
+const NEXUS_CALENDAR_WEEKDAYS=Object.freeze({domingo:0,lunes:1,martes:2,miercoles:3,jueves:4,viernes:5,sabado:6});
+function calendarLocalNoon(value=new Date()){return new Date(value.getFullYear(),value.getMonth(),value.getDate(),12,0,0,0)}
+function calendarAddDays(value,days){const d=calendarLocalNoon(value);d.setDate(d.getDate()+days);return d}
+function calendarDateFromParts(year,month,day){const d=new Date(year,month,day,12,0,0,0);return d.getFullYear()===year&&d.getMonth()===month&&d.getDate()===day?d:null}
+function resolveNaturalCalendarDate(input,now=new Date()){
+ const n=norm(input).replace(/[¿?¡!,;]+/g,' ').replace(/\s+/g,' ').trim(),today=calendarLocalNoon(now);let m;
+ m=n.match(/\b(\d{4})-(\d{1,2})-(\d{1,2})\b/);if(m){const d=calendarDateFromParts(Number(m[1]),Number(m[2])-1,Number(m[3]));return d?isoDate(d):null}
+ if(/\bpasado\s+manana\b/.test(n))return isoDate(calendarAddDays(today,2));
+ if(/\bmanana\b/.test(n))return isoDate(calendarAddDays(today,1));
+ if(/\bhoy\b/.test(n))return isoDate(today);
+ m=n.match(/\b(\d{1,2})[\/.](\d{1,2})(?:[\/.](\d{2,4}))?\b/);if(m){let y=m[3]?Number(m[3]):today.getFullYear();if(y<100)y+=2000;let d=calendarDateFromParts(y,Number(m[2])-1,Number(m[1]));if(d&&!m[3]&&d<today)d=calendarDateFromParts(y+1,Number(m[2])-1,Number(m[1]));return d?isoDate(d):null}
+ m=n.match(/\b(\d{1,2})\s+de\s+(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre)(?:\s+de\s+(\d{4}))?\b/);if(m){let y=m[3]?Number(m[3]):today.getFullYear(),month=NEXUS_CALENDAR_MONTHS[m[2]],d=calendarDateFromParts(y,month,Number(m[1]));if(d&&!m[3]&&d<today)d=calendarDateFromParts(y+1,month,Number(m[1]));return d?isoDate(d):null}
+ m=n.match(/\b(?:(proximo|proxima)\s+)?(domingo|lunes|martes|miercoles|jueves|viernes|sabado)\b/);if(m){let delta=(NEXUS_CALENDAR_WEEKDAYS[m[2]]-today.getDay()+7)%7;if(m[1]&&delta===0)delta=7;return isoDate(calendarAddDays(today,delta))}
+ return null;
+}
+function removeNaturalCalendarDateText(input){
+ let s=norm(input).replace(/[¿?¡!,;]+/g,' ').replace(/\s+/g,' ').trim();
+ for(const p of [/\bpasado\s+manana\b/g,/\bmanana\b/g,/\bhoy\b/g,/\b\d{4}-\d{1,2}-\d{1,2}\b/g,/\b\d{1,2}[\/.]\d{1,2}(?:[\/.]\d{2,4})?\b/g,/\b\d{1,2}\s+de\s+(?:enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre)(?:\s+de\s+\d{4})?\b/g,/\b(?:(?:proximo|proxima)\s+)?(?:domingo|lunes|martes|miercoles|jueves|viernes|sabado)\b/g])s=s.replace(p,' ');
+ return s.replace(/\s+/g,' ').trim();
+}
+function cleanCalendarTaskText(input){
+ let s=removeNaturalCalendarDateText(input)
+  .replace(/^(?:para|el|la|de|del|a)\s+/,'').replace(/^(?:un|una)\s+/,'')
+  .replace(/^(?:la\s+|el\s+)?(?:tarea|evento|recordatorio)\b\s*(?:de\s+)?/,'')
+  .replace(/^(?:para|el|la|de|del|a)\s+/,'').replace(/\s+/g,' ').trim();
+ return s;
+}
+function parseNaturalCalendarDraft(input,now=new Date()){
+ let n=norm(input).replace(/[¿?¡!.,;:]+/g,' ').replace(/\s+/g,' ').trim().replace(/^(?:por favor|porfa|porfavor)\s+/,'').replace(/^(?:nexus(?:[- ]?x)?|nexo|nexos)\s+/,'').trim();
+ let m=n.match(/^(agendame|agenda|agendar|recordame|recuerdame|programame|programa|programar)\b\s*(.*)$/),clearVerb=Boolean(m);
+ if(!m)m=n.match(/^(agrega|agregar|anade|anadir|crea|crear|anota|anotar)\b\s*(.*)$/);
+ if(!m)return null;
+ let rest=m[2]||'',date=resolveNaturalCalendarDate(rest,now),hasNoun=/\b(?:tarea|evento|recordatorio)\b/.test(rest);
+ if(!clearVerb&&!hasNoun&&!date)return null;
+ rest=rest.replace(/^(?:(?:un|una)\s+)?(?:tarea|evento|recordatorio)\b\s*/,'').trim();
+ const text=cleanCalendarTaskText(rest);
+ return {kind:'calendar-create',date:date||'',text};
+}
+function calendarDateLabel(date){if(!isValidCalendarDate(date))return String(date||'');return new Intl.DateTimeFormat('es-AR',{weekday:'long',day:'numeric',month:'long'}).format(new Date(date+'T12:00:00'))}
+function clearVoicePendingIntent({keepAwaiting=false}={}){clearTimeout(voicePendingTimer);voicePendingTimer=null;voicePendingIntent=null;if(!keepAwaiting)voiceAwaitingCommand=false}
+function voicePendingPrompt(pending=voicePendingIntent){if(!pending?.text)return 'Claro. ¿Qué tarea querés agregar?';if(!pending?.date)return `Perfecto. ¿Para qué día querés agendar ${pending.text}?`;return ''}
+function setVoicePendingIntent(draft){clearTimeout(voicePendingTimer);voicePendingIntent={kind:'calendar-create',text:String(draft?.text||'').trim(),date:String(draft?.date||''),expiresAt:Date.now()+30000};voiceAwaitingCommand=true;voicePendingTimer=setTimeout(()=>{voicePendingIntent=null;voicePendingTimer=null;voiceAwaitingCommand=false;if(voiceMonitoring&&!voiceSpeaking)$('#voiceStatusText').textContent='Dormido · esperando “Nexus”';},30000);return voicePendingIntent}
+async function handleVoicePendingTurn(input){
+ if(!voicePendingIntent)return false;const raw=String(input||'').trim(),n=norm(raw).replace(/[¿?¡!.,;:]+/g,' ').replace(/\s+/g,' ').trim();
+ if(/^(?:cancela|cancelar|cancela eso|olvidalo|olvida|dejalo|deja eso|no importa)$/.test(n)){clearVoicePendingIntent();speakText('De acuerdo. Cancelé la tarea pendiente.');return true}
+ const pending={...voicePendingIntent},date=resolveNaturalCalendarDate(raw);if(!pending.date&&date)pending.date=date;
+ if(!pending.text&&!date){const text=cleanCalendarTaskText(raw);if(text)pending.text=text}
+ if(!pending.text||!pending.date){setVoicePendingIntent(pending);speakText(voicePendingPrompt(pending));return true}
+ clearVoicePendingIntent();const action={action:'create_calendar_event',date:pending.date,text:pending.text};const result=await executeAssistantAction(action,{speak:false,origin:'voice'});const answer=fastAgentAnswer(action,result);state.agentHistory.push({role:'user',text:raw},{role:'assistant',text:'LOCAL · '+answer});state.agentHistory=state.agentHistory.slice(-12);speakText(answer);return true;
+}
+
 function fastAgentPlan(q){
   const raw=String(q||'').trim();
   if(!raw)return null;
+  const calendarDraft=parseNaturalCalendarDraft(raw);
+  if(calendarDraft?.date&&calendarDraft.text)return {action:'create_calendar_event',date:calendarDraft.date,text:calendarDraft.text};
   const parts=raw.split(/\s+(?:y|luego|despues|después|tambien|también)\s+/i).map(x=>x.trim()).filter(Boolean);
   if(parts.length>1){
     const steps=parts.map(parseLocalAssistantAction);
@@ -1830,17 +1885,21 @@ function fastAgentPlan(q){
 function fastAgentAnswer(action,result){
   if(!result)return 'No se recibió un resultado de la operación.';
   if(!result.ok)return result.error||'No pude completar la orden.';
-  if(['status','diagnostics'].includes(action.action))return `Estado local: ${result.data.integrity.ok?'integridad correcta':'revisar integridad'}; ${result.data.integrity.recordCount} registros y ${state.docs.length} documentos.`;
-  if(action.action==='search_inventory'){const rows=result.data?.results||[];if(!rows.length)return 'No encontré coincidencias en el inventario local.';const top=rows.slice(0,5).map(r=>`${r.name}${r.formula?' · '+r.formula:''}${r.location?' · '+r.location:''}`).join(' | ');return `Encontré ${rows.length} coincidencia(s): ${top}.`;}
-  if(action.action==='search_documents'){const rows=result.data?.results||[];if(!rows.length)return 'No encontré documentos relacionados en el índice local.';return `Encontré ${rows.length} documento(s): ${rows.slice(0,5).map(r=>r.name).join(', ')}.`;}
-  if(action.action==='open_item')return result.ok?'Abrí la ficha solicitada.':'No encontré la ficha solicitada.';
-  if(action.action==='open_document')return result.ok?'Abrí el documento solicitado.':'No encontré el documento solicitado.';
-  if(action.action==='research')return 'Investigación iniciada.';
-  if(action.action==='open_qr')return 'QR abierto.';
+  if(['status','diagnostics'].includes(action.action))return `El sistema está ${result.data.integrity.ok?'correcto':'para revisar'}. Hay ${result.data.integrity.recordCount} registros y ${state.docs.length} documentos locales.`;
+  if(action.action==='search_inventory'){const rows=result.data?.results||[];if(!rows.length)return 'No encontré coincidencias en el inventario local.';const top=rows[0];let a=`Encontré ${rows.length} coincidencia${rows.length===1?'':'s'}. La mejor es ${top.name}`;if(top.formula)a+=`, fórmula ${top.formula}`;if(top.location)a+=`, ubicada en ${top.location}`;return a+'.';}
+  if(action.action==='search_documents'){const rows=result.data?.results||[];if(!rows.length)return 'No encontré documentos relacionados en el índice local.';return `Encontré ${rows.length} documento${rows.length===1?'':'s'} relacionado${rows.length===1?'':'s'}. ${rows.slice(0,3).map(r=>r.name).join(', ')}.`;}
+  if(action.action==='open_item')return result.data?.name?`Listo. Abrí la ficha de ${result.data.name}.`:'Listo. Abrí la ficha solicitada.';
+  if(action.action==='open_document')return result.data?.name?`Listo. Abrí ${result.data.name}.`:'Listo. Abrí el documento solicitado.';
+  if(action.action==='open_calendar')return 'Abrí tu calendario.';
+  if(action.action==='create_calendar_event'){const row=result.result||action;return `Listo. Agendé ${row.text} para ${calendarDateLabel(row.date)}.`;}
+  if(action.action==='delete_calendar_event')return 'Listo. Eliminé el evento del calendario.';
+  if(action.action==='research')return 'Listo. Inicié la investigación local.';
+  if(action.action==='open_qr')return 'Abrí el escáner QR.';
+  if(action.action==='open_lens')return 'NEXUS Lens está listo.';
   if(action.action==='start_camera')return result.ok?'Cámara iniciada.':'No pude iniciar la cámara.';
   if(action.action==='stop_camera')return 'Cámara detenida.';
-  if(action.action==='open_view')return 'Módulo abierto.';
-  if(action.action==='sequence')return result.ok?'Listo. Ejecuté la secuencia.':'No pude completar la secuencia.';
+  if(action.action==='open_view'){const names={dashboard:'inicio',inventory:'inventario',research:'investigación',ai:'NEXUS IA',documents:'documentos',reports:'informes',settings:'ajustes'};return `Listo. Abrí ${names[action.view||action.query]||'el módulo solicitado'}.`;}
+  if(action.action==='sequence')return result.ok?'Listo. Ejecuté toda la secuencia.':'No pude completar toda la secuencia.';
   return result.ok?'Listo.':'No pude completar la orden.';
 }
 const NEXUS_AGENT_ACTIONS=new Set(['open_view','search_inventory','open_item','search_documents','open_document','research','open_qr','start_camera','stop_camera','analyze_camera','open_lens','start_lens_camera','stop_lens_camera','analyze_lens_camera','identify_lens_code','get_lens_context','open_calendar','create_calendar_event','delete_calendar_event','sync_repository','export_inventory','export_report','toggle_web','status','diagnostics','clear_chat','start_voice','stop_voice','web_search','get_inventory','create_inventory_item','update_inventory_item','delete_inventory_item','get_documents','get_activity','get_state','sequence']);
@@ -2054,15 +2113,20 @@ async function executeRegisteredAction(action,{speak=true}={}){
 }
 
 function resolveIntent(text){
- const q=String(text||'').trim(),n=norm(q);
- const planned=fastAgentPlan(q);
- if(planned&&!['search_inventory','search_documents','research','web_search'].includes(planned.action))return {kind:'LOCAL',local:planned};
+ const q=String(text||'').trim(),n=norm(q),planned=fastAgentPlan(q);
  const external=/\b(internet|web|actuales|actualizada?s?|actualidad|recientes?|noticias|hoy)\b/.test(n);
+ const augmentable=new Set(['research','search_inventory','search_documents']);
+ // Invariante Local-First: una capacidad local nunca desaparece por tener Internet.
+ if(planned){
+  if(planned.action==='web_search')return {kind:'EXTERNO',externalQuery:q};
+  if(external&&augmentable.has(planned.action)&&state.web&&navigator.onLine)return {kind:'HÍBRIDO',local:planned,externalQuery:q};
+  return {kind:'LOCAL',local:planned};
+ }
  const split=q.match(/^(.+?)\s+y\s+(.+)$/i);
  if(external&&split){const local=fastAgentPlan(split[1].replace(/\b(nuestro|nuestra|nuestros|nuestras)\s+/gi,''));if(local)return {kind:'HÍBRIDO',local,externalQuery:split[2]}}
  if(external)return {kind:'EXTERNO',externalQuery:q};
- if(planned)return {kind:'LOCAL',local:planned};
  if(/(?:que es|explica|explicame|como funciona|informacion externa)/.test(n))return {kind:'EXTERNO',externalQuery:q};
+ if(state.web&&navigator.onLine)return {kind:'EXTERNO',externalQuery:q};
  return {kind:'LOCAL',local:null};
 }
 async function nexusAgentTurn(userText,{speak=false}={}){
@@ -2162,10 +2226,15 @@ function parseLocalAssistantAction(q){
   if(m)return {action:'update_inventory_item',query:m[1].trim(),formula:raw.match(/(?:formula|fórmula)\s+(.+)$/i)?.[1]?.trim()||m[2].trim()};
   return null;
 }
-async function executeVoiceCommand(q){const out=await nexusAgentTurn(q,{speak:true});return Boolean(out);}
+async function executeVoiceCommand(q){
+ const raw=String(q||'').trim();if(!raw)return false;
+ if(voicePendingIntent&&await handleVoicePendingTurn(raw))return true;
+ const draft=parseNaturalCalendarDraft(raw);if(draft&&(!draft.text||!draft.date)){const pending=setVoicePendingIntent(draft);speakText(voicePendingPrompt(pending));return true;}
+ const out=await nexusAgentTurn(raw,{speak:true});return Boolean(out);
+}
 function stopVoiceRecognition({manual=true}={}){
   voiceMonitoring=false;voiceListening=false;voiceAwaitingCommand=false;voiceSpeaking=false;
-  clearTimeout(voiceWakeTimer);clearTimeout(voiceRestartTimer);
+  clearTimeout(voiceWakeTimer);clearTimeout(voiceRestartTimer);clearTimeout(voicePendingTimer);voicePendingTimer=null;voicePendingIntent=null;
   if(manual)removeStorage('nexus_voice_wake_enabled_v2');
   if(voiceRecognition){try{voiceRecognition.onend=null;voiceRecognition.abort?.();voiceRecognition.stop?.()}catch{}}
   ++voiceUtteranceId;
@@ -2231,28 +2300,63 @@ function receiveVoiceTranscript(text){
  voiceCommandQueue=voiceCommandQueue.then(async()=>{if(!voiceMonitoring)return;await executeVoiceCommand(command);if(voiceMonitoring&&!voiceSpeaking)$('#voiceStatusText').textContent='Dormido · esperando “Nexus”';}).catch(error=>{$('#voiceStatusText').textContent='Error de comando · '+error.message;});
  return voiceCommandQueue;
 }
-async function startVoiceRecognition({automatic=false}={}){
- if(voiceMonitoring)return true;const engine=globalThis.NexusOffline;
- if(!engine){$('#voiceStatusText').textContent='Motor local no disponible. Recargá NEXUS.';return false;}
- const granted=await requestMicrophonePermission({silent:automatic});if(!granted)return false;
- voiceMonitoring=true;voiceSpeaking=false;voicePartialInterrupted=false;
- voiceRecognition=engine.createVoice({vocabulary:[...state.inventory,...state.catalog].flatMap(r=>[r.name,r.formula].filter(Boolean)),onTranscript:receiveVoiceTranscript,onPartial:receiveVoicePartial,onStatus:patch=>{
-  if(patch.error){voiceMonitoring=false;voiceListening=false;$('#voiceStatus')?.classList.remove('active');$('#voiceToggleBtn').textContent='🎙 Activar una vez';}
-  $('#voiceStatusText').textContent=patch.error?`${patch.state} · ${patch.error}`:patch.state;
- }});
- const current=voiceRecognition;
- try{await current.start();if(!voiceMonitoring||current!==voiceRecognition)return false;voiceListening=true;writeStorage('nexus_voice_wake_enabled_v2','1');$('#voiceStatus')?.classList.add('active');$('#voiceStatusText').textContent='Voz offline activa · esperando “Nexus”';$('#voiceToggleBtn').textContent='■ Detener vigilancia';return true;}
- catch(error){voiceMonitoring=false;voiceListening=false;$('#voiceStatusText').textContent=error.message;return false;}
+function voiceVocabulary(){return [...state.inventory,...state.catalog].flatMap(r=>[r.name,r.formula].filter(Boolean))}
+function setVoiceActiveUi(label){voiceListening=true;writeStorage('nexus_voice_wake_enabled_v2','1');$('#voiceStatus')?.classList.add('active');$('#voiceStatusText').textContent=label;$('#voiceToggleBtn').textContent='■ Detener vigilancia';const pill=$('#agentStatePill');if(pill)pill.textContent='● Agente activo · esperando Nexus'}
+async function startOfflineVoice(engine,{forceWasm=false}={}){
+ voiceRecognition=engine.createVoice({vocabulary:voiceVocabulary(),onTranscript:receiveVoiceTranscript,onPartial:receiveVoicePartial,onStatus:patch=>{if(patch.error){voiceListening=false;$('#voiceStatusText').textContent=`${patch.state} · ${patch.error}`;}else $('#voiceStatusText').textContent=patch.state;}});
+ const current=voiceRecognition;await current.start({forceWasm});if(!voiceMonitoring||current!==voiceRecognition)return false;setVoiceActiveUi('Voz offline activa · esperando “Nexus”');return true;
 }
-function selectLocalSpanishVoice(voices){return voices.filter(v=>v.localService&&/^es(?:-|$)/i.test(v.lang)).sort((a,b)=>(/^es-AR$/i.test(b.lang)?2:1)-(/^es-AR$/i.test(a.lang)?2:1))[0]||null;}
+function normalizeVoiceTranscriptCandidate(text){
+ let s=String(text||'').trim();if(!s)return '';
+ return s.replace(/^\s*(?:nexo|nexos)\b/i,'Nexus');
+}
+function voiceCommandBody(text){
+ const normalized=normalizeVoiceTranscriptCandidate(text),wake=VOICE_WAKE.exec(normalized);
+ return (wake?normalized.slice(wake.index+wake[0].length):normalized).replace(/^[\s,:;-]+/,'').trim();
+}
+function voiceLocalPlanScore(text){
+ const body=voiceCommandBody(text);if(!body)return 0;
+ const draft=parseNaturalCalendarDraft(body);if(draft&&(draft.date||draft.text))return 100;
+ const plan=fastAgentPlan(body);if(!plan)return 0;
+ if(plan.action==='create_calendar_event')return 100;
+ if(['open_view','search_inventory','open_item','search_documents','open_document','open_qr','open_lens','start_camera','stop_camera','start_lens_camera','stop_lens_camera','analyze_lens_camera','toggle_web','status','diagnostics','export_inventory','export_report'].includes(plan.action))return 80;
+ return 60;
+}
+function chooseVoiceTranscript(result){
+ const candidates=[];
+ for(let i=0;i<Math.min(Number(result?.length||0),5);i++){
+  const alt=result[i],text=normalizeVoiceTranscriptCandidate(alt?.transcript);if(!text)continue;
+  candidates.push({text,confidence:Number(alt?.confidence||0),local:voiceLocalPlanScore(text),index:i});
+ }
+ if(!candidates.length)return '';
+ candidates.sort((a,b)=>b.local-a.local||b.confidence-a.confidence||a.index-b.index);
+ return candidates[0].text;
+}
+async function startBrowserVoice(SR,engine){
+ const recognizer=new SR();recognizer.lang='es-AR';recognizer.continuous=true;recognizer.interimResults=true;recognizer.maxAlternatives=5;let fallingBack=false;
+ const fallback=async reason=>{if(fallingBack||!voiceMonitoring)return;fallingBack=true;recognizer.onend=null;recognizer.onerror=null;try{recognizer.abort?.()}catch{};$('#voiceStatusText').textContent=`Voz online no disponible (${reason}). Activando respaldo offline…`;try{await startOfflineVoice(engine,{forceWasm:true})}catch(error){voiceMonitoring=false;voiceListening=false;$('#voiceStatus')?.classList.remove('active');$('#voiceStatusText').textContent='No se pudo iniciar la voz: '+error.message}};
+ recognizer.onstart=()=>{if(!fallingBack)setVoiceActiveUi('Voz online activa · esperando “Nexus”')};
+ recognizer.onresult=e=>{if(!voiceMonitoring||fallingBack)return;for(let i=e.resultIndex;i<e.results.length;i++){const result=e.results[i],text=result?.isFinal?chooseVoiceTranscript(result):normalizeVoiceTranscriptCandidate(result?.[0]?.transcript);if(!text)continue;result.isFinal?receiveVoiceTranscript(text):receiveVoicePartial(text)}};
+ recognizer.onerror=e=>{if(!voiceMonitoring||fallingBack)return;const code=e?.error||'error';if(['not-allowed','audio-capture'].includes(code)){voiceMonitoring=false;voiceListening=false;$('#voiceStatus')?.classList.remove('active');$('#voiceStatusText').textContent=code==='not-allowed'?'Micrófono bloqueado para NEXUS-X.':'No se pudo capturar el micrófono.';return}if(!['no-speech','aborted'].includes(code))void fallback(code)};
+ recognizer.onend=()=>{voiceListening=false;if(!voiceMonitoring||fallingBack)return;clearTimeout(voiceRestartTimer);voiceRestartTimer=setTimeout(()=>{if(!voiceMonitoring||fallingBack)return;try{recognizer.start()}catch{void fallback('reinicio')}},350)};
+ voiceRecognition=recognizer;recognizer.start();return true;
+}
+async function startVoiceRecognition({automatic=false}={}){
+ if(voiceMonitoring)return true;const engine=globalThis.NexusOffline;if(!engine){$('#voiceStatusText').textContent='Motor local no disponible. Recargá NEXUS.';return false}
+ const granted=await requestMicrophonePermission({silent:automatic});if(!granted)return false;voiceMonitoring=true;voiceSpeaking=false;voicePartialInterrupted=false;
+ const SR=globalThis.SpeechRecognition||globalThis.webkitSpeechRecognition;
+ try{if(navigator.onLine!==false&&SR)return await startBrowserVoice(SR,engine);return await startOfflineVoice(engine)}
+ catch(error){if(voiceMonitoring&&navigator.onLine!==false&&SR){try{return await startOfflineVoice(engine,{forceWasm:true})}catch{}}voiceMonitoring=false;voiceListening=false;$('#voiceStatus')?.classList.remove('active');$('#voiceStatusText').textContent=error.message||'No se pudo iniciar la voz.';return false}
+}
+function spanishVoiceScore(voice){const lang=String(voice?.lang||'').toLowerCase();let score=lang==='es-ar'?300:lang==='es-es'?240:lang.startsWith('es-')?190:lang==='es'?170:-1;if(score<0)return score;if(voice?.localService)score+=30;return score}
+function selectSpanishVoice(voices,{localOnly=false}={}){return (voices||[]).filter(v=>spanishVoiceScore(v)>=0&&(!localOnly||v.localService)).sort((a,b)=>spanishVoiceScore(b)-spanishVoiceScore(a))[0]||null}
+function selectLocalSpanishVoice(voices){return selectSpanishVoice(voices,{localOnly:true})}
+function speechTextForTTS(text){let s=String(text??'').replace(/(?:^|\n)\s*(?:LOCAL|EXTERNA(?: NO DISPONIBLE)?)\s*·\s*/g,' ').replace(/\n\s*(?:Fuentes:|Sin fuentes web verificables).*$/is,'').replace(/https?:\/\/\S+/gi,' ').replace(/[*_`#]/g,' ').replace(/\s+/g,' ').trim();if(s.length>560){const cut=s.slice(0,560),stop=Math.max(cut.lastIndexOf('. '),cut.lastIndexOf('? '),cut.lastIndexOf('! '));s=(stop>180?cut.slice(0,stop+1):cut.trimEnd()+'…')}return s}
 function speakText(text){
- if(!globalThis.speechSynthesis)return false;
- const synth=globalThis.speechSynthesis,voice=selectLocalSpanishVoice(synth.getVoices());
- if(!voice){if(globalThis.NexusOffline)globalThis.NexusOffline.diagnostics.voice.tts='Sin voz española local instalada';$('#voiceStatusText').textContent='Salida de voz pendiente: instalá una voz española offline en Android y tocá Probar voz.';return false;}
- const token=++voiceUtteranceId;synth.cancel();voiceSpeaking=true;voiceLastSpoken=String(text).replace(/[*_`#]/g,'').replace(/\bnexus(?:[- ]?x)?\b/gi,'el sistema');
- const utterance=new SpeechSynthesisUtterance(voiceLastSpoken);utterance.voice=voice;utterance.lang=voice.lang;utterance.rate=.98;utterance.pitch=1;
- if(globalThis.NexusOffline)globalThis.NexusOffline.diagnostics.voice.tts={name:voice.name,language:voice.lang,local:voice.localService};
- const finish=()=>{if(token!==voiceUtteranceId)return;voiceSpeaking=false;if(voiceMonitoring)$('#voiceStatusText').textContent='Dormido · esperando “Nexus”';};utterance.onend=finish;utterance.onerror=finish;synth.speak(utterance);return true;
+ if(!globalThis.speechSynthesis||typeof globalThis.SpeechSynthesisUtterance!=='function')return false;const synth=globalThis.speechSynthesis,voices=typeof synth.getVoices==='function'?synth.getVoices():[],online=navigator.onLine!==false,voice=online?selectSpanishVoice(voices):selectLocalSpanishVoice(voices),spoken=speechTextForTTS(text);if(!spoken)return false;
+ const token=++voiceUtteranceId;synth.cancel();voiceSpeaking=true;voiceLastSpoken=spoken.replace(/\bnexus(?:[- ]?x)?\b/gi,'el sistema');const utterance=new SpeechSynthesisUtterance(voiceLastSpoken);if(voice)utterance.voice=voice;utterance.lang=voice?.lang||'es-AR';utterance.rate=.98;utterance.pitch=1;
+ if(globalThis.NexusOffline)globalThis.NexusOffline.diagnostics.voice.tts={name:voice?.name||'voz predeterminada',language:utterance.lang,local:voice?Boolean(voice.localService):null,mode:online?'online/híbrida':'offline/local-preferida'};
+ const finish=()=>{if(token!==voiceUtteranceId)return;voiceSpeaking=false;if(voiceMonitoring){if(voicePendingIntent){voiceAwaitingCommand=true;$('#voiceStatusText').textContent='Te escucho · respuesta pendiente'}else $('#voiceStatusText').textContent='Dormido · esperando “Nexus”'}};utterance.onend=finish;utterance.onerror=finish;synth.speak(utterance);return true;
 }
 function initVoice(){
  refreshLocalVoiceStatus().catch(()=>{});$('#installVoiceLanguage').onclick=installLocalVoiceLanguage;
