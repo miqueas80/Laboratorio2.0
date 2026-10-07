@@ -16,7 +16,7 @@ const REPO_OWNER='miqueas80';
 const REPO_NAME='';
 const REPO_BRANCH='';
 const DOC_MAX_BYTES=16*1024*1024;
-const APP_VERSION='2026.10.05-r28-expo-local';
+const APP_VERSION='2026.10.07-r29-lens-reliability';
 const INVENTORY_RECOVERY_KEY='nexus_x_inventory_recovery_v1';
 const health={storage:'sin comprobar',documents:'sin comprobar',errors:[],boot:'BOOT'};
 const LENS_EXTERNAL_CACHE_TTL=30*60*1000;
@@ -1231,9 +1231,22 @@ function parseLensVisionPayload(value){
  if(!raw||typeof raw!=='object'||Array.isArray(raw))throw new Error('Respuesta visual inválida.');const list=value=>[...(Array.isArray(value)?value:[])].map(x=>String(x||'').trim()).filter(Boolean).slice(0,12),categories=new Set(['reactivo','frasco','instrumental','equipo','componente','codigo','formula','etiqueta','pictograma','objeto-general','desconocido']);
  return {category:categories.has(raw.category)?raw.category:'desconocido',hypothesis:String(raw.hypothesis||'').trim().slice(0,300),confidence:Math.max(0,Math.min(100,Math.round(Number(raw.confidence)||0))),objects:list(raw.objects),visibleText:list(raw.visibleText),formulaCandidates:list(raw.formulaCandidates),codes:list(raw.codes),pictograms:list(raw.pictograms),manufacturer:String(raw.manufacturer||'').trim().slice(0,160),model:String(raw.model||'').trim().slice(0,160),observableEvidence:list(raw.observableEvidence),limitations:list(raw.limitations)};
 }
-function lensVisionPrompt(){return 'Analizá UNA fotografía de laboratorio. Devolvé exclusivamente JSON válido, sin markdown, con: category (reactivo|frasco|instrumental|equipo|componente|codigo|formula|etiqueta|pictograma|objeto-general|desconocido), hypothesis, confidence (0-100), objects[], visibleText[], formulaCandidates[], codes[], pictograms[], manufacturer, model, observableEvidence[], limitations[]. Describí sólo rasgos visibles. El texto es señal auxiliar. No confirmes identidad química, composición, concentración, peligros ni contenido por apariencia. Un pictograma sólo se informa si es visible. Si hay duda usá category desconocido y bajá confidence.'}
+function lensVisionPrompt(){return 'Actuás como SEGUNDA OPINIÓN visual de NEXUS LENS sobre UNA fotografía. Devolvé exclusivamente JSON válido, sin markdown, con: category (reactivo|frasco|instrumental|equipo|componente|codigo|formula|etiqueta|pictograma|objeto-general|desconocido), hypothesis, confidence (0-100), objects[], visibleText[], formulaCandidates[], codes[], pictograms[], manufacturer, model, observableEvidence[], limitations[]. REGLAS ESTRICTAS: hypothesis describe únicamente la CLASE DE OBJETO visible, nunca la identidad química, composición, concentración o contenido. No infieras ingredientes por color, envase, marca, forma o contexto. Si leés texto de una etiqueta, copialo literalmente sólo en visibleText y/o formulaCandidates; no lo conviertas por sí solo en identidad. Si el objeto está fuera del dominio de laboratorio o la evidencia es insuficiente, category debe ser desconocido y confidence bajo. No completes huecos creativamente. Un pictograma sólo se informa si está claramente visible.'}
 function lensContextForProvider(context){
- const local=(context.evidenceGroups?.probableMatches||[]).slice(0,4).map(e=>({source:e.source,id:e.metadata?.record?.id,name:e.metadata?.record?.name,formula:e.metadata?.record?.formula,confidence:e.confidence}));const documents=(context.documents||[]).slice(0,4).map(e=>({name:e.value?.name,excerpt:e.value?.excerpt?.slice(0,240)}));return JSON.stringify({localCandidates:local,documents,note:'Datos locales no confirmados; sólo sirven para contrastar la imagen.'});
+ const local=(context.evidenceGroups?.probableMatches||[]).slice(0,4).map(e=>({source:e.source,id:e.metadata?.record?.id,name:e.metadata?.record?.name,formula:e.metadata?.record?.formula,confidence:e.confidence}));
+ const localVisual=(context.evidenceGroups?.visualHypotheses||[]).find(e=>e.local);
+ const documents=(context.documents||[]).slice(0,4).map(e=>({name:e.value?.name,excerpt:e.value?.excerpt?.slice(0,240)}));
+ return JSON.stringify({
+  localVisual:localVisual?{hypothesis:localVisual.value?.hypothesis,category:localVisual.value?.category,confidence:localVisual.confidence}:null,
+  localCandidates:local,
+  documents,
+  rules:[
+   'La evidencia local tiene prioridad.',
+   'No confirmar sustancias químicas por apariencia.',
+   'Si no hay evidencia suficiente responder desconocido.',
+   'Tu función es contrastar, no reemplazar, la decisión local.'
+  ]
+ });
 }
  async function xkiroVisionAnalyze({imageDataUrl,context=''}) {
  if(!state.web)throw new Error('Internet está desactivado; NEXUS LENS permanece local.');
@@ -1425,15 +1438,80 @@ function getLensVisionProvider(){
   }
  };
 }
-function lensVisionEvidence(providerResult){
- const analysis=providerResult.analysis,evidence=[createLensEvidence({source:providerResult.provider,type:'visual-hypothesis',value:analysis,confidence:Math.min(90,analysis.confidence),local:false,metadata:{tier:'visual-hypothesis',model:providerResult.model,cacheHit:Boolean(providerResult.cacheHit),chemicalCertainty:false}})];
- for(const pictogram of analysis.pictograms)evidence.push(createLensEvidence({source:providerResult.provider,type:'pictogram-observation',value:pictogram,confidence:Math.min(85,analysis.confidence),local:false,metadata:{visibleOnly:true,chemicalCertainty:false}}));return evidence;
+function lensProviderChemicalClaim(text){
+ const q=norm(text||'');if(!q)return false;
+ if(/\b(acido|hidroxido|fosfato|nitrato|sulfato|cloruro|carbonato|oxido|peroxido|hipoclorito|amonio|amoniaco|acetona|etanol|metanol)\b/.test(q))return true;
+ const records=[...state.inventory,...state.catalog].filter(r=>String(r.formula||'').trim());
+ return records.some(r=>{
+  const name=norm(r.name),formula=norm(r.formula);
+  return Boolean(
+   (name&&name.length>=4&&q.includes(name)) ||
+   (formula&&formula.length>=2&&q.includes(formula))
+  );
+ });
 }
-function lensVisionQuery(analysis){return [analysis.hypothesis,...analysis.objects,...analysis.visibleText,...analysis.formulaCandidates,...analysis.codes,analysis.manufacturer,analysis.model].filter(Boolean).join(' ').slice(0,600)}
+function sanitizeLensProviderAnalysis(raw){
+ const analysis={
+  ...raw,
+  objects:[...(raw.objects||[])],
+  visibleText:[...(raw.visibleText||[])],
+  formulaCandidates:[...(raw.formulaCandidates||[])],
+  limitations:[...(raw.limitations||[])]
+ };
+ const generatedClaim=[analysis.hypothesis,...analysis.objects].filter(Boolean).join(' ');
+ if(lensProviderChemicalClaim(generatedClaim)){
+  analysis.limitations=[...analysis.limitations,'NEXUS descartó una identidad química inferida sólo por imagen.'];
+  analysis.hypothesis=(analysis.category==='frasco'||analysis.category==='reactivo')
+   ?'Frasco o recipiente de laboratorio'
+   :(analysis.objects.find(item=>!lensProviderChemicalClaim(item))||'Objeto de laboratorio no confirmado');
+  analysis.objects=analysis.objects.filter(item=>!lensProviderChemicalClaim(item));
+  analysis.confidence=Math.min(49,analysis.confidence);
+ }
+ analysis.uncertain=analysis.category==='desconocido'||analysis.confidence<55;
+ return analysis;
+}
+function lensVisionEvidence(providerResult){
+ const analysis=providerResult.analysis;
+ if(analysis.uncertain)return [createLensEvidence({
+  source:providerResult.provider,
+  type:'visual-rejection',
+  value:{hypothesis:analysis.hypothesis||'',category:analysis.category,reason:'provider-uncertain'},
+  confidence:analysis.confidence,
+  local:false,
+  metadata:{tier:'second-opinion',model:providerResult.model,cacheHit:Boolean(providerResult.cacheHit),chemicalCertainty:false}
+ })];
+
+ const evidence=[createLensEvidence({
+  source:providerResult.provider,
+  type:'visual-hypothesis',
+  value:analysis,
+  confidence:Math.min(85,analysis.confidence),
+  local:false,
+  metadata:{tier:'second-opinion',model:providerResult.model,cacheHit:Boolean(providerResult.cacheHit),chemicalCertainty:false}
+ })];
+
+ for(const pictogram of analysis.pictograms)evidence.push(createLensEvidence({
+  source:providerResult.provider,
+  type:'pictogram-observation',
+  value:pictogram,
+  confidence:Math.min(80,analysis.confidence),
+  local:false,
+  metadata:{visibleOnly:true,chemicalCertainty:false}
+ }));
+ return evidence;
+}
+function lensVisionQuery(analysis){return [analysis.hypothesis,...analysis.objects,analysis.manufacturer,analysis.model].filter(Boolean).join(' ').slice(0,600)}
 function fuseLensVisualContext(localContext,providerResult,{expanded=false}={}){
- const analysis=providerResult.analysis,query=lensVisionQuery(analysis),evidence=mergeLensEvidence(localContext.evidences,lensVisionEvidence(providerResult));
- for(const [source,records,cap] of [['inventory',state.inventory,86],['catalog',state.catalog,83]])for(const hit of lensMatchesFromText(records,query).slice(0,3))evidence.push(createLensEvidence({source,type:'identity',value:{id:hit.r.id,name:hit.r.name,formula:hit.r.formula},confidence:Math.min(cap,Math.round(analysis.confidence*.55+Math.min(hit.score,200)*.15)),metadata:{match:'visual-context',score:hit.score,record:hit.r,chemicalCertainty:false}}));
- evidence.push(...searchLensDocuments(query));return buildNexusLensContext(evidence,{expanded});
+ const analysis=sanitizeLensProviderAnalysis(providerResult.analysis);
+ const safeResult={...providerResult,analysis};
+ const query=lensVisionQuery(analysis);
+ const evidence=mergeLensEvidence(localContext.evidences,lensVisionEvidence(safeResult));
+
+ // Internet sólo aporta una segunda opinión visual y contexto documental.
+ // Nunca convierte una respuesta generativa en identidad de inventario/catálogo.
+ if(query&&!analysis.uncertain)evidence.push(...searchLensDocuments(query));
+
+ return buildNexusLensContext(evidence,{expanded});
 }
 function buildLensExternalQuery(context,analysis){
  const record=context.identity?.record;return [record?.name,record?.formula,analysis?lensVisionQuery(analysis):'',context.evidences.find(e=>e.type==='code-observation')?.value].filter(Boolean).join(' ').replace(/\s+/g,' ').trim().slice(0,420);
@@ -1462,7 +1540,8 @@ function lensStateFromContext(context){
  const quality=context.evidences?.find(e=>e.type==='image-quality');if(context.status==='unknown'&&quality?.value?.usable===false)return ['empty','Captura inutilizable',quality.value.issues.join('. ')+'. Volvé a capturar la imagen.'];
  const unavailable=context.evidences?.some(e=>e.type==='provider-status'&&e.value==='unavailable');if(unavailable)return ['unavailable','Servicio externo no disponible','NEXUS conserva los resultados locales y no bloquea la operación.'];
  if(context.status==='candidate')return ['local','Coincidencia local probable','Requiere verificación física antes de usar el material.'];
- if(context.status==='hypothesis')return ['hypothesis','Hipótesis visual','La imagen aporta una propuesta; no confirma una identidad química.'];
+ if(context.status==='hypothesis'){const visualRows=context.evidenceGroups?.visualHypotheses||[],hasLocal=visualRows.some(e=>e.local);return hasLocal?['hypothesis','Hipótesis visual local','La imagen aporta una propuesta; no confirma una identidad química.']:['hypothesis','Hipótesis externa · NO CONFIRMADA','xKiro aporta una segunda opinión visual; no confirma identidad ni composición.'];}
+ const rejected=context.evidences?.find(e=>e.type==='visual-rejection');if(context.status==='unknown'&&rejected)return ['empty','Sin evidencia suficiente','NEXUS rechazó la mejor coincidencia en lugar de inventar una identificación.'];
  const localError=context.evidences?.find(e=>e.type==='local-engine-status');if(localError)return ['offline','Modelo local no disponible',localError.metadata.error];
  if(!navigator.onLine)return ['offline','Modo local · sin coincidencia suficiente','Ajustá el encuadre a un objeto soportado y volvé a analizar.'];
  const providerState=context.evidences?.find(e=>e.type==='provider-status'&&['not-configured','disabled'].includes(e.value));if(providerState)return ['unavailable',providerState.value==='not-configured'?'Reconocimiento visual externo no configurado':'Reconocimiento visual externo desactivado','QR y conocimiento local siguen disponibles.'];
@@ -1492,18 +1571,93 @@ async function identifyLensCode(code,{render=true}={}){const indexEvidence=await
 let lensLastEmbedding=null;
 function fuseLensLocalVision(context,result){
  const best=result.candidates?.[0],evidence=[...context.evidences];
- evidence.push(createLensEvidence({source:'local-vision',type:'runtime-status',value:result.accepted?'inference-complete':'uncertain',metadata:{runtime:result.backend,model:result.model,durationMs:result.durationMs,margin:result.margin}}));
+
+ evidence.push(createLensEvidence({
+  source:'local-vision',
+  type:'runtime-status',
+  value:result.accepted?'inference-complete':'rejected',
+  metadata:{
+   runtime:result.backend,
+   model:result.model,
+   durationMs:result.durationMs,
+   margin:result.margin,
+   rejectGap:result.rejectGap,
+   rejectionReason:result.rejectionReason||''
+  }
+ }));
+
+ if(!result.accepted&&best){
+  evidence.push(createLensEvidence({
+   source:'local-vision',
+   type:'visual-rejection',
+   value:{
+    candidate:best.label,
+    similarity:Math.round(best.similarity*100),
+    reason:result.rejectionReason||'insufficient-evidence'
+   },
+   confidence:Math.round(best.similarity*100),
+   metadata:{scoreKind:'cosine-similarity',calibratedProbability:false,chemicalCertainty:false}
+  }));
+ }
+
  if(result.accepted&&best){
-  const analysis={hypothesis:best.label,category:best.group,objects:[best.label],confidence:Math.round(best.similarity*100),visibleText:[],formulaCandidates:[],codes:[],pictograms:[]};
-  evidence.push(createLensEvidence({source:'local-vision',type:'visual-hypothesis',value:analysis,confidence:analysis.confidence,metadata:{model:result.model,runtime:result.backend,scoreKind:'cosine-similarity',calibratedProbability:false,chemicalCertainty:false,localVision:true,candidates:result.candidates}}));
-  for(const [source,records] of [['inventory',state.inventory],['catalog',state.catalog]])for(const hit of lensMatchesFromText(records,best.label).slice(0,3))evidence.push(createLensEvidence({source,type:'identity',value:{id:hit.r.id,name:hit.r.name,formula:hit.r.formula},confidence:Math.min(80,analysis.confidence),metadata:{match:'visual-category',record:hit.r,localVision:true,chemicalCertainty:false}}));
+  const analysis={
+   hypothesis:best.label,
+   category:best.group,
+   objects:[best.label],
+   confidence:Math.round(best.similarity*100),
+   visibleText:[],
+   formulaCandidates:[],
+   codes:[],
+   pictograms:[]
+  };
+
+  evidence.push(createLensEvidence({
+   source:'local-vision',
+   type:'visual-hypothesis',
+   value:analysis,
+   confidence:analysis.confidence,
+   metadata:{
+    model:result.model,
+    runtime:result.backend,
+    scoreKind:'cosine-similarity',
+    calibratedProbability:false,
+    chemicalCertainty:false,
+    localVision:true,
+    candidates:result.candidates
+   }
+  }));
+
+  // Una clase visual de recipiente químico NO identifica su contenido.
+  if(!best.chemicalContainer){
+   for(const [source,records] of [['inventory',state.inventory],['catalog',state.catalog]]){
+    for(const hit of lensMatchesFromText(records,best.label).slice(0,3)){
+     evidence.push(createLensEvidence({
+      source,
+      type:'identity',
+      value:{id:hit.r.id,name:hit.r.name,formula:hit.r.formula},
+      confidence:Math.min(80,analysis.confidence),
+      metadata:{match:'visual-category',record:hit.r,localVision:true,chemicalCertainty:false}
+     }));
+    }
+   }
+  }
+
   evidence.push(...searchLensDocuments(best.label));
  }
+
  for(const ref of result.references||[]){
   const record=state.inventory.find(r=>r.id===ref.recordId);if(!record)continue;
-  evidence.push(createLensEvidence({source:'visual-reference',type:'identity',value:{id:record.id,name:record.name},confidence:Math.min(90,Math.round(ref.similarity*100)),metadata:{record,match:'visual-reference',localVision:true,chemicalCertainty:false}}));
+  evidence.push(createLensEvidence({
+   source:'visual-reference',
+   type:'identity',
+   value:{id:record.id,name:record.name},
+   confidence:Math.min(90,Math.round(ref.similarity*100)),
+   metadata:{record,match:'visual-reference',localVision:true,chemicalCertainty:false}
+  }));
   evidence.push(...searchLensDocuments(record.name));
  }
+
  return buildNexusLensContext(evidence);
 }
 async function saveLensVisualReference(){

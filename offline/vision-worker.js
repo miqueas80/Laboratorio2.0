@@ -34,9 +34,28 @@ function rank(embedding) {
   const rows = prototypes.classes.map(c => ({id:c.id, label:c.label, group:c.group, reject:!!c.reject,
     chemicalContainer:!!c.chemicalContainer, similarity:c.embedding.reduce((s,v,i)=>s+v*embedding[i],0)}))
     .sort((a,b)=>b.similarity-a.similarity);
-  // Similarity and margin are model scores, never calibrated probabilities.
-  const margin = rows[0].similarity - rows[1].similarity;
-  return {accepted:!rows[0].reject && rows[0].similarity >= .20 && margin >= .008, margin, candidates:rows.slice(0,4)};
+
+  // Open-set gate: MobileCLIP siempre devuelve "algo más parecido".
+  // NEXUS sólo acepta cuando la evidencia supera umbral, margen y clases negativas.
+  // Estos valores son scores de similitud, NO probabilidades calibradas.
+  const best=rows[0],runner=rows[1];
+  const margin=best.similarity-runner.similarity;
+  const nearestReject=rows.find(row=>row.reject);
+  const rejectGap=nearestReject?best.similarity-nearestReject.similarity:Infinity;
+
+  const accepted=
+    !best.reject &&
+    best.similarity>=.24 &&
+    margin>=.012 &&
+    rejectGap>=.01;
+
+  let rejectionReason='';
+  if(best.reject)rejectionReason='out-of-domain';
+  else if(best.similarity<.24)rejectionReason='low-similarity';
+  else if(margin<.012)rejectionReason='ambiguous';
+  else if(rejectGap<.01)rejectionReason='negative-class-close';
+
+  return {accepted,rejectionReason,margin,rejectGap,candidates:rows.slice(0,4)};
 }
 self.onmessage = async ({data}) => {
   const {id, type} = data;

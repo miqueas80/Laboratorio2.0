@@ -15,6 +15,16 @@ test('motores: archivos vendorizados íntegros, 35 categorías reales y embeddin
  const model=JSON.parse(fs.readFileSync(new URL('offline/v1/vision/prototypes.json',root)));assert.equal(model.classes.filter(c=>!c.reject).length,35);
  for(const c of model.classes){assert.equal(c.embedding.length,512);assert.ok(Math.abs(Math.hypot(...c.embedding)-1)<1e-5);}
 });
+
+test('Lens open-set rechaza similitud baja, ambigüedad y cercanía a clases negativas',()=>{
+ const worker=fs.readFileSync(new URL('offline/vision-worker.js',root),'utf8');
+ assert.match(worker,/best\.similarity>=\.24/);
+ assert.match(worker,/margin>=\.012/);
+ assert.match(worker,/rejectGap>=\.01/);
+ assert.match(worker,/rejectionReason='low-similarity'/);
+ assert.match(worker,/rejectionReason='ambiguous'/);
+ assert.match(worker,/rejectionReason='negative-class-close'/);
+});
 test('voz nativa exige disponibilidad del idioma Y processLocally real; nunca activa reconocimiento cloud',async()=>{
  const h=harness();try{const api=loadCore(h);let created=0;
  h.window.SpeechRecognition=class{constructor(){created++;}static async available(){return 'available';}};
