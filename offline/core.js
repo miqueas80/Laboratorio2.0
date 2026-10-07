@@ -6,7 +6,7 @@
  const cacheName = 'nexus-x-models:' + encodeURIComponent(new URL('../',base).pathname) + ':' + manifest.version;
  const assetURL = path => new URL(path,base).href;
  const diagnostics = {voice:{engine:'sin iniciar',local:true,language:'es',model:'vosk-small-es-0.42',microphone:'sin comprobar',wakeWord:'Nexus'},
-  lens:{runtime:'sin iniciar',webgpu:!!navigator.gpu,wasm:typeof WebAssembly!=='undefined',model:'MobileCLIP-S0',detector:'no incluido; clasificación por captura',embedding:'sin iniciar',ocr:'no preparado',cache:false}};
+  lens:{runtime:'sin iniciar',webgpu:!!navigator.gpu,wasm:typeof WebAssembly!=='undefined',model:'MobileCLIP-S0',detector:'MobileCLIP-S0',embedding:'sin iniciar',ocr:'PP-OCRv6 Tiny · no preparado',ocrDetector:'PP-OCRv6_tiny_det',ocrRecognizer:'PP-OCRv6_tiny_rec',ocrBackend:'sin iniciar',ocrCached:false,ocrDurationMs:0,ocrLines:0,cache:false}};
  const notify = (part,patch) => { Object.assign(diagnostics[part],patch); root.dispatchEvent(new CustomEvent('nexus-offline-status',{detail:{part,...diagnostics[part]}})); };
  const scripts = new Map();
  function loadScript(path,globalName) {
@@ -148,10 +148,16 @@
   }
   return {start,stop,get active(){return active;}};
  }
- let visionWorker,serial=0,idleTimer;const jobs=new Map();
+ let visionWorker,serial=0,idleTimer,ocrWorker,ocrSerial=0,ocrIdleTimer;const jobs=new Map(),ocrJobs=new Map();
+ function releaseOcr() {
+  clearTimeout(ocrIdleTimer);ocrWorker?.terminate();ocrWorker=null;
+  for(const job of ocrJobs.values()){clearTimeout(job.timer);job.reject(new Error('Motor OCR liberado'));}ocrJobs.clear();
+  notify('lens',{ocr:'PP-OCRv6 Tiny · liberado'});
+ }
  function releaseVision() {
   clearTimeout(idleTimer);visionWorker?.terminate();visionWorker=null;
   for(const job of jobs.values()){clearTimeout(job.timer);job.reject(new Error('Motor visual liberado'));}jobs.clear();
+  releaseOcr();
   notify('lens',{embedding:'liberado'});
  }
  async function visionRequest(type,pixels,options={}) {
@@ -170,14 +176,59 @@
   const id=++serial;
   return new Promise((resolve,reject)=>{
    const timer=setTimeout(()=>{releaseVision();},90000);jobs.set(id,{resolve,reject,timer});
-   visionWorker.postMessage({id,type,pixels,forceWasm:!!options.forceWasm},pixels?[pixels]:[]);
+   const views=Array.isArray(pixels)?pixels.filter(Boolean):pixels?[pixels]:[];
+   visionWorker.postMessage({id,type,pixels:views,forceWasm:!!options.forceWasm},views);
   });
  }
- function pixelsFor(source) {
+ async function ocrRequest(type,source,options={}) {
+  await requirePrepared('vision');clearTimeout(ocrIdleTimer);
+  if(ocrJobs.size)throw new Error('Ya hay un análisis OCR local en curso.');
+  if(!ocrWorker){
+   ocrWorker=new Worker(assetURL('ocr-worker.js'));
+   ocrWorker.onmessage=({data})=>{
+    const job=ocrJobs.get(data.id);if(!job)return;ocrJobs.delete(data.id);clearTimeout(job.timer);
+    if(data.error){
+     notify('lens',{ocr:'PP-OCRv6 Tiny · error',ocrError:data.error});
+     job.reject(new Error(data.error));
+    }else{
+     const result=data.result;
+     notify('lens',{runtime:result.backend,ocr:`PP-OCRv6 Tiny · ${result.backend}`,ocrDetector:result.detector,ocrRecognizer:result.recognizer,ocrBackend:result.backend,ocrCached:true,ocrDurationMs:result.durationMs||0,ocrLines:result.lines?.length||0,ocrError:''});
+     job.resolve(result);
+    }
+    ocrIdleTimer=setTimeout(releaseOcr,60000);
+   };
+   ocrWorker.onerror=event=>{
+    const message=event.message||'Fallo no especificado del worker OCR local.';
+    notify('lens',{ocr:'PP-OCRv6 Tiny · error',ocrError:message});
+    releaseOcr();
+   };
+  }
+  notify('lens',{ocr:`PP-OCRv6 Tiny · ${type==='prepare'?'inicializando':'analizando'}`});
+  const id=++ocrSerial;
+  let image=null,transfer=[];
+  if(type==='recognize'){
+   const width=source?.naturalWidth||source?.videoWidth||source?.width,height=source?.naturalHeight||source?.videoHeight||source?.height;
+   if(!width||!height)throw new Error('Imagen OCR vacía.');
+   const canvas=document.createElement('canvas');canvas.width=width;canvas.height=height;
+   const context=canvas.getContext('2d',{willReadFrequently:true});context.drawImage(source,0,0,width,height);
+   const rgba=context.getImageData(0,0,width,height).data;
+   image={rgba:rgba.buffer,width,height};transfer=[rgba.buffer];
+  }
+  return new Promise((resolve,reject)=>{
+   const timer=setTimeout(()=>{releaseOcr();},90000);ocrJobs.set(id,{resolve,reject,timer});
+   ocrWorker.postMessage({id,type,image,forceWasm:!!options.forceWasm},transfer);
+  });
+ }
+ function pixelsFor(source,view='center') {
   const w=source.width||source.naturalWidth,h=source.height||source.naturalHeight;if(!w||!h)throw new Error('Imagen vacía');
   const canvas=document.createElement('canvas');canvas.width=canvas.height=256;
-  const ctx=canvas.getContext('2d',{willReadFrequently:true});ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality='high';const side=Math.min(w,h);
-  ctx.drawImage(source,(w-side)/2,(h-side)/2,side,side,0,0,256,256);
+  const ctx=canvas.getContext('2d',{willReadFrequently:true});ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality='high';
+  if(view==='letterbox'){
+   const scale=Math.min(256/w,256/h),width=Math.max(1,Math.round(w*scale)),height=Math.max(1,Math.round(h*scale));
+   ctx.fillStyle='#808080';ctx.fillRect(0,0,256,256);ctx.drawImage(source,0,0,w,h,(256-width)/2,(256-height)/2,width,height);
+  }else{
+   const side=Math.min(w,h);ctx.drawImage(source,(w-side)/2,(h-side)/2,side,side,0,0,256,256);
+  }
   const rgba=ctx.getImageData(0,0,256,256).data,data=new Float32Array(3*256*256);
   for(let i=0;i<256*256;i++)for(let c=0;c<3;c++)data[c*256*256+i]=rgba[4*i+c]/255;
   canvas.width=canvas.height=1;return data.buffer;
@@ -194,11 +245,23 @@
   const db=await referenceDB();try{await new Promise((resolve,reject)=>{const tx=db.transaction('references','readwrite');tx.objectStore('references').put({id:recordId+':'+Date.now(),recordId,label:String(label).slice(0,200),embedding,model:'MobileCLIP-S0',createdAt:new Date().toISOString()});tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error);});}finally{db.close();}
  }
  async function analyze(source,options={}) {
-  const result=await visionRequest('analyze',pixelsFor(source),options);
+  const result=await visionRequest('analyze',[pixelsFor(source,'center'),pixelsFor(source,'letterbox')],options);
   try{result.references=(await references()).filter(r=>r.model===result.model).map(r=>({recordId:r.recordId,label:r.label,similarity:r.embedding.reduce((s,v,i)=>s+v*result.embedding[i],0)})).filter(r=>r.similarity>=.85).sort((a,b)=>b.similarity-a.similarity).slice(0,3);}catch(error){result.references=[];result.referenceError=error.message;}
   return result;
  }
+ async function prepareVision(options={}) {
+  const vision=await visionRequest('prepare',null,options);
+  try{
+   const ocr=await ocrRequest('prepare',null,options);
+   return {...vision,ocr};
+  }catch(error){
+   notify('lens',{ocr:'PP-OCRv6 Tiny · no disponible',ocrError:error.message});
+   return {...vision,ocr:{ready:false,error:error.message}};
+  }
+ }
  root.NexusOffline={prepare,cacheStatus,diagnostics,nativeVoice,createVoice,grammar,analyze,saveReference,releaseVision,
+  recognizeText:source=>ocrRequest('recognize',source),
+  releaseOcr,
   async prepareVoice(){const model=await loadVoiceModel();destroyModel(model);notify('voice',{state:'Voz local lista',engine:'VOSK · WASM'});},
-  prepareVision:options=>visionRequest('prepare',null,options)};
+  prepareVision};
 })(globalThis);

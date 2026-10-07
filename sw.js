@@ -1,6 +1,6 @@
 'use strict';
 // Incrementar VERSION junto con APP_VERSION cuando cambie cualquier recurso CORE.
-const VERSION='2026.10.07-r29-lens-reliability';
+const VERSION='2026.10.07-r30-lens-final';
 importScripts('./offline/assets.js');
 const SCOPE=new URL(self.registration.scope);
 const PREFIX='nexus-x-shell:'+encodeURIComponent(SCOPE.pathname)+':';
@@ -9,7 +9,7 @@ const CORE=['./','./index.html','./app.js','./manifest.webmanifest','./icon.svg'
  './icon-192.png','./icon-512.png','./inventory.json','./catalogo_maestro.json','./documents-manifest.json','./document-worker.js',
  './jszip.min.js','./xlsx.full.min.js','./jsQR.js',
  './pdf.mjs','./pdf.worker.mjs','./offline/assets.js','./offline/core.js',
- './offline/vision-worker.js','./offline/audio-worklet.js'];
+ './offline/vision-worker.js','./offline/ocr-worker.js','./offline/audio-worklet.js'];
 const URLS=new Set(CORE.map(path=>new URL(path,SCOPE).href));
 // Large engines are explicitly prepared, independently of the atomic application shell.
 const MODEL_CACHE='nexus-x-models:'+encodeURIComponent(SCOPE.pathname)+':'+self.NEXUS_OFFLINE_ASSETS.version;

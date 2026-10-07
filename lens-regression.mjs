@@ -8,12 +8,13 @@ function canvas(h){
  let captures=0;h.window.HTMLCanvasElement.prototype.getContext=function(){return {drawImage:()=>{captures++},getImageData:()=>({width:320,height:240,data:Uint8ClampedArray.from({length:320*240*4},(_,i)=>i%4===3?255:(Math.floor(i/4)%2?210:40))})}};
  h.window.HTMLCanvasElement.prototype.toDataURL=()=> 'data:image/jpeg;base64,YQ==';return ()=>captures;
 }
-test('QR/Lens DOM, recursos locales, sin OCR y versiones sincronizadas',()=>{
+test('QR/Lens DOM, recursos locales, OCR sin Tesseract y versiones sincronizadas',()=>{
  for(const id of ['view-qr','qrVideo','view-lens','lensVideo','lensPermissionBtn','lensStartBtn','lensStopBtn','lensCameraSelect'])assert.ok(html.includes('id="'+id+'"'),id);
  assert.doesNotMatch(app+html,/Tesseract|ocrOutput|view-vision|visionVideo|LENS_TEXT_ENGINE|preprocessLensText/);
+ assert.match(app,/function parseLensOcrResult/);assert.match(app,/source:'local-ocr'/);
  assert.match(app,/loadScript\('\.\/jsQR.js','jsQR'\)/);assert.ok(fs.existsSync(new URL('jsQR.js',import.meta.url)));
  assert.match(app,/if\(!raw\)raw=await decodeQrVideoFrame/);assert.match(app,/if\(raw\)\{state.scanBusy=true;processQr\(raw\);return\}/);
- const sw=fs.readFileSync(new URL('sw.js',import.meta.url),'utf8');assert.match(sw,/'\.\/jsQR.js'/);assert.equal(app.match(/APP_VERSION='([^']+)'/)[1],sw.match(/VERSION='([^']+)'/)[1]);
+ const sw=fs.readFileSync(new URL('sw.js',import.meta.url),'utf8'),version='2026.10.07-r30-lens-final';assert.match(sw,/'\.\/jsQR.js'/);assert.equal(app.match(/APP_VERSION='([^']+)'/)[1],version);assert.equal(sw.match(/VERSION='([^']+)'/)[1],version);
 });
 test('QR stops tracks, clears video, no retained image; Lens remains independent',async()=>{
  const h=harness({stored:master.records});try{await h.api.loadMaster();let qr=0,lens=0;h.api.state.stream={getTracks:()=>[{stop:()=>qr++},{stop:()=>qr++}]};h.api.state.lensStream={getTracks:()=>[{stop:()=>lens++}]};
@@ -47,7 +48,7 @@ for(const mode of ['exact','offline','disabled','gateway-unavailable','visual','
  const result=await h.api.runNexusLensPipeline({width:320,height:240});assert.equal(result.ok,true);assert.equal(h.api.state.lensBusy,false);assert.doesNotMatch(JSON.stringify(h.api.state.lensLastContext),/data:image/);
  if(mode==='exact'){assert.equal(result.status,'confirmed');assert.ok(result.evidences.some(e=>e.source==='inventory'));assert.ok(result.evidences.some(e=>e.source==='catalog'));assert.ok(result.documents.length);assert.equal(h.calls.length,0)}
  else if(mode==='visual'){assert.equal(result.status,'unknown');assert.equal(result.identity,null);assert.equal(visualCalls,1);assert.equal(h.api.shouldSearchLensWeb(result),false);assert.ok(result.evidences.some(e=>e.type==='visual-rejection'))}
- else {assert.equal(result.identity,null);assert.equal(visualCalls,mode==='failed'?1:0)}
+ else {assert.equal(result.identity,null);assert.equal(visualCalls,mode==='failed'?1:0);if(mode!=='poor')assert.ok(result.evidences.some(e=>e.type==='local-ocr-status'))}
  if(mode!=='poor')assert.equal(count(),3,'one capture plus quality sample and QR decoding copies');
  }finally{h.close()}
 });
@@ -55,7 +56,7 @@ test('quality is metadata, visual fusion cannot replace confirmed code; web gate
  const h=harness();try{canvas(h);const quality=h.api.analyzeLensImageQuality({width:320,height:240,getContext:()=>({getImageData:()=>({data:new Uint8ClampedArray(320*240*4)})})});
  assert.equal(h.api.buildNexusLensContext([quality]).identity,null);assert.equal(quality.metadata.qualityOnly,true);assert.equal(h.api.shouldSearchLensWeb(h.api.buildNexusLensContext([quality])),false);
  h.api.state.inventory=master.records;const local=h.api.resolveLensLocalSignals({code:'NEXUS-X-0001'});const fused=h.api.fuseLensVisualContext(local,{provider:'mock',analysis:h.api.parseLensVisionPayload({hypothesis:master.records[1].name,confidence:90}),model:'mock'});
- assert.equal(fused.identity.record.id,'NEXUS-X-0001');assert.equal(fused.status,'confirmed');assert.equal(fused.evidenceGroups.contradictions.length,0);
+ assert.equal(fused.identity.record.id,'NEXUS-X-0001');assert.equal(fused.status,'confirmed');assert.ok(fused.evidenceGroups.contradictions.some(item=>item.source==='mock'));
  assert.ok(fused.evidences.some(e=>e.source==='mock'&&e.type==='visual-rejection'));
  assert.equal(fused.evidences.filter(e=>e.type==='identity'&&e.metadata?.match==='visual-context').length,0);assert.equal(h.api.shouldSearchLensWeb(fused),false);assert.equal(h.api.shouldSearchLensWeb(fused,{expanded:true}),true);
  }finally{h.close()}

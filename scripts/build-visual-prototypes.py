@@ -17,7 +17,16 @@ options = ort.SessionOptions()
 options.intra_op_num_threads = 2
 session = ort.InferenceSession(str(source / 'text_model.onnx'), options, providers=['CPUExecutionProvider'])
 for item in categories:
-    prompts = [f'A photo of {item["en"]}.', f'A close-up photo of {item["en"]}.', f'A photo of {item["en"]} on a laboratory table.']
+    descriptions = item.get('prompts') or [item["en"]]
+    prompts = [
+        prompt
+        for description in descriptions
+        for prompt in (
+            f'A photo of {description}.',
+            f'A close-up photo of {description}.',
+            f'A photo of {description} on a laboratory table.',
+        )
+    ]
     tokens = tokenizer.encode_batch(prompts)
     feeds = {'input_ids': np.array([t.ids for t in tokens], dtype=np.int64)}
     if any(i.name == 'attention_mask' for i in session.get_inputs()):

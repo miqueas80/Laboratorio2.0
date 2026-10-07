@@ -62,6 +62,18 @@ async function launch(offline) {
   console.log('PASS cold offline reopen: shell, 111 inventory, 6 documents, model cache');
   const engine = await page.evaluate(() => NexusOffline.prepareVision({forceWasm:true}));
   console.log('PASS real local visual runtime', JSON.stringify(engine));
+  const ocr = await page.evaluate(async () => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 1200; canvas.height = 300;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = '#111'; ctx.font = 'bold 100px Arial'; ctx.textBaseline = 'middle';
+    ctx.fillText('NEXUS-X-0001', 40, 150);
+    const result = await NexusOffline.recognizeText(canvas);
+    return {backend:result.backend, lines:result.lines, code:result.lines.map(line => normalizeLensNexusCode(line.text)).find(Boolean) || ''};
+  });
+  assert.equal(ocr.code, 'NEXUS-X-0001', `Local PP-OCRv6 Tiny did not read the synthetic label: ${JSON.stringify(ocr)}`);
+  console.log('PASS local PP-OCRv6 Tiny label OCR', JSON.stringify(ocr));
   await page.locator('[data-view="lens"]').click();
   for (const [file, label] of [['erlenmeyer.jpg', 'Erlenmeyer'], ['beaker.jpg', 'Vaso de precipitados'], ['nexus-qr.png', 'CONFIRMADO']]) {
     await page.locator('#lensImageInput').setInputFiles(path.join(fixtures, file));

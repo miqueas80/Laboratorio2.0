@@ -16,7 +16,7 @@ const REPO_OWNER='miqueas80';
 const REPO_NAME='';
 const REPO_BRANCH='';
 const DOC_MAX_BYTES=16*1024*1024;
-const APP_VERSION='2026.10.07-r29-lens-reliability';
+const APP_VERSION='2026.10.07-r30-lens-final';
 const INVENTORY_RECOVERY_KEY='nexus_x_inventory_recovery_v1';
 const health={storage:'sin comprobar',documents:'sin comprobar',errors:[],boot:'BOOT'};
 const LENS_EXTERNAL_CACHE_TTL=30*60*1000;
@@ -1139,9 +1139,13 @@ async function startLensCamera(){
 }
 function stopLensCamera(){if(state.lensStream){state.lensStream.getTracks().forEach(t=>t.stop());state.lensStream=null}const v=$('#lensVideo');if(v)v.srcObject=null;$('#lensStage')?.classList.add('black');if($('#lensStatus'))$('#lensStatus').textContent='Cámara NEXUS LENS detenida.';const camera=$('#lensCameraState'),hint=$('#lensFrameHint');if(camera){camera.dataset.state='offline';camera.innerHTML='<i></i>Cámara detenida'}if(hint)hint.textContent='Sin imagen seleccionada';if(!state.lensLastContext)setLensUiState('offline','Modo local · cámara detenida','Podés analizar una foto sin iniciar la cámara.');}
 
-function createLensEvidence({source,type,value,confidence=0,local=true,metadata={}}={}){
+function createLensEvidence({source,type,value,confidence=0,local=true,metadata={},boundingBox,runtime}={}){
  const score=Math.max(0,Math.min(100,Math.round(Number(confidence)||0)));
- return {source:String(source||'unknown'),type:String(type||'observation'),value:value??null,confidence:score,local:Boolean(local),metadata:metadata&&typeof metadata==='object'&&!Array.isArray(metadata)?metadata:{}};
+ const evidence={source:String(source||'unknown'),type:String(type||'observation'),value:value??null,confidence:score,local:Boolean(local),metadata:metadata&&typeof metadata==='object'&&!Array.isArray(metadata)?metadata:{}};
+ const box=boundingBox??evidence.metadata.boundingBox,engine=runtime??evidence.metadata.runtime;
+ if(box!=null)evidence.boundingBox=box;
+ if(engine)evidence.runtime=String(engine);
+ return evidence;
 }
 function mergeLensEvidence(...sets){
  const out=[],seen=new Set();
@@ -1173,32 +1177,86 @@ function buildNexusLensContext(evidences,{expanded=false}={}){
  const rows=mergeLensEvidence(Array.isArray(evidences)?evidences.filter(e=>e&&typeof e==='object'):[]);
  const identities=rows.filter(e=>e.type==='identity'&&e.metadata?.record);
  const confirmed=identities.find(e=>e.metadata.match==='exact-code'&&e.confidence===100&&e.local);
+ const ocrCode=identities.find(e=>e.metadata.match==='ocr-code'&&e.local);
+ const ocrText=identities.find(e=>e.metadata.match==='ocr-text'&&e.local&&e.confidence>=85);
+ const visualReference=identities.find(e=>e.metadata.match==='visual-reference'&&e.local);
  const hasLocalVision=rows.some(e=>e.source==='local-vision'&&e.type==='visual-hypothesis');
  const eligible=hasLocalVision?identities.filter(e=>e.metadata.localVision||e.metadata.match==='exact-code'||e.metadata.match==='label-agreement'):identities;
- const candidate=confirmed||eligible.sort((a,b)=>Number(b.metadata.localVision===true)-Number(a.metadata.localVision===true)||b.confidence-a.confidence)[0]||null;
+ const candidate=confirmed||ocrCode||ocrText||visualReference||eligible.sort((a,b)=>Number(b.metadata.localVision===true)-Number(a.metadata.localVision===true)||b.confidence-a.confidence)[0]||null;
  const visual=rows.filter(e=>e.type==='visual-hypothesis');
  const externalInformation=rows.filter(e=>e.type==='external-information');
- const identified=candidate?.metadata?.match==='label-agreement'&&candidate.confidence>=85;
+ const identified=Boolean(ocrCode||ocrText||candidate?.metadata?.match==='label-agreement'&&candidate.confidence>=85);
  const status=confirmed?'confirmed':identified?'identified':candidate&&!candidate.metadata.localVision?'candidate':visual.length||candidate?'hypothesis':'unknown';
  const classification=confirmed?'confirmed-local':identified?'identified-local':candidate&&!candidate.metadata.localVision?'probable-match':visual.length||candidate?'visual-hypothesis':externalInformation.length?'external-information':'unresolved';
  const documents=rows.filter(e=>e.type==='document-context');
- const contradictions=identities.filter(e=>confirmed&&e.value.id!==confirmed.value.id).map(e=>({source:e.source,id:e.value.id,reason:'Discrepa con el código local confirmado'}));
+ const trusted=confirmed||ocrCode||ocrText, trustedRecord=trusted?.metadata?.record;
+ const contradictions=[
+  ...identities.filter(e=>confirmed&&e.value.id!==confirmed.value.id).map(e=>({source:e.source,id:e.value.id,reason:'Discrepa con el código QR local confirmado'})),
+  ...rows.filter(e=>!e.local&&e.type==='visual-hypothesis'&&trustedRecord).flatMap(e=>{
+   const claim=[e.value?.hypothesis,...(e.value?.objects||[]),...(e.value?.formulaCandidates||[])].filter(Boolean).join(' ');
+   const conflict=[...state.inventory,...state.catalog].find(r=>r.id!==trustedRecord.id&&[r.name,r.formula].filter(Boolean).some(term=>norm(term).length>=3&&norm(claim).includes(norm(term))));
+   return conflict?[{source:e.source,id:conflict.id,reason:'Opinión externa contradice evidencia local prioritaria'}]:[];
+  }),
+  ...rows.filter(e=>!e.local&&e.type==='visual-rejection'&&trustedRecord&&e.value?.rejectedClaims?.length).map(e=>({source:e.source,id:trustedRecord.id,reason:'Se descartó una afirmación química externa frente a evidencia local prioritaria'}))
+ ];
  const externalRows=rows.filter(e=>!e.local);
  return {ok:true,status,classification,identity:candidate?{source:candidate.source,record:candidate.metadata.record,confidence:candidate.confidence,confirmed:Boolean(confirmed)}:null,evidences:rows,evidenceGroups:{contradictions,confirmedLocal:confirmed?[confirmed]:[],probableMatches:identities.filter(e=>e!==confirmed),visualHypotheses:visual,externalInformation},documents,local:externalRows.length===0,localFirst:true,external:{requested:externalRows.length>0,allowed:!confirmed||expanded,blocked:Boolean(confirmed&&!expanded),reason:confirmed&&!expanded?'Coincidencia exacta de código NEXUS en datos locales.':'La evidencia local no produjo una identificación exacta o se solicitó ampliación.'}};
 }
-function resolveLensLocalSignals({code='',text='',textQuality=0,indexEvidence=null,extraEvidence=[],expanded=false}={}){
+function normalizeLensNexusCode(text){
+ const source=String(text||'').toUpperCase();
+ const match=source.match(/(?:NEXUS\s*-\s*X|NEXUS\s+X|NX)\s*[-_: ]*\s*([0-9OI]{1,4})\b/);
+ if(!match)return '';
+ const digits=match[1].replace(/O/g,'0').replace(/I/g,'1');
+ if(!/^\d{1,6}$/.test(digits))return '';
+ return `NEXUS-X-${String(Number(digits)).padStart(4,'0')}`;
+}
+function parseLensOcrResult(result){
+ const rows=Array.isArray(result?.lines)?result.lines:[];
+ const evidences=[];
+ for(const row of rows){
+  const text=String(typeof row==='string'?row:row?.text||'').trim().slice(0,500);
+  if(!text)continue;
+  const rawConfidence=Number(row?.confidence)||0,confidence=Math.max(0,Math.min(100,Math.round(rawConfidence<=1?rawConfidence*100:rawConfidence)));
+  const metadata={runtime:String(result.runtime||'PP-OCRv6 Tiny'),backend:String(result.backend||'unknown'),
+   boundingBox:Array.isArray(row?.boundingBox)||row?.boundingBox&&typeof row.boundingBox==='object'?row.boundingBox:null};
+  const code=normalizeLensNexusCode(text);
+  if(code)evidences.push(createLensEvidence({source:'local-ocr',type:'code-observation',value:code,confidence,metadata:{...metadata,raw:text}}));
+  else {
+   evidences.push(createLensEvidence({source:'local-ocr',type:'text-observation',value:text,confidence,metadata}));
+   if(/\b(?:HNO3|H2SO4|HCl|NaOH|NaCl|H3PO4|NH3|CH3COOH)\b/i.test(text)||/\b(?:[A-Z][a-z]?\d*){2,}\b/.test(text))
+    evidences.push(createLensEvidence({source:'local-ocr',type:'formula-observation',value:text,confidence,metadata}));
+  }
+ }
+ return {evidences,code:evidences.find(e=>e.type==='code-observation')?.value||'',text:evidences.filter(e=>e.type==='text-observation').map(e=>e.value).join(' '),runtime:String(result?.runtime||'PP-OCRv6 Tiny'),backend:String(result?.backend||'unknown')};
+}
+function resolveLensLocalSignals({code='',text='',textQuality=0,ocrResult=null,indexEvidence=null,extraEvidence=[],expanded=false}={}){
  const evidences=[];if(indexEvidence)evidences.push(indexEvidence);evidences.push(...extraEvidence);
- const rawCode=String(code||'').trim(),id=rawCode?qrExtractId(rawCode):'';
+ const ocr=ocrResult?parseLensOcrResult(ocrResult):{evidences:[],code:'',text:''};
+ evidences.push(...ocr.evidences);
+ const rawCode=String(code||'').trim(),id=rawCode?qrExtractId(rawCode):'',ocrId=ocr.code||normalizeLensNexusCode(text);
  if(rawCode)evidences.push(createLensEvidence({source:'camera',type:'code-observation',value:id||rawCode,confidence:100,metadata:{raw:rawCode,format:'qr'}}));
  if(text)evidences.push(createLensEvidence({source:'camera',type:'text-hypothesis',value:String(text).slice(0,2500),confidence:textQuality,metadata:{auxiliary:true}}));
+ const observedText=[ocr.text,text].filter(Boolean).join(' ').slice(0,2500);
  const inventoryExact=id?state.inventory.find(r=>r.id===id):null;
  if(inventoryExact)evidences.push(createLensEvidence({source:'inventory',type:'identity',value:{id:inventoryExact.id,name:inventoryExact.name,formula:inventoryExact.formula},confidence:100,metadata:{match:'exact-code',record:inventoryExact}}));
- else for(const hit of lensMatchesFromText(state.inventory,text).slice(0,3))evidences.push(createLensEvidence({source:'inventory',type:'identity',value:{id:hit.r.id,name:hit.r.name,formula:hit.r.formula},confidence:Math.min(95,Math.round(textQuality*.7+Math.min(hit.score,200)*.12)),metadata:{match:'text-candidate',score:hit.score,record:hit.r}}));
+ else if(ocrId){const record=state.inventory.find(r=>r.id===ocrId);if(record)evidences.push(createLensEvidence({source:'inventory',type:'identity',value:{id:record.id,name:record.name,formula:record.formula},confidence:95,metadata:{match:'ocr-code',record,localOCR:true}}))}
+ else for(const hit of lensMatchesFromText(state.inventory,observedText).slice(0,3)){
+  const observed=ocr.evidences.find(e=>e.local&&(norm(e.value).includes(norm(hit.r.name))||hit.r.formula&&norm(e.value).includes(norm(hit.r.formula))));
+  const confidence=Math.min(95,Math.round((observed?.confidence||textQuality)*.7+Math.min(hit.score,200)*.12));
+  const exactOcr=ocr.evidences.some(e=>e.local&&e.confidence>=85&&(norm(e.value).includes(norm(hit.r.name))||hit.r.formula&&norm(e.value).includes(norm(hit.r.formula))));
+  if(exactOcr&&hit.exactField&&confidence>=65)evidences.push(createLensEvidence({source:'inventory',type:'identity',value:{id:hit.r.id,name:hit.r.name,formula:hit.r.formula},confidence,metadata:{match:'ocr-text',score:hit.score,record:hit.r,localOCR:true}}));
+ }
  const catalogExact=id?state.catalog.find(r=>r.id===id||norm(r.originalNumber)===norm(rawCode)):null;
  if(catalogExact)evidences.push(createLensEvidence({source:'catalog',type:'identity',value:{id:catalogExact.id,name:catalogExact.name,formula:catalogExact.formula},confidence:100,metadata:{match:'exact-code',record:catalogExact}}));
- else for(const hit of lensMatchesFromText(state.catalog,text).slice(0,3))evidences.push(createLensEvidence({source:'catalog',type:'identity',value:{id:hit.r.id,name:hit.r.name,formula:hit.r.formula},confidence:Math.min(92,Math.round(textQuality*.65+Math.min(hit.score,200)*.12)),metadata:{match:'text-candidate',score:hit.score,record:hit.r}}));
+ else if(ocrId){const record=state.catalog.find(r=>r.id===ocrId);if(record)evidences.push(createLensEvidence({source:'catalog',type:'identity',value:{id:record.id,name:record.name,formula:record.formula},confidence:95,metadata:{match:'ocr-code',record,localOCR:true}}))}
+ else for(const hit of lensMatchesFromText(state.catalog,observedText).slice(0,3)){
+  const exactOcr=ocr.evidences.some(e=>e.local&&e.confidence>=85&&(norm(e.value).includes(norm(hit.r.name))||hit.r.formula&&norm(e.value).includes(norm(hit.r.formula))));
+  const evidence=ocr.evidences.find(e=>e.local&&e.confidence>=85&&(norm(e.value).includes(norm(hit.r.name))||hit.r.formula&&norm(e.value).includes(norm(hit.r.formula))));
+  const confidence=Math.min(92,Math.round((evidence?.confidence||textQuality)*.65+Math.min(hit.score,200)*.12));
+  if(exactOcr&&hit.exactField&&confidence>=65)evidences.push(createLensEvidence({source:'catalog',type:'identity',value:{id:hit.r.id,name:hit.r.name,formula:hit.r.formula},confidence,metadata:{match:'ocr-text',score:hit.score,record:hit.r,localOCR:true}}));
+ }
  const identity=evidences.filter(e=>e.type==='identity').sort((a,b)=>b.confidence-a.confidence)[0];
- const query=[id,text,identity?.metadata?.record?.name,identity?.metadata?.record?.formula].filter(Boolean).join(' ');
+ const query=[id,ocrId,observedText,identity?.metadata?.record?.name,identity?.metadata?.record?.formula].filter(Boolean).join(' ');
  evidences.push(...searchLensDocuments(query));
  return buildNexusLensContext(evidences,{expanded});
 }
@@ -1460,6 +1518,7 @@ function sanitizeLensProviderAnalysis(raw){
  };
  const generatedClaim=[analysis.hypothesis,...analysis.objects].filter(Boolean).join(' ');
  if(lensProviderChemicalClaim(generatedClaim)){
+  analysis.rejectedClaims=[analysis.hypothesis,...analysis.objects].filter(item=>lensProviderChemicalClaim(item)).slice(0,8);
   analysis.limitations=[...analysis.limitations,'NEXUS descartó una identidad química inferida sólo por imagen.'];
   analysis.hypothesis=(analysis.category==='frasco'||analysis.category==='reactivo')
    ?'Frasco o recipiente de laboratorio'
@@ -1475,7 +1534,7 @@ function lensVisionEvidence(providerResult){
  if(analysis.uncertain)return [createLensEvidence({
   source:providerResult.provider,
   type:'visual-rejection',
-  value:{hypothesis:analysis.hypothesis||'',category:analysis.category,reason:'provider-uncertain'},
+  value:{hypothesis:analysis.hypothesis||'',category:analysis.category,reason:'provider-uncertain',rejectedClaims:analysis.rejectedClaims||[]},
   confidence:analysis.confidence,
   local:false,
   metadata:{tier:'second-opinion',model:providerResult.model,cacheHit:Boolean(providerResult.cacheHit),chemicalCertainty:false}
@@ -1542,7 +1601,7 @@ function lensStateFromContext(context){
  if(context.status==='candidate')return ['local','Coincidencia local probable','Requiere verificación física antes de usar el material.'];
  if(context.status==='hypothesis'){const visualRows=context.evidenceGroups?.visualHypotheses||[],hasLocal=visualRows.some(e=>e.local);return hasLocal?['hypothesis','Hipótesis visual local','La imagen aporta una propuesta; no confirma una identidad química.']:['hypothesis','Hipótesis externa · NO CONFIRMADA','xKiro aporta una segunda opinión visual; no confirma identidad ni composición.'];}
  const rejected=context.evidences?.find(e=>e.type==='visual-rejection');if(context.status==='unknown'&&rejected)return ['empty','Sin evidencia suficiente','NEXUS rechazó la mejor coincidencia en lugar de inventar una identificación.'];
- const localError=context.evidences?.find(e=>e.type==='local-engine-status');if(localError)return ['offline','Modelo local no disponible',localError.metadata.error];
+ const localError=context.evidences?.find(e=>e.type==='local-engine-status'||e.type==='local-ocr-status');if(localError)return ['offline','Modelo local no disponible',localError.metadata.error];
  if(!navigator.onLine)return ['offline','Modo local · sin coincidencia suficiente','Ajustá el encuadre a un objeto soportado y volvé a analizar.'];
  const providerState=context.evidences?.find(e=>e.type==='provider-status'&&['not-configured','disabled'].includes(e.value));if(providerState)return ['unavailable',providerState.value==='not-configured'?'Reconocimiento visual externo no configurado':'Reconocimiento visual externo desactivado','QR y conocimiento local siguen disponibles.'];
  return ['empty','Sin coincidencias','No se encontró evidencia suficiente para identificar el objeto.'];
@@ -1552,8 +1611,9 @@ function renderLensResult(result){
  const box=$('#lensResult'),evidence=$('#lensEvidence');if(!box||!evidence)return;
  const record=result.identity?.record||null,visual=lensVisualEvidence(result),external=result.evidenceGroups?.externalInformation||[],title=result.status==='confirmed'?'CONFIRMADO LOCALMENTE':result.status==='identified'?'IDENTIFICADO':result.status==='candidate'?'Identificación propuesta':result.status==='hypothesis'?'HIPÓTESIS VISUAL':'Sin identificación';const proposal=record?.name||visual?.hypothesis||visual?.category||'No se pudo proponer un objeto';const origin=result.status==='confirmed'?'Coincidencia exacta de código NEXUS':record?`${result.identity?.source||'local'} · coincidencia contextual`:visual?'Visión multimodal · hipótesis visual':'Sin identidad local; la calidad de imagen no identifica objetos';const confidence=record?result.identity?.confidence:visual?.confidence||0;
  const sourceHtml=external.length?`<div class="lens-source-list"><strong class="muted">Fuentes externas</strong>${external.slice(0,4).map(e=>{const value=e.value||{},url=safeExternalUrl(value.url);return `<div class="lens-source"><strong>${escapeHtml(value.title||e.source)}</strong>${value.snippet?`<div>${escapeHtml(value.snippet).slice(0,230)}</div>`:''}${url?`<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">Abrir fuente</a>`:''}</div>`}).join('')}</div>`:'';
- box.innerHTML=`<div class="badge ${result.status==='confirmed'?'ok':result.status==='unknown'?'warn':''}">${escapeHtml(title)}</div><h3 class="lens-proposal">${escapeHtml(proposal)}</h3><div class="muted">${escapeHtml(origin)}</div><div class="footer-note">${record?.location?'Ubicación: '+escapeHtml(record.location)+' · ':''}${result.evidences.filter(e=>e.source==='inventory'&&e.type==='identity').length} coincidencias de inventario · ${result.evidences.filter(e=>e.source==='catalog'&&e.type==='identity').length} de catálogo · ${result.documents.length} documentos</div><div class="lens-meta"><span class="badge">${result.evidences.some(e=>e.metadata?.scoreKind==='cosine-similarity')&&result.status==='hypothesis'?'Similitud visual':'Confianza'} ${escapeHtml(String(confidence||0))}%</span><span class="badge ${result.local?'ok':'warn'}">${result.local?'Evidencia local':'Evidencia combinada'}</span>${record?.id?`<span class="badge">${escapeHtml(record.id)}</span>`:''}</div>${record?`<div class="footer-note">${result.status==='confirmed'?'La identidad proviene de un código NEXUS exacto.':'No usar como confirmación química: verificá envase, etiqueta y ficha de seguridad.'}</div>`:visual?`<div class="footer-note">La visión identifica rasgos visibles, no el contenido ni la composición del material.</div>`:'<div class="footer-note">Podés ajustar el encuadre, buscar un código o consultar los datos locales.</div>'}${sourceHtml}`;
- evidence.innerHTML='<h3>Origen de la evidencia</h3>'+result.evidences.map(e=>`<div class="result-card"><strong>${escapeHtml(e.source)} · ${escapeHtml(e.type)}</strong><div class="muted">${e.local?'local':'externa'} · ${e.metadata?.scoreKind==='cosine-similarity'?'similitud':'confianza'} ${e.confidence}%</div><div>${escapeHtml(typeof e.value==='string'?e.value:JSON.stringify(e.value))}</div></div>`).join('');
+ const visualScore=result.evidences.some(e=>e.metadata?.scoreKind==='cosine-similarity')&&result.status==='hypothesis';
+ box.innerHTML=`<div class="badge ${result.status==='confirmed'?'ok':result.status==='unknown'?'warn':''}">${escapeHtml(title)}</div><h3 class="lens-proposal">${escapeHtml(proposal)}</h3><div class="muted">${escapeHtml(origin)}</div><div class="footer-note">${record?.location?'Ubicación: '+escapeHtml(record.location)+' · ':''}${result.evidences.filter(e=>e.source==='inventory'&&e.type==='identity').length} coincidencias de inventario · ${result.evidences.filter(e=>e.source==='catalog'&&e.type==='identity').length} de catálogo · ${result.documents.length} documentos</div><div class="lens-meta"><span class="badge">${visualScore?'Similitud visual · no es probabilidad calibrada':'Confianza '+escapeHtml(String(confidence||0))+'%'}</span><span class="badge ${result.local?'ok':'warn'}">${result.local?'Evidencia local':'Evidencia combinada'}</span>${record?.id?`<span class="badge">${escapeHtml(record.id)}</span>`:''}</div>${record?`<div class="footer-note">${result.status==='confirmed'?'La identidad proviene de un código NEXUS exacto.':'No usar como confirmación química: verificá envase, etiqueta y ficha de seguridad.'}</div>`:visual?`<div class="footer-note">La visión identifica rasgos visibles, no el contenido ni la composición del material.</div>`:'<div class="footer-note">Podés ajustar el encuadre, buscar un código o consultar los datos locales.</div>'}${sourceHtml}`;
+ evidence.innerHTML='<h3>Origen de la evidencia</h3>'+result.evidences.map(e=>`<div class="result-card"><strong>${escapeHtml(e.source)} · ${escapeHtml(e.type)}</strong><div class="muted">${e.local?'local':'externa'} · ${e.metadata?.scoreKind==='cosine-similarity'?'similitud no calibrada':'confianza '+e.confidence+'%'}</div><div>${escapeHtml(typeof e.value==='string'?e.value:JSON.stringify(e.value))}</div></div>`).join('');
  const selected=$('#lensSelectedObject'),frameHint=$('#lensFrameHint');if(selected)selected.textContent=record?.name||visual?.hypothesis||'Sin objeto confirmado';if(frameHint)frameHint.textContent=result.status==='confirmed'?'Código local confirmado':result.status==='candidate'?'Coincidencia local':result.status==='hypothesis'?'Hipótesis visual':'Sin coincidencia';
  const [kind,label,detail]=lensStateFromContext(result);setLensUiState(kind,label,detail);lensSetContextActions(result);
 }
@@ -1582,6 +1642,7 @@ function fuseLensLocalVision(context,result){
    durationMs:result.durationMs,
    margin:result.margin,
    rejectGap:result.rejectGap,
+   multiView:result.multiView||null,
    rejectionReason:result.rejectionReason||''
   }
  }));
@@ -1592,7 +1653,7 @@ function fuseLensLocalVision(context,result){
    type:'visual-rejection',
    value:{
     candidate:best.label,
-    similarity:Math.round(best.similarity*100),
+    similarity:best.similarity,
     reason:result.rejectionReason||'insufficient-evidence'
    },
    confidence:Math.round(best.similarity*100),
@@ -1622,6 +1683,7 @@ function fuseLensLocalVision(context,result){
     runtime:result.backend,
     scoreKind:'cosine-similarity',
     calibratedProbability:false,
+    multiView:result.multiView||null,
     chemicalCertainty:false,
     localVision:true,
     candidates:result.candidates
@@ -1668,7 +1730,16 @@ async function runNexusLensPipeline(source,label='imagen',{expand=false}={}){
  if(state.lensBusy)return {ok:false,error:'NEXUS LENS ya está analizando una imagen.'};state.lensBusy=true;setLensUiState('analyzing','Analizando localmente','Comprobando captura y código NEXUS antes de usar servicios externos.');
  try{
   const frame=captureLensFrame(source),quality=analyzeLensImageQuality(frame),raw=await decodeLensCode(frame),indexEvidence=await ensureLensIndexedDocuments();
-  let context=resolveLensLocalSignals({code:raw,indexEvidence,extraEvidence:[quality],expanded:expand});
+  let ocrResult=null,ocrFailure=null;
+  if(!raw&&quality.value.usable){
+   if(typeof globalThis.NexusOffline?.recognizeText!=='function')ocrFailure='Runtime PP-OCRv6 Tiny no disponible; Lens continúa sin afirmar lectura OCR.';
+   else try{ocrResult=await globalThis.NexusOffline.recognizeText(frame)}
+   catch(error){ocrFailure=error.message||String(error)}
+  }
+  let context=resolveLensLocalSignals({code:raw,ocrResult,indexEvidence,extraEvidence:[
+   quality,
+   ...(ocrFailure?[createLensEvidence({source:'local-ocr',type:'local-ocr-status',value:'unavailable',metadata:{runtime:'PP-OCRv6 Tiny',error:ocrFailure}})]:[])
+  ],expanded:expand});
   lensLastEmbedding=null;$('#lensSaveReferenceBtn').disabled=true;
   if(context.status!=='confirmed'&&globalThis.NexusOffline){
    setLensUiState('analyzing','Detectando categoría localmente','Modelo visual real · una captura · sin enviar imágenes.');
@@ -2132,7 +2203,8 @@ async function prepareOfflineEngine(group){
  try{
   const result=await engine.prepare(group,progress=>{if(status)status.textContent=`Preparando motor ${group==='voice'?'de voz':'visual'} offline · ${Math.round(progress.done/progress.total*100)} %`;});
   if(group==='voice'){if(!voiceMonitoring)await engine.prepareVoice();}else await engine.prepareVision();
-  if(status)status.textContent=`${group==='voice'?'Voz local lista · VOSK':'Motor visual listo · '+engine.diagnostics.lens.runtime}${result.controlled?'':' · cerrá y reabrí NEXUS para habilitar el arranque offline'}`;
+  const lens=engine.diagnostics.lens;
+  if(status)status.textContent=`${group==='voice'?'Voz local lista · VOSK':`Vision · MobileCLIP-S0 ${lens.runtime} · OCR ${lens.ocr}${lens.ocrError?' · '+lens.ocrError:''}`}${result.controlled?'':' · cerrá y reabrí NEXUS para habilitar el arranque offline'}`;
   if(!result.persistent)toast('Modelos guardados. El navegador no garantizó almacenamiento persistente; verificá modo avión antes de la expo.');
   return true;
  }catch(error){if(status)status.textContent='Error recuperable · '+error.message;return false}
@@ -2188,7 +2260,7 @@ function initVoice(){
  const btn=$('#voiceToggleBtn');if(!btn)return;btn.onclick=()=>voiceMonitoring?stopVoiceRecognition():startVoiceRecognition();
  $('#voicePermissionBtn').onclick=()=>startVoiceRecognition();$('#voiceSpeakBtn').onclick=()=>speakText('El sistema está listo. Decime una orden.');
  $('#lensSaveReferenceBtn').onclick=saveLensVisualReference;
- globalThis.addEventListener('nexus-offline-status',event=>{if(event.detail.part==='lens')$('#lensEngineStatus').textContent=`LOCAL · ${event.detail.runtime} · ${event.detail.embedding}${event.detail.durationMs?` · ${event.detail.durationMs} ms`:''}`;});
+ globalThis.addEventListener('nexus-offline-status',event=>{if(event.detail.part==='lens'){const d=event.detail;$('#lensEngineStatus').textContent=`OCR: PP-OCRv6 Tiny · detector ${d.ocrDetector} · recognizer ${d.ocrRecognizer} · ${d.ocrBackend} · cached ${d.ocrCached?'sí':'no'} · ${d.ocrDurationMs||0} ms · lines ${d.ocrLines||0} | Vision: MobileCLIP-S0 · ${d.runtime||'WASM/WebGPU'}`;}});
  // Android requires a user gesture to resume audio after a cold launch.
  $('#voiceStatusText').textContent='Tocá Activar para escuchar localmente · wake word “Nexus”';
 }

@@ -57,6 +57,23 @@ function rank(embedding) {
 
   return {accepted,rejectionReason,margin,rejectGap,candidates:rows.slice(0,4)};
 }
+async function infer(pixels) {
+  const input = new ort.Tensor('float32', new Float32Array(pixels), [1,3,256,256]);
+  let output;
+  try {
+    try { output = await session.run({pixel_values:input}); }
+    catch (error) {
+      if (backend !== 'WebGPU') throw error;
+      await initialize(true);
+      output = await session.run({pixel_values:input});
+    }
+    const embedding = normalized(output.image_embeds.data);
+    return {embedding,rank:rank(embedding)};
+  } finally {
+    input.dispose();
+    if(output)for (const tensor of Object.values(output)) tensor.dispose();
+  }
+}
 self.onmessage = async ({data}) => {
   const {id, type} = data;
   if (busy) { self.postMessage({id,error:'Motor ocupado'}); return; }
@@ -65,18 +82,18 @@ self.onmessage = async ({data}) => {
     await initialize(!!data.forceWasm);
     if (type === 'prepare') { self.postMessage({id,result:{backend,model:prototypes.model}}); return; }
     const started = performance.now();
-    // Preprocessing: RGB float32 [0,1], 256x256, exact model card configuration.
-    const input = new ort.Tensor('float32', new Float32Array(data.pixels), [1,3,256,256]);
-    let output;
-    try { output = await session.run({pixel_values:input}); }
-    catch (error) {
-      if (backend !== 'WebGPU') throw error;
-      await initialize(true);
-      output = await session.run({pixel_values:input});
-    } finally { input.dispose(); }
-    const embedding = normalized(output.image_embeds.data);
-    for (const tensor of Object.values(output)) tensor.dispose();
-    self.postMessage({id,result:{...rank(embedding),embedding,backend,model:prototypes.model,
+    const views=(Array.isArray(data.pixels)?data.pixels:[data.pixels]).filter(Boolean).slice(0,2);
+    if(!views.length)throw new Error('No se recibieron vistas visuales.');
+    const results=[];
+    for(const pixels of views)results.push(await infer(pixels));
+    const embedding=normalized(results.reduce((sum,result)=>sum.map((value,index)=>value+result.embedding[index]),new Array(results[0].embedding.length).fill(0)));
+    const fused=rank(embedding),bestId=fused.candidates[0]?.id;
+    const agreement=results.length===1||results.length===2&&results.every(result=>result.rank.candidates[0]?.id===bestId);
+    const allAccepted=results.every(result=>result.rank.accepted);
+    const accepted=fused.accepted&&allAccepted&&agreement;
+    const rejectionReason=accepted?'':!agreement?'multi-view-disagreement':!allAccepted?results.find(result=>!result.rank.accepted)?.rank.rejectionReason||'insufficient-evidence':fused.rejectionReason;
+    self.postMessage({id,result:{...fused,accepted,rejectionReason,embedding,backend,model:prototypes.model,
+      multiView:{views:results.length,agreement,labels:results.map(result=>result.rank.candidates[0]?.label||'')},
       durationMs:Math.round(performance.now()-started),at:new Date().toISOString()}});
   } catch (error) { self.postMessage({id,error:error.message||String(error)}); }
   finally { busy = false; }

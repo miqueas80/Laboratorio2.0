@@ -16,7 +16,7 @@ function worker({failInstall=false}={}){
 }
 test('PWA: instalación local completa, navegación /Laboratorio2.0/ y lectores disponibles sin red',async()=>{
  const w=worker();await w.lifecycle('install');await w.lifecycle('activate');
- for(const path of ['./','./?source=pwa','./documents','./app.js?v=123','./catalogo_maestro.json','./pdf.mjs','./pdf.worker.mjs','./document-worker.js','./jszip.min.js','./xlsx.full.min.js']){
+ for(const path of ['./','./?source=pwa','./documents','./app.js?v=123','./catalogo_maestro.json','./pdf.mjs','./pdf.worker.mjs','./document-worker.js','./offline/ocr-worker.js','./jszip.min.js','./xlsx.full.min.js']){
   const res=await w.request(path,/documents|source|^\.\/$/.test(path)?'navigate':undefined);assert.equal(res?.status,200,path);
  }assert.equal(w.network,0);assert.equal(w.claimed,0);assert.equal(await w.request('/otra-app/app.js'),null);assert.equal(await w.request('https://cdn.example.org/x.js'),null);
 });
@@ -30,8 +30,9 @@ test('PWA: actualización incompleta conserva versión anterior y no fuerza acti
 });
 
 test('PWA: modelos preparados sobreviven activación y se sirven sin red; faltantes no fingen READY',async()=>{
- const w=worker(),key='nexus-x-models:%2FLaboratorio2.0%2F:expo-v1',url='https://miqueas80.github.io/Laboratorio2.0/offline/v1/voice/vosk-es.tar.gz';
+ const w=worker(),key='nexus-x-models:%2FLaboratorio2.0%2F:2026.10.07-r30-lens-final',url='https://miqueas80.github.io/Laboratorio2.0/offline/v1/voice/vosk-es.tar.gz';
  w.stores.set(key,new Map([[url,new Response('model bytes')]]));await w.lifecycle('install');await w.lifecycle('activate');
  assert.ok(w.stores.has(key));const res=await w.request('./offline/v1/voice/vosk-es.tar.gz');assert.equal(await res.text(),'model bytes');assert.equal(w.network,0);
  assert.equal((await w.request('./offline/v1/vision/mobileclip-s0.onnx')).status,503);
+ assert.equal((await w.request('./offline/v1/vision/ocr/PP-OCRv6_tiny_det.onnx')).status,503);
 });

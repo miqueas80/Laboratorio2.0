@@ -2,11 +2,11 @@
 
 Estado: candidato Stable / Local-First; pendiente validación física Android.
 
-Inventario NEXUS-X (111 registros), QR local, NEXUS Lens, documentos indexados,
-búsquedas semánticas locales, agente NEXUS, voz y PWA offline.
+Inventario NEXUS-X (111 registros), QR y OCR local, NEXUS Lens, documentos
+indexados, búsquedas semánticas locales, agente NEXUS, voz y PWA offline.
 Gemini y búsqueda web son complementarios: el núcleo local funciona sin ellos.
-Sin QR, Lens no identifica objetos offline. Brillo/contraste sólo evalúan calidad.
-Las hipótesis multimodales se cruzan con datos locales sin confirmar composición química.
+Sin QR o etiqueta local legible, la visión sólo propone categorías; no identifica
+el contenido químico de un recipiente. Brillo/contraste sólo evalúan calidad.
 
 Gemini consulta `/models` y aplica failover limitado ante errores temporales o modelo
 retirado. `NEXUS_CONFIG.geminiModelChain` permite configurar preferencias; sólo se
@@ -34,12 +34,13 @@ PDF.js 3.11.174 se reemplaza por una versión posterior al parche de
 GHSA-wgrm-67xf-hhpq. Además se usa `isEvalSupported:false` en cada apertura.
 Referencia: https://github.com/mozilla/pdf.js/security/advisories/GHSA-wgrm-67xf-hhpq
 
-NEXUS LENS no carga Tesseract ni un motor OCR separado. La percepción sigue un
-flujo local-first: código NEXUS/QR y contexto local primero; si no existe una
-identificación exacta y el usuario habilitó Internet, una única captura puede
-analizarse mediante el proveedor visual multimodal configurado. El texto visible,
-las fórmulas, los pictogramas y otros rasgos se interpretan dentro de ese mismo
-análisis visual, no como una función OCR independiente.
+NEXUS LENS no carga Tesseract. PP-OCRv6 Tiny y MobileCLIP-S0 se ejecutan localmente
+con ONNX Runtime Web y sus modelos se incluyen en «Preparar visión offline».
+Lens prioriza QR exacto, código y etiqueta legibles localmente; sólo el QR puede
+confirmar un registro. La visión propone categorías y nunca determina el contenido
+químico de un recipiente. Si no existe evidencia local suficiente y el usuario
+habilitó Internet, una única captura puede contrastarse con el proveedor visual
+multimodal configurado.
 
 ## Proveedor visual de NEXUS LENS
 
