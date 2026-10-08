@@ -30,7 +30,7 @@ function makePeer(){
  peer=new ManualWebRTCPeer({
   onPayload:async payload=>{
    await experimentalDB();
-   if(payload?.type==='yjs-state'){
+   if(payload?.type==='yjs-state'||payload?.type==='yjs-chunk'){
     if(!yjsBoard)throw Error('Activá primero Yjs en el otro equipo.');
     const status=await yjsBoard.receive(payload);
     output('yjsStatus',{status,tasks:yjsBoard.listTasks()});
