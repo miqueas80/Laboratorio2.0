@@ -61,7 +61,7 @@ export async function prepareOfflineShell({
   const rows=document?.records,ids=new Set();
   if(!Array.isArray(rows)||rows.length!==111||rows.some(record=>{
    const id=String(record?.id||'');
-   if(!/^NEXUS-X-\\d{4}$/.test(id)||ids.has(id))return true;
+   if(!/^NEXUS-X-\d{4}$/.test(id)||ids.has(id))return true;
    ids.add(id);return false;
   }))throw Error('Inventario canónico inesperado; no se creará la copia offline');
   const target=new URL('snapshot/inventory.json',root);
