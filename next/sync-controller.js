@@ -45,8 +45,14 @@ export class EdgeSyncController{
   const event=setRegister(this.replica,key,value,{deleted});
   try{await atomicEdgeWrites(this.db,writeOperations(parseEvent(event)))}
   catch(error){if(old)this.replica.entries.set(key,old);else this.replica.entries.delete(key);this.replica.clock=oldClock;throw error}
-  if(broadcast&&this.transport?.confirmed)await this.transport.send({type:'edge-events',events:[event]});
-  return event;
+  // A failed radio/WebRTC send must never pretend that the already committed
+  // IndexedDB write rolled back. The journal is durable; sendSnapshot can replay.
+  let delivered=false,deliveryError='';
+  if(broadcast&&this.transport?.confirmed){
+   try{await this.transport.send({type:'edge-events',events:[event]});delivered=true}
+   catch(error){deliveryError=String(error?.message||error)}
+  }
+  return {...event,delivered,deliveryError,pending:!delivered};
  }
  async receive(message){
   if(!this.transport?.confirmed)throw Error('Receptor sin vínculo verificado');
