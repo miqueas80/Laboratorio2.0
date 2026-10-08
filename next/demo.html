@@ -71,6 +71,18 @@
 <button id="syncNow">Intercambiar historial experimental</button>
 <pre id="syncResult" aria-live="polite">Sin sincronización.</pre>
 </section>
+<section>
+<h2>Yjs · tareas colaborativas por campos</h2>
+<p>Requiere el runtime local Yjs (desde el artefacto de compilación). Se sincroniza con la conexión WebRTC cifrada y el código de emparejamiento anterior; jamás toca el calendario original.</p>
+<label>Sala de colaboración <input id="yjsRoom" value="lab-experimental"></label>
+<button id="yjsEnable">Activar Yjs local</button>
+<label>ID de tarea <input id="yjsTaskId" value="tarea-demo"></label>
+<label>Título <input id="yjsTitle" placeholder="Preparar etiquetas"></label>
+<label>Notas <input id="yjsNotes" placeholder="Revisadas por cuarto año"></label>
+<button id="yjsWrite">Guardar cambios en IndexedDB experimental</button>
+<button id="yjsSync">Sincronizar estado Yjs por WebRTC</button>
+<pre id="yjsStatus" aria-live="polite">Motor Yjs opcional no cargado.</pre>
+</section>
 <p><a href="../index.html">Volver a NEXUS-X estable</a></p>
 </main>
 <script type="module" src="./demo.js"></script>
