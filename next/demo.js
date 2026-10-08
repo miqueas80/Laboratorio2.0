@@ -278,4 +278,4 @@ $('yjsSync').onclick=()=>task(async()=>{
  if(!yjsBoard)throw Error('Primero activá Yjs');
  output('yjsStatus',{sent:await yjsBoard.sendSnapshot(),tasks:yjsBoard.listTasks()});
 },'yjsStatus');
-window.addEventListener('pagehide',()=>{client?.close();documentFabric?.close();safetyClient?.close();yjsBoard?.close();peer?.close();edgeDB?.close();virtual.close()},{once:true});
+window.addEventListener('pagehide',()=>{client?.close();documentFabric?.close();safetyClient?.close();lensBridge?.close();voiceBridge?.stop();videoStream?.getTracks().forEach(track=>track.stop());yjsBoard?.close();peer?.close();edgeDB?.close();virtual.close()},{once:true});
