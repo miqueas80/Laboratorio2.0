@@ -20,7 +20,7 @@ jobs:
           cache: npm
       - run: npm ci --ignore-scripts --no-audit --no-fund
       - name: Install pinned Transformers.js without lifecycle scripts
-        run: npm install --no-save --ignore-scripts --no-audit --no-fund @huggingface/transformers@3.8.1
+        run: npm install --no-save --ignore-scripts --no-audit --no-fund @huggingface/transformers@3.8.1 playwright-core@1.56.1
       - name: Vendor local ONNX runtime
         run: node scripts/vendor-edge-transformers.mjs
       - name: Download the verified multilingual ONNX model (experimental CI only)
@@ -34,5 +34,7 @@ jobs:
           done
           echo "b60b6b43406a48bf3638526314f3d232d97058bc93472ff2de930d43686fa441  $MODEL_ROOT/tokenizer.json" | sha256sum -c -
           echo "66fc00f5f29afcaff34092e1bdd20008ca3918265a82fb9695a551e510cc4ebc  $MODEL_ROOT/onnx/model_quantized.onnx" | sha256sum -c -
-      - name: Produce and compare actual Spanish embeddings offline
-        run: node scripts/smoke-edge-embeddings.mjs
+      - name: Produce actual Spanish embeddings in a browser Web Worker (network blocked)
+        run: |
+          command -v google-chrome
+          node scripts/smoke-edge-embeddings.mjs
