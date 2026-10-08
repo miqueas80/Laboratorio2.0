@@ -1,0 +1,5 @@
+body{font-family:system-ui,sans-serif;color:#172e38;background:#eff6f7;margin:0}
+main{max-width:850px;margin:24px auto;padding:22px;background:white;border:1px solid #c8dbe0;border-radius:12px}
+section{border-top:1px solid #d0dfe4;padding:18px 0}input,button{font:inherit;padding:9px;margin:6px;border-radius:7px;border:1px solid #869eaa}
+button{background:#075d71;color:white;cursor:pointer}button:hover{background:#044c60}
+pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#f0f5f6;padding:12px;border-radius:7px}a{color:#075d71}
