@@ -176,6 +176,18 @@ $('yjsEnable').onclick=()=>task(async()=>{
  let Y;
  try{Y=await import('./vendor/yjs/yjs.bundle.mjs')}
  catch{throw Error('Runtime Yjs no instalado: copiá el artefacto local a next/vendor/yjs/. No se usará ninguna CDN.')}
+ // Clicking Activate is explicit consent to store only the ~93KB Yjs runtime
+ // together with the read-only shell and canonical inventory snapshot.
+ const settings={includeVendor:false,includeInventory:true,includeYjs:true};
+ const cached=await offlineShellStatus(settings);
+ if(!cached.ready){
+  if(!navigator.onLine)throw Error('Primero prepará los archivos de Yjs cuando estés online');
+  await prepareOfflineShell({...settings,onProgress:p=>output('yjsStatus',p)});
+  if(navigator.serviceWorker){
+   await navigator.serviceWorker.register('./semantic-sw.js',{scope:'./'});
+   await navigator.serviceWorker.ready;
+  }
+ }
  yjsBoard=new YjsLabBoard({Y,db:edgeDB,room:$('yjsRoom').value.trim(),transport:peer});
  const restored=await yjsBoard.load();
  output('yjsStatus',{restored,tasks:yjsBoard.listTasks()});
