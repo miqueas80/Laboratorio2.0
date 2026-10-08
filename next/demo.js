@@ -8,6 +8,7 @@ import {ManualWebRTCPeer} from './manual-webrtc.js';
 import {EdgeSyncController} from './sync-controller.js';
 import {readPublishedDocumentCache} from './document-source.js';
 import {SemanticEvidenceFabric} from './semantic-fabric.js';
+import {prepareSemanticAssets,semanticCacheStatus} from './model-provisioner.js';
 const $=id=>document.getElementById(id);
 let client=null,records=null,peer=null,replica=null,edgeDB=null,documentFabric=null;
 const actorKey='nexus_edge_demo_actor_v1';
