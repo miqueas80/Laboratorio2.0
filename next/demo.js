@@ -28,7 +28,14 @@ async function experimentalDB(){
 function makePeer(){
  peer?.close();
  peer=new ManualWebRTCPeer({
-  onPayload:async payload=>{await experimentalDB();output('syncResult',await replica.receive(payload))},
+  onPayload:async payload=>{
+   await experimentalDB();
+   if(payload?.type==='yjs-state'){
+    if(!yjsBoard)throw Error('Activá primero Yjs en el otro equipo.');
+    const status=await yjsBoard.receive(payload);
+    output('yjsStatus',{status,tasks:yjsBoard.listTasks()});
+   }else output('syncResult',await replica.receive(payload));
+  },
   onStatus:status=>output('pairStatus',{...status,code:peer.getPairCode()||'Todavía no calculado'})
  });
  return peer;
