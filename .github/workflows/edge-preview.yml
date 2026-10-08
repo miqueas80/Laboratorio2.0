@@ -32,6 +32,16 @@ jobs:
         with:
           python-version: '3.11'
       - run: python3 -m pip install --disable-pip-version-check --no-cache-dir pypdf==5.9.0
+      - name: OCR for scanned PDFs during build only (not shipped to browser)
+        shell: bash
+        run: |
+          if ! command -v pdftoppm || ! command -v tesseract || ! tesseract --list-langs 2>&1 | grep -qx spa; then
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq --no-install-recommends poppler-utils tesseract-ocr tesseract-ocr-spa
+          fi
+          command -v tesseract
+          command -v pdftoppm
+          tesseract --list-langs 2>&1 | grep -x spa
       - run: npm ci --ignore-scripts --no-audit --no-fund
       - name: Install pinned browser runtimes without postinstall scripts
         run: npm install --no-save --ignore-scripts --no-audit --no-fund @huggingface/transformers@3.8.1 yjs@13.6.32 esbuild@0.25.9
