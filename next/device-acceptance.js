@@ -14,7 +14,8 @@ export function deriveAutomaticEdgeChecks({
 }={}){
  const verifiedInventory=inspectMigration(inventory);
  const docs=documents?.available===true&&documents?.limited!==true&&
-   documents?.documents?.length===6&&documents?.total===6;
+   documents?.documents?.length===6&&documents?.total===6&&
+  documents.documents.every(d=>typeof d.text==='string'&&d.text.trim().length>32);
  const perf=performance?.mode==='active-virtual-scroll'&&visibleCount>=100001&&
    Number.isFinite(performance?.averageFPS)&&Number.isFinite(performance?.p95FrameMs)&&
    performance.averageFPS>=60&&performance.p95FrameMs<=1000/60;
