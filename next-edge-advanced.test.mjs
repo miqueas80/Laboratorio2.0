@@ -36,8 +36,8 @@ test('HNSW indexa 400 vectores sin bloquear ni perder la consulta exacta',()=>{
 });
 
 test('WebCrypto: dos extremos generan mismo código de verificación y cifran sin Internet',async()=>{
- const previous=globalThis.crypto;globalThis.crypto=webcrypto;
- try{
+ assert.ok(globalThis.crypto?.subtle);
+ {
   const a=await newIdentity(),b=await newIdentity();
   const id='ece18550-98e4-47ce-a2f6-e08db0d87a10';
   const one=await derivePairing(a,b.publicKey,id),two=await derivePairing(b,a.publicKey,id);
@@ -45,7 +45,7 @@ test('WebCrypto: dos extremos generan mismo código de verificación y cifran si
   const packet=await encryptPacket(one.key,{type:'edge-events',events:[{key:'calendar:a',clock:1}]});
   assert.deepEqual(await decryptPacket(two.key,packet),{type:'edge-events',events:[{key:'calendar:a',clock:1}]});
   await assert.rejects(decryptPacket(two.key,{...packet,data:packet.data.slice(0,-2)+'AA'}));
- }finally{globalThis.crypto=previous}
+ }
 });
 
 test('Dos bases IndexedDB separadas convergen mediante cambios CRDT explícitos',async()=>{
