@@ -1,48 +1,106 @@
-# NEXUS-X · Edge Architecture (experimental)
+# NEXUS-X Edge · Arquitectura experimental (PR #4)
 
-Branch: `feature/nexus-x-edge-architecture-v1`
+**Proyecto productivo preservado.** Esta rama no altera `main`, `app.js`,
+`sw.js`, los 111 registros ni los seis documentos originales. Los módulos
+`next/` se ejecutan por decisión explícita desde `next/demo.html` en un
+servidor que sirva ESTA rama, no desde la URL de producción actual.
 
-**No production data is mutated by importing these modules.** The current app, its
-111 inventory records, 6 documents, Vosk ASR, QR and xKiro gateway stay unchanged.
-Do not merge this branch into the expo release solely on green unit tests.
+## Qué se implementó
 
-## Implemented, isolated and testable
+- **BM25 + HNSW**: `search-core.js`, `hnsw.js`, `search-worker.js` y
+  `search-client.js`; la búsqueda vectorial usa embeddings reales solo si
+  el llamador los proporciona y comprueba las dimensiones.
+- **Fabric con evidencia**: `document-fabric.js`, `document-source.js`,
+  `fabric-client.js`, `semantic-fabric.js`; consulta en solo lectura los
+  documentos ya indexados por NEXUS, conserva nombres, rutas y fragmentos,
+  y no inventa citas científicas.
+- **Embeddings multilingües opcionales**: `embedding-worker.js`,
+  `embedding-client.js`, `model-provisioner.js`, `semantic-sw.js`.
+  Usan `Xenova/paraphrase-multilingual-MiniLM-L12-v2` (384 dimensiones)
+  con ONNX cuantizado q8. Todos los archivos deben quedar locales; la
+  inferencia deshabilita cualquier descarga remota.
+- **Virtualización y métricas**: `virtual-list.js`, `benchmarks.js`;
+  pruebas sintéticas de 100.001 ítems y mediciones FPS vía rAF, sin
+  afirmar que el equipo alcanzó 60 FPS o menos de 80 MB.
+- **Datos separados**: `storage.js` (IndexedDB experimental, operaciones
+  atómicas, OPFS y migración copy-only) y `dexie-adapter.js` (adaptador
+  aislado para Dexie.js inyectado por la aplicación hospedadora).
+- **Seguridad química**: `chemical-engine.js` valida checksum CAS,
+  metadatos GHS y algunas reglas de segregación ÚNICAMENTE con una SDS
+  de procedencia explícita. No certifica el almacenamiento.
+- **Agente**: `agent-dag.js` y `inspection-dag.js` preparan pasos,
+  validan dependencias y escriben el calendario experimental mediante
+  una transacción única si hay confirmación. No hacen rollback de efectos
+  físicos, interfaces o servicios externos.
+- **P2P opcional**: `sync-core.js`, `sync-controller.js`,
+  `p2p-crypto.js`, `manual-webrtc.js`: CRDT tipo registro LWW,
+  diario durable, señalización manual sin servidor, canal cifrado
+  y código de verificación comparado entre operadores. **No es Yjs
+  ni Automerge; aún falta resolver colecciones colaborativas complejas.**
+- **Visión y voz**: `lens-preprocess-worker.js` y `voice-guard.js`
+  son módulos optativos; la detección por energía NO es un wake-word
+  entrenado y no sustituye Vosk.
+- **Telemetría**: `telemetry.js` limita y sanea los eventos locales.
 
-- `search-core.js`, `search-worker.js`, `search-client.js`: indexed local
-  BM25 plus cosine when supplied valid offline vectors. Query runs in a Worker;
-  supports up to 150k documents per index subject to actual device capacity.
-- `virtual-list.js`: fixed-height viewport DOM virtualizer.
-- `storage.js`: separate IndexedDB V1 store, receipt-based **copy-only**
-  inventory migration with dry-run default; native atomic transactions; OPFS
-  attachment functions. Original app's data is never deleted.
-- `chemical-engine.js`: validates CAS check digits and SDS-sourced GHS fields,
-  checks a small explicit incompatibility rule set. Unverified records remain
-  unknown, not assumed safe.
-- `agent-dag.js`: topology and cycle validation, reads + staged writes committed
-  in one atomic DB transaction; refuses irreversible UI/remote writes.
-- `sync-core.js`: prototype LWW register CRDT with deterministic merges and
-  tombstones. **Not** WebRTC transport or full Yjs/Automerge collaboration.
-- `lens-preprocess-worker.js`: opt-in ImageBitmap + OffscreenCanvas preprocessing.
-- `voice-guard.js`: opt-in energy detection hook; **not** a trained keyword spotter.
-- `telemetry.js`: bounded, redacted, local structured diagnostics.
+## Preparación de un modelo multilingüe, sin obligar a la expo a descargarlo
 
-## Pending before claiming the full requested specification
+La PWA operativa funciona sin estos recursos extra. La instalación ES opcional
+y requiere consentimiento explícito. Los pesos ONNX cuantizados pesan
+aproximadamente 118 MB y el tokenizer unos 17 MB: más runtime y CacheStorage
+incrementan mucho el espacio exigido, por lo que **no se autoinstalan**.
 
-1. Choose, license, quantize, package and benchmark a **Spanish/multilingual**
-   text embedding model compatible with Android WebGPU/WASM. This branch uses
-   cosine vectors supplied by a caller, but does not generate text embeddings.
-2. HNSW index and BM25 score calibration, 100,000+ record stress tests on the
-   target smartphone, 60 FPS profiling and the requested less-than-80 MB DOM
-   memory budget. Neither FPS nor RAM target has been verified.
-3. Actual Dexie adapter and verified OPFS migration for the 6 production documents.
-4. A professionally curated SDS/CAS reference and expert review before storage
-   incompatibility warnings may be treated as safety decisions.
-5. Couple the DAG only to reversible local tools and a permissioned event system;
-   arbitrary UI actions cannot be rolled back.
-6. An encrypted, authenticated LAN signaling/pairing channel for Yjs/Automerge
-   transport. WebRTC peers need signaling, even on a LAN without Internet.
-7. Physical Android offline, voice TTS, QR, model-cache and SW regression tests,
-   plus a backup/rollback drill and formal release authorization.
+**En un Codespace o entorno de compilación y solo en la rama experimental:**
 
-Run `npm test` (includes `next-edge.test.mjs`) on a branch. Benchmarks should
-run on actual Android hardware. No new CDN or mandatory server dependency.
+1. Instalar localmente la versión auditada y fija:
+   `npm install --no-save --ignore-scripts @huggingface/transformers@3.8.1`
+2. Copiar la biblioteca y su runtime ONNX matching:
+   `node scripts/vendor-edge-transformers.mjs`
+3. Servir esta rama en una web HTTPS o `localhost`. Para publicarla
+   definitivamente hay que incluir `next/vendor/` en la distribución;
+   hoy **no** se incluyó en el repositorio de producción.
+4. Abrir `next/demo.html`, comprobar recursos y elegir conscientemente
+   «Preparar modelo multilingüe». El instalador descarga archivos desde
+   Hugging Face únicamente esa vez y verifica SHA-256 de los dos ficheros
+   más grandes. `next/semantic-sw.js` sirve los archivos cacheados
+   bajo el mismo origen después de que la pestaña quede controlada.
+5. Recargar, comprobar `installed` y activar búsqueda híbrida de documentos.
+
+**Importante:** `next/vendor` no forma parte de esta PR; no se ha realizado
+ninguna inferencia real del modelo en Android. Al publicar los archivos del
+runtime deben auditarse la licencia y los checksums. En caso de falta de
+memoria o cuotas, no instales el modelo: el Fabric continúa por BM25.
+GitHub impide incluir el archivo individual de pesos de ~118 MB
+directamente en un commit normal.
+
+## Verificar
+
+- `npm test`: regresiones existentes y tests nuevos
+  (`next-edge.test.mjs`, `next-edge-advanced.test.mjs`,
+  `next-fabric.test.mjs`, `next-resilience.test.mjs`).
+- `node --check` en todos los módulos de `next/`, obligatorio en CI.
+- `next/demo.html` desde un servidor local para probar BM25, 100.001
+  registros sintéticos, virtualización, FPS, documentos, DAG y WebRTC.
+- Pruebas físicas entre DOS equipos Android en una misma Wi-Fi, modo avión
+  y reinicio de aplicación; el código WebRTC no puede garantizar conexión
+  cuando la red bloquea candidatos ICE locales o mDNS.
+
+## Pendientes que no se deben confundir con funciones ya validadas
+
+1. Publicar la distribución del runtime local Transformers.js y probar
+   **embeddings efectivos** es-AR + consultas sobre los seis documentos.
+2. Calibración científica de rankings, evaluación de precisión de HNSW
+   y benchmark real de 100k, objetivo 60 FPS / menos de 80 MB.
+3. Migración productiva con Dexie + backups, manejo de cuotas y política OPFS.
+4. Validar en persona las incompatibilidades de almacenamiento con fichas
+   SDS legítimas y aprobación del responsable de seguridad.
+5. Integración transaccional del DAG en el Action Registry real, sin
+   convertir herramientas externas en falsas operaciones atómicas.
+6. Motor Yjs/Automerge de colaboración por campo/colección y políticas de
+   autenticación de laboratorios; actualmente solo LWW verificado.
+7. Keyword spotter entrenado, barge-in de TTS con control de eco y mejoras
+   de precisión de Lens sin QR.
+8. Revisión profesional de seguridad del Cloudflare Gateway, cuyo despliegue
+   es independiente del GitHub Pages frontend.
+
+**No fusionar ni activar esta rama por tener CI verde.** Requiere respaldo
+verificado, ensayos Android y decisión de publicación después de la expo.
