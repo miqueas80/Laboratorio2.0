@@ -76,7 +76,46 @@ try{
    }finally{fabric.close()}
   }finally{client.close()}
  });
+ const prepared=await page.evaluate(async()=>{
+  const {prepareOfflineShell,offlineShellStatus}=await import('./offline-shell.js');
+  const {prepareSemanticAssets,semanticCacheStatus}=await import('./model-provisioner.js');
+  // The CI files were already downloaded and SHA256-checked. This fetcher
+  // reads them from SAME ORIGIN to populate browser CacheStorage.
+  const prefix='https://huggingface.co/Xenova/paraphrase-multilingual-MiniLM-L12-v2/resolve/main/';
+  const fetcher=(url,options)=>{
+   if(!String(url).startsWith(prefix))throw Error('Origen remoto inesperado');
+   return fetch('./models/Xenova/paraphrase-multilingual-MiniLM-L12-v2/'+String(url).slice(prefix.length),options);
+  };
+  await prepareOfflineShell({includeVendor:true});
+  await prepareSemanticAssets({fetcher});
+  const registration=await navigator.serviceWorker.register('./semantic-sw.js',{scope:'./'});
+  await navigator.serviceWorker.ready;
+  if(!registration.active)throw Error('Service Worker offline no activo');
+  if(!navigator.serviceWorker.controller){
+   await new Promise((resolve,reject)=>{
+    const limit=setTimeout(()=>reject(Error('La pestaña no quedó controlada por SW')),15000);
+    navigator.serviceWorker.addEventListener('controllerchange',()=>{clearTimeout(limit);resolve()},{once:true});
+   });
+  }
+  const shell=await offlineShellStatus(),model=await semanticCacheStatus();
+  if(!shell.ready||!model.installed)throw Error('Preparación offline incompleta');
+  return {shellFiles:shell.cached,modelFiles:model.files,controlled:!!navigator.serviceWorker.controller};
+ });
+ await page.context().setOffline(true);
+ await page.reload({waitUntil:'domcontentloaded'});
+ const offline=await page.evaluate(async()=>{
+  const {LocalEmbeddingClient}=await import('./embedding-client.js');
+  const client=new LocalEmbeddingClient({timeoutMs:150000});
+  try{
+   const state=await client.prepare();
+   const vectors=await client.embed(['Matraz Erlenmeyer de vidrio'],{batchSize:1});
+   if(vectors.length!==1||vectors[0].length!==384)throw Error('Modelo offline no generó 384 dimensiones');
+   return {success:true,backend:state.backend,dimension:vectors[0].length,
+    networkOnline:navigator.onLine,serviceWorker:!!navigator.serviceWorker.controller};
+  }finally{client.close()}
+ });
  console.log(JSON.stringify({...data,elapsedMs:Math.round(performance.now()-started),
+  browserOffline:offline,prepared,
   externalRequestsBlocked:true,environment:'headless Chromium / WASM, not Android'},null,2));
 }finally{
  await browser?.close().catch(()=>{});
