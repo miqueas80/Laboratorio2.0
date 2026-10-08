@@ -48,7 +48,8 @@ export function searchIndex(index,query,{vector=null,limit=20,lexicalWeight=.7,s
       scores.set(id,(scores.get(id)||0)+idf*numerator/denominator);
     }
   }
-  const maxBm25=Math.max(0,...scores.values()),out=[],exact=fold(query).trim();
+  let maxBm25=0;for(const value of scores.values())if(value>maxBm25)maxBm25=value;
+  const out=[],exact=fold(query).trim();
   const ids=qVector?index.docs.keys():scores.keys();
   for(const id of ids){
     const doc=index.docs.get(id),lexical=scores.get(id)||0;
