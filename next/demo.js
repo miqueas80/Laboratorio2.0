@@ -200,7 +200,7 @@ $('fabricStatus').onclick=()=>task(async()=>output('fabricResults',{
  model:await semanticCacheStatus(),shell:await offlineShellStatus({includeInventory:true})
 }),'fabricResults');
 $('offlineShell').onclick=()=>task(async()=>{
- if(!confirm('¿Autorizar la preparación offline de Edge Lab? Se guardarán la interfaz y los motores locales, aproximadamente 23 MB adicionales, en el navegador.'))return;
+ if(!confirm('¿Autorizar la preparación offline de Edge Lab? Se guardarán la interfaz, los módulos y el índice de los seis documentos canónicos en el navegador. Los modelos de IA se preparan aparte.'))return;
  const result=await prepareOfflineShell({includeInventory:true,includeDocuments:true,onProgress:p=>output('fabricResults',p)});
  if(!navigator.serviceWorker)throw Error('Service Worker no disponible');
  await navigator.serviceWorker.register('./semantic-sw.js',{scope:'./'});
