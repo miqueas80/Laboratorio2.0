@@ -52,7 +52,28 @@ try{
    const dot=(a,b)=>a.reduce((sum,x,i)=>sum+x*b[i],0);
    const related=dot(vectors[0],vectors[1]),unrelated=dot(vectors[0],vectors[2]);
    if(related<=unrelated)throw Error('Sin recuperación semántica pertinente: '+JSON.stringify({related,unrelated}));
-   return {model:state.model,backend:state.backend,dimension:384,vectors:3,related,unrelated};
+   const {EvidenceFabric}=await import('./fabric-client.js');
+   const {documentRows}=await import('./document-fabric.js');
+   const documents=[
+    {name:'Guía del material de vidrio',path:'guias/erlenmeyer.md',
+     chunks:[samples[1]]},
+    {name:'Noticias deportivas',path:'noticias/deportes.md',
+     chunks:[samples[2]]}
+   ];
+   const sourceRows=documentRows(documents);
+   const sourceVectors=await client.embed(sourceRows.map(x=>x.text));
+   const fabric=new EvidenceFabric();
+   try{
+    await fabric.build(documents,{vectors:sourceVectors});
+    const evidence=await fabric.query(samples[0],{vector:vectors[0],limit:2});
+    if(!evidence.length||evidence[0].source.path!=='guias/erlenmeyer.md')
+     throw Error('RAG no recuperó el documento científico correcto: '+JSON.stringify(evidence));
+    if(!(evidence[0].similarity>0.1))
+     throw Error('El índice híbrido no utilizó la similitud vectorial: '+JSON.stringify(evidence));
+    return {model:state.model,backend:state.backend,dimension:384,
+     vectors:3,related,unrelated,ragSource:evidence[0].source.path,
+     ragSimilarity:evidence[0].similarity,ragFragments:evidence.length};
+   }finally{fabric.close()}
   }finally{client.close()}
  });
  console.log(JSON.stringify({...data,elapsedMs:Math.round(performance.now()-started),
