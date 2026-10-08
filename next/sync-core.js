@@ -12,7 +12,8 @@ export function createReplica(actor){
 }
 export function setRegister(replica,key,value,{deleted=false}={}){
  if(!replica||!validActor(replica.actor)||typeof key!=='string'||!key||key.length>180)throw Error('Registro inválido');
- replica.clock=Math.max(replica.clock,...[...replica.entries.values()].map(x=>x.clock))+1;
+ for(const entry of replica.entries.values())if(entry.clock>replica.clock)replica.clock=entry.clock;
+ replica.clock++;
  const event={key,actor:replica.actor,clock:replica.clock,deleted:Boolean(deleted),value:deleted?null:structuredClone(value)};
  replica.entries.set(key,event);return structuredClone(event);
 }
