@@ -1,0 +1,38 @@
+name: NEXUS Edge real Spanish embedding inference
+on:
+  workflow_dispatch:
+  push:
+    branches: [feature/nexus-x-edge-architecture-v1]
+    paths:
+      - ".github/workflows/edge-real-embedding.yml"
+      - "scripts/smoke-edge-embeddings.mjs"
+permissions:
+  contents: read
+jobs:
+  verify-spanish-semantic:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Install pinned Transformers.js without lifecycle scripts
+        run: npm install --no-save --ignore-scripts --no-audit --no-fund @huggingface/transformers@3.8.1
+      - name: Vendor local ONNX runtime
+        run: node scripts/vendor-edge-transformers.mjs
+      - name: Download the verified multilingual ONNX model (experimental CI only)
+        run: |
+          set -euo pipefail
+          MODEL_ROOT="next/models/Xenova/paraphrase-multilingual-MiniLM-L12-v2"
+          mkdir -p "$MODEL_ROOT/onnx"
+          BASE="https://huggingface.co/Xenova/paraphrase-multilingual-MiniLM-L12-v2/resolve/main"
+          for FILE in config.json tokenizer_config.json special_tokens_map.json tokenizer.json onnx/model_quantized.onnx; do
+            curl --fail --location --retry 3 --retry-delay 3 --connect-timeout 20 --max-time 240 --output "$MODEL_ROOT/$FILE" "$BASE/$FILE"
+          done
+          echo "b60b6b43406a48bf3638526314f3d232d97058bc93472ff2de930d43686fa441  $MODEL_ROOT/tokenizer.json" | sha256sum -c -
+          echo "66fc00f5f29afcaff34092e1bdd20008ca3918265a82fb9695a551e510cc4ebc  $MODEL_ROOT/onnx/model_quantized.onnx" | sha256sum -c -
+      - name: Produce and compare actual Spanish embeddings offline
+        run: node scripts/smoke-edge-embeddings.mjs
