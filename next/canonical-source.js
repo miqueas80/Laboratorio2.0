@@ -23,7 +23,7 @@ export function validateCanonicalSnapshot(snapshot){
   if(!ref||seen.has(ref.path)||doc.originalBytes!==ref.size||doc.blobRevision!==ref.revision||
     !/^[0-9a-f]{64}$/.test(String(doc.sha256||''))||
     typeof doc.text!=='string'||doc.text.length>650000||doc.textCharacters!==doc.text.length||
-    !['text','truncated','no-text','error'].includes(doc.extractionStatus))
+    !['text','truncated','no-text','error','ocr-partial','ocr-complete'].includes(doc.extractionStatus))
    throw Error('Documento canónico inesperado, duplicado o sin procedencia verificada');
   seen.add(ref.path);
   documents.push({
