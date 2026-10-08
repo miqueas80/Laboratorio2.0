@@ -56,6 +56,18 @@ $('stress').onclick=()=>task(async()=>{
 $('search').onclick=()=>task(async()=>{if(!client)throw Error('Primero prepará un índice');output('results',await client.query($('query').value,{limit:10}))},'results');
 $('integrity').onclick=()=>task(async()=>output('checks',inspectMigration(await getRecords())),'checks');
 $('safety').onclick=()=>task(async()=>output('checks',evaluateStorage(await getRecords())),'checks');
+$('fabricLoad').onclick=()=>task(async()=>{
+ const source=await readPublishedDocumentCache();
+ if(!source.available||!source.documents.length)throw Error(source.reason||'Primero indexá los documentos en NEXUS estable');
+ documentFabric?.close();documentFabric=new SemanticEvidenceFabric();
+ const result=await documentFabric.prepare(source.documents,{semantic:$('semanticMode').checked,
+  onProgress:progress=>output('fabricResults',{state:'Generando embeddings locales',...progress})});
+ output('fabricResults',result);
+},'fabricResults');
+$('fabricAsk').onclick=()=>task(async()=>{
+ if(!documentFabric)throw Error('Indexá primero los documentos');
+ output('fabricResults',await documentFabric.query($('fabricQuery').value,{limit:8}));
+},'fabricResults');
 $('inspect').onclick=()=>task(async()=>{
  const db=await experimentalDB(),out=await inspectAndSchedule({
   db,inventory:await getRecords(),observation:{code:$('inspectCode').value.trim()},
