@@ -7,6 +7,8 @@ on:
       - ".github/workflows/edge-yjs.yml"
       - "next/yjs-lab.js"
       - "scripts/test-edge-yjs.mjs"
+      - "scripts/vendor-edge-yjs.mjs"
+      - "scripts/smoke-edge-yjs-browser.mjs"
 permissions:
   contents: read
 jobs:
@@ -21,6 +23,19 @@ jobs:
           cache: npm
       - run: npm ci --ignore-scripts --no-audit --no-fund
       - name: Install fixed Yjs release for separate experimental validation
-        run: npm install --no-save --ignore-scripts --no-audit --no-fund yjs@13.6.32
+        run: npm install --no-save --ignore-scripts --no-audit --no-fund yjs@13.6.32 esbuild@0.25.9 playwright-core@1.56.1
       - name: Test concurrent field edits, offline convergence and persisted Yjs snapshots
         run: node --test scripts/test-edge-yjs.mjs
+      - name: Build and verify self-hosted Yjs browser library
+        run: |
+          node scripts/vendor-edge-yjs.mjs
+          test -s next/vendor/yjs/yjs.bundle.mjs
+          node --check next/vendor/yjs/yjs.bundle.mjs
+      - name: Test actual bundled Yjs in Chromium with two offline-compatible IndexedDB stores
+        run: node scripts/smoke-edge-yjs-browser.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nexus-edge-yjs-local-runtime
+          path: next/vendor/yjs/yjs.bundle.mjs
+          if-no-files-found: error
+          retention-days: 3
