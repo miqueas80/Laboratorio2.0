@@ -16,13 +16,15 @@ const REPO_OWNER='miqueas80';
 const REPO_NAME='';
 const REPO_BRANCH='';
 const DOC_MAX_BYTES=16*1024*1024;
-const APP_VERSION='2026.10.07-r31.2-xkiro-expo-test';
+const APP_VERSION='2026.10.08-nexus-voice-v2-dev';
 const INVENTORY_RECOVERY_KEY='nexus_x_inventory_recovery_v1';
 const health={storage:'sin comprobar',documents:'sin comprobar',errors:[],boot:'BOOT'};
 const LENS_EXTERNAL_CACHE_TTL=30*60*1000;
 const LENS_EXTERNAL_CACHE_LIMIT=20;
 const VOICE_WAKE=/\bnexus(?:[- ]?x)?\b/i;
 let voiceRecognition=null;let voiceListening=false;let voiceMonitoring=false;let voiceSpeaking=false;let voiceAwaitingCommand=false;let voiceWakeTimer=null;let voiceRestartTimer=null;let voicePendingIntent=null;let voicePendingTimer=null;let voiceCommandQueue=Promise.resolve();
+// El motor ASR es intercambiable; intenciones y Action Registry siguen siendo únicos.
+let voiceEngineMode='none',voiceSessionEpoch=0,voiceSwitchTimer=null,voiceCommandBusy=false,voiceLastInputAt=0;
 const lensExternalCache=new Map(),lensExternalPending=new Map();
 const WEB_TIMEOUT=6500;
 function storageFailure(error){
@@ -935,6 +937,7 @@ async function setInternetMode(enabled,{source='ui',runLastQuery=true,force=fals
  const epoch=internetActivationEpoch;
  state.web=next;
  webQueryEpoch++;
+ scheduleVoiceEngineAlignment();
  if(!next){
   internetActivationPromise=null;
   for(const c of externalRequests)c.abort();
@@ -967,6 +970,7 @@ async function setInternetMode(enabled,{source='ui',runLastQuery=true,force=fals
 
 async function handleNetworkChange(){
  updateNetworkStatus();
+ scheduleVoiceEngineAlignment();
  if(!state.web){renderInternetToggle();return;}
  if(!navigator.onLine){
   internetActivationEpoch++;
@@ -1799,7 +1803,38 @@ if(lensVisionQuery(analysis))context=fuseLensVisualContext(context,{...result,an
 }
 async function analyzeCurrentLensCamera(options={}){const v=$('#lensVideo');if(!v||!state.lensStream||v.readyState<2){toast('Primero concedé el permiso e iniciá la cámara NEXUS LENS.');return {ok:false,error:'Cámara NEXUS LENS no iniciada'}}return runNexusLensPipeline(v,'cámara',options);}
 async function analyzeLensImageFile(file,options={}){if(!file)return {ok:false,error:'No se recibió una imagen.'};const url=URL.createObjectURL(file);try{const image=await new Promise((resolve,reject)=>{const img=new Image();img.onload=()=>resolve(img);img.onerror=()=>reject(new Error('No se pudo abrir la imagen.'));img.src=url;});return await runNexusLensPipeline(image,file.name,options)}finally{URL.revokeObjectURL(url)}}
-function localAssistantResponse(q){const n=norm(q);if(/\b(hola|buenas|hey|hola nexus)\b/.test(n))return'Hola. Soy NEXUS-X. Puedo buscar en el inventario, abrir módulos, analizar documentos y conversar cuando xkiro está conectado.';if(/quien eres|que eres|como te llamas/.test(n))return'Soy NEXUS-X, el asistente del sistema de gestión e investigación del laboratorio.';if(/cuantos registros|cantidad de registros|inventario/.test(n)&&!/buscar|investigar/.test(n))return`El inventario cargado contiene ${state.inventory.length} registros.`;if(/estado|diagnostico|integridad/.test(n)){const x=runIntegrity();return`Integridad local: ${x.ok?'correcta':'requiere revisión'}. Registros: ${x.recordCount}. IDs únicos: ${x.uniqueIds}.`;}return'Puedo ejecutar comandos locales como “Nexus, abrir inventario” o “Nexus, investigar ácido nítrico”. Para conversación libre y análisis profundo, activá Internet; xKiro se conecta mediante el Gateway seguro.';}
+function localEvidenceAnswer(question){
+ // Respuesta local basada en evidencia. No inventar síntesis científica si no hay evidencia.
+ const normalized=norm(question).replace(/^(?:nexus(?:[- ]?x)?)[,:\s]+/,'').trim();
+ if(!/^(?:que|cual|para que|como|explica|explicame|decime|dime|informacion|donde|tenemos|hay)\b/.test(normalized))return '';
+ const terms=searchTerms(normalized).filter(t=>!['explica','explicam','informacion','sirve','saber','decim','dime','cual','como','donde','hac','pas'].includes(t));
+ if(!terms.length)return '';
+ const query=terms.slice(0,5).join(' ');
+ const inventory=searchLocal(query).slice(0,2),docs=documentSearch(query).slice(0,2);
+ if(docs.length){
+  const h=docs[0],snippet=String(h.chunk||'').replace(/\s+/g,' ').trim().slice(0,260);
+  if(snippet)return 'Según el documento local «'+h.d.name+'»: '+snippet+(snippet.length===260?'…':'')+'. Puedo abrir el documento para comprobar el contexto.';
+ }
+ if(inventory.length){
+  const r=inventory[0].r;
+  return 'En el inventario local encontré '+r.name+(r.formula?', fórmula '+r.formula:'')+(r.location?', ubicación registrada: '+r.location:'')+'. Esto es un dato del inventario, no una explicación científica verificada.';
+ }
+ return '';
+}
+function localAssistantResponse(q){
+ const n=norm(q);
+ if(/\b(hola|buenas|hey|hola nexus)\b/.test(n))return'Hola. Soy NEXUS-X. Puedo buscar en el inventario, abrir módulos, analizar documentos y conversar cuando xKiro está conectado.';
+ if(/quien eres|que eres|como te llamas/.test(n))return'Soy NEXUS-X, el asistente local del laboratorio.';
+ if(/cuantos registros|cantidad de registros|inventario/.test(n)&&!/buscar|investigar/.test(n))return `El inventario cargado contiene ${state.inventory.length} registros.`;
+ if(/estado|diagnostico|integridad/.test(n)){const x=runIntegrity();return `Integridad local: ${x.ok?'correcta':'requiere revisión'}. Registros: ${x.recordCount}. IDs únicos: ${x.uniqueIds}.`;}
+ return localEvidenceAnswer(q)||'No encontré evidencia local suficiente para responder con certeza. Puedo buscar inventario, documentos y ejecutar órdenes; con Internet, xKiro amplía las respuestas.';
+}
+function emergencyLabResponse(q){
+ const n=norm(q);
+ if(!/\b(acido|corrosivo|reactivo|quimico|sustancia)\b/.test(n)||!/\b(derram|salpic|cayo|cae|caiga|toco|contacto|piel|mano|ojo|ojos|quemadura)\b/.test(n))return '';
+ return 'Si una sustancia química te salpicó la piel, alejate de la fuente, quitá con cuidado la ropa contaminada y enjuagá la zona con abundante agua corriente al menos 20 minutos. Buscá asistencia médica urgente y consultá la ficha de seguridad del producto. No uses neutralizantes ni cremas. Si afectó los ojos, lavalos inmediatamente con agua abundante y buscá atención urgente. Algunas sustancias, como el ácido fluorhídrico, requieren tratamiento especializado inmediato.';
+}
+
 async function showInventoryQuery(query,{openFirst=false,speak=false}={}){
   const q=String(query||'').trim();
   if(!q)return {ok:false,error:'Consulta vacía',data:{results:[]}};
@@ -1876,9 +1911,28 @@ async function handleVoicePendingTurn(input){
  clearVoicePendingIntent();const action={action:'create_calendar_event',date:pending.date,text:pending.text};const result=await executeAssistantAction(action,{speak:false,origin:'voice'});const answer=fastAgentAnswer(action,result);state.agentHistory.push({role:'user',text:raw},{role:'assistant',text:'LOCAL · '+answer});state.agentHistory=state.agentHistory.slice(-12);speakText(answer);return true;
 }
 
+function contextualLocalPlan(q){
+ const n=norm(q).replace(/^(?:nexus(?:[- ]?x)?)[,:\s]+/,'').replace(/^(?:por favor|porfa|quiero que|necesito que|podes|podrias)\s+/,'').replace(/[?.!,;:]+/g,' ').replace(/\s+/g,' ').trim();
+ if(/^(?:como|por que|que ocurre|que pasa|explica|explicame)\b/.test(n))return null;
+ const start=/^(?:inicia|iniciar|arranca|arrancar|activa|activar|enciende|encender|prende|prender|prendi|abri|abre|abrir|quiero iniciar|quiero activar|mostrame|muestrame)\s+(?:(?:la|el|una)\s+)?(?:camara|video|escanner|escaner)(?:\s+(?:de|del|en)\s+(?:nexus\s+)?(lens|qr|vision))?$/;
+ const stop=/^(?:detene|detener|apaga|apagar|para|parar|cerrar|cerra|cierra)\s+(?:(?:la|el)\s+)?(?:camara|video|escanner|escaner)(?:\s+(?:de|del|en)\s+(?:nexus\s+)?(lens|qr|vision))?$/;
+ const startMatch=n.match(start),stopMatch=n.match(stop);
+ if(startMatch||stopMatch){
+  const target=(startMatch||stopMatch)[1]||state.view;
+  if(['lens','vision'].includes(target))return {action:startMatch?'start_lens_camera':'stop_lens_camera'};
+  if(target==='qr')return {action:startMatch?'start_camera':'stop_camera'};
+  return {clarification:'¿Querés usar la cámara de NEXUS Lens o el escáner QR? Decime «iniciá cámara Lens» o «iniciá cámara QR».'};
+ }
+ const search=n.match(/^(?:busca|buscar|buscame|encontra|encontrar|mostrame)\s+(.+)$/);
+ if(search&&state.view==='inventory')return {action:'search_inventory',query:search[1]};
+ if(search&&state.view==='documents')return {action:'search_documents',query:search[1]};
+ return null;
+}
 function fastAgentPlan(q){
   const raw=String(q||'').trim();
   if(!raw)return null;
+  const contextual=contextualLocalPlan(raw);
+  if(contextual)return contextual;
   const calendarDraft=parseNaturalCalendarDraft(raw);
   if(calendarDraft?.date&&calendarDraft.text)return {action:'create_calendar_event',date:calendarDraft.date,text:calendarDraft.text};
   const parts=raw.split(/\s+(?:y|luego|despues|después|tambien|también)\s+/i).map(x=>x.trim()).filter(Boolean);
@@ -2139,6 +2193,7 @@ async function executeRegisteredAction(action,{speak=true}={}){
 
 function resolveIntent(text){
  const q=String(text||'').trim(),n=norm(q),planned=fastAgentPlan(q);
+ if(planned?.clarification)return {kind:'LOCAL',local:null,clarification:planned.clarification};
  const external=/\b(internet|web|actuales|actualizada?s?|actualidad|recientes?|noticias|hoy)\b/.test(n);
  const augmentable=new Set(['research','search_inventory','search_documents']);
  // Invariante Local-First: una capacidad local nunca desaparece por tener Internet.
@@ -2157,15 +2212,16 @@ function resolveIntent(text){
 async function nexusAgentTurn(userText,{speak=false}={}){
  const q=String(userText||'').trim();if(!q)return {answer:'',actions:[],fast:true};
  const t0=performance.now(),route=resolveIntent(q),actions=[];let answer='',localResult;
+ const emergency=emergencyLabResponse(q);if(emergency){answer='LOCAL · '+emergency;state.agentHistory.push({role:'user',text:q},{role:'assistant',text:answer});state.agentHistory=state.agentHistory.slice(-12);if(speak)speakText(answer);return {answer,actions,fast:true,route:'SEGURIDAD_LOCAL'};}
  if(route.local){localResult=await executeAssistantAction(route.local,{speak:false});actions.push({name:route.local.action,args:route.local,result:localResult});answer='LOCAL · '+fastAgentAnswer(route.local,localResult)}
- if(route.kind==='LOCAL'&&!route.local)answer='LOCAL · '+localAssistantResponse(q);
+ if(route.kind==='LOCAL'&&!route.local)answer='LOCAL · '+(route.clarification||localAssistantResponse(q));
  if(route.kind!=='LOCAL'){
   if(!state.web)answer+=(answer?'\n\n':'')+'EXTERNA · Activá Internet para consultar xKiro. Los resultados locales ya están disponibles.';
   else{
    try{
     // El híbrido sólo comparte nombres/fórmulas relevantes; nunca notas, ubicaciones ni el inventario completo.
     const context=route.kind==='HÍBRIDO'?(localResult?.data?.results||[]).slice(0,3).map(x=>[x.name,x.formula].filter(Boolean).join(' · ')).join('\n'):'';
-   const out=await xkiroGenerate({question:route.externalQuery,context,useSearch:true});
+   const out=await xkiroGenerate({question:route.externalQuery,context,useSearch:/\b(?:noticias|actualidad|recientes|hoy|internet|web|fuentes|busca en internet)\b/.test(norm(route.externalQuery))});
     answer+=(answer?'\n\n':'')+'EXTERNA · '+out.answer+'\n'+(out.grounded?'Fuentes: '+out.sources.map(x=>x.title+' — '+x.url).join(' | '):'Sin fuentes web verificables en la respuesta; no se confirma actualidad.');
    }catch(e){answer+=(answer?'\n\n':'')+'EXTERNA NO DISPONIBLE · '+e.message+' '+localAvailabilityMessage()}
   }
@@ -2258,6 +2314,7 @@ async function executeVoiceCommand(q){
  const out=await nexusAgentTurn(raw,{speak:true});return Boolean(out);
 }
 function stopVoiceRecognition({manual=true}={}){
+  ++voiceSessionEpoch;clearTimeout(voiceSwitchTimer);voiceSwitchTimer=null;voiceEngineMode='none';
   voiceMonitoring=false;voiceListening=false;voiceAwaitingCommand=false;voiceSpeaking=false;
   clearTimeout(voiceWakeTimer);clearTimeout(voiceRestartTimer);clearTimeout(voicePendingTimer);voicePendingTimer=null;voicePendingIntent=null;
   if(manual)removeStorage('nexus_voice_wake_enabled_v2');
@@ -2307,12 +2364,14 @@ async function prepareOfflineEngine(group){
 let voiceLastSpoken='',voiceUtteranceId=0,voicePartialInterrupted=false,voiceEchoUntil=0;
 function voiceTextIsEcho(text){const n=norm(text).replace(/[^a-z0-9 ]/g,'').trim();return (voiceSpeaking||Date.now()<voiceEchoUntil)&&n.length>8&&norm(voiceLastSpoken).replace(/[^a-z0-9 ]/g,'').includes(n);}
 function receiveVoicePartial(text){
+ voiceLastInputAt=Date.now();
  if(voiceMonitoring&&voiceSpeaking&&VOICE_WAKE.test(text)&&!voiceTextIsEcho(text)){
   ++voiceUtteranceId;globalThis.speechSynthesis?.cancel();voiceSpeaking=false;voicePartialInterrupted=true;voiceAwaitingCommand=true;
   $('#voiceStatusText').textContent='Nexus interrumpido · te escucho';
  }
 }
 function receiveVoiceTranscript(text){
+ voiceLastInputAt=Date.now();
  if(!voiceMonitoring)return;const transcript=String(text||'').trim().replace(/^nexos?\b/i,'Nexus').replace(/\b(abrir|abre|abrí|abri)\s+(?:el\s+)?inventario\s+(busca|buscar|buscá)\b/i,'$1 inventario y $2');if(!transcript||voiceTextIsEcho(transcript))return;
  $('#voiceTranscript').textContent=transcript;const wake=VOICE_WAKE.exec(transcript);let command='';
  if(voiceSpeaking){if(!wake)return;++voiceUtteranceId;globalThis.speechSynthesis?.cancel();voiceSpeaking=false;}
@@ -2322,14 +2381,19 @@ function receiveVoiceTranscript(text){
  }else if(voiceAwaitingCommand){command=transcript;voiceAwaitingCommand=false;clearTimeout(voiceWakeTimer);}
  voicePartialInterrupted=false;if(!command)return;
  $('#voiceStatusText').textContent='Nexus activo · ejecutando orden…';
- voiceCommandQueue=voiceCommandQueue.then(async()=>{if(!voiceMonitoring)return;await executeVoiceCommand(command);if(voiceMonitoring&&!voiceSpeaking)$('#voiceStatusText').textContent='Dormido · esperando “Nexus”';}).catch(error=>{$('#voiceStatusText').textContent='Error de comando · '+error.message;});
+ voiceCommandQueue=voiceCommandQueue.then(async()=>{if(!voiceMonitoring)return;voiceCommandBusy=true;try{await executeVoiceCommand(command)}finally{voiceCommandBusy=false;if(voiceMonitoring&&!voiceSpeaking)$('#voiceStatusText').textContent='Dormido · esperando “Nexus”';scheduleVoiceEngineAlignment();}}).catch(error=>{$('#voiceStatusText').textContent='No pude completar la orden.';console.warn('Voice command failed',error?.name||'error');});
  return voiceCommandQueue;
 }
 function voiceVocabulary(){return [...state.inventory,...state.catalog].flatMap(r=>[r.name,r.formula].filter(Boolean))}
 function setVoiceActiveUi(label){voiceListening=true;writeStorage('nexus_voice_wake_enabled_v2','1');$('#voiceStatus')?.classList.add('active');$('#voiceStatusText').textContent=label;$('#voiceToggleBtn').textContent='■ Detener vigilancia';const pill=$('#agentStatePill');if(pill)pill.textContent='● Agente activo · esperando Nexus'}
 async function startOfflineVoice(engine,{forceWasm=false}={}){
- voiceRecognition=engine.createVoice({vocabulary:voiceVocabulary(),onTranscript:receiveVoiceTranscript,onPartial:receiveVoicePartial,onStatus:patch=>{if(patch.error){voiceListening=false;$('#voiceStatusText').textContent=`${patch.state} · ${patch.error}`;}else $('#voiceStatusText').textContent=patch.state;}});
- const current=voiceRecognition;await current.start({forceWasm});if(!voiceMonitoring||current!==voiceRecognition)return false;setVoiceActiveUi('Voz offline activa · esperando “Nexus”');return true;
+ const session=voiceSessionEpoch;
+ voiceRecognition=engine.createVoice({vocabulary:voiceVocabulary(),
+  onTranscript:text=>session===voiceSessionEpoch?receiveVoiceTranscript(text):undefined,
+  onPartial:text=>session===voiceSessionEpoch?receiveVoicePartial(text):undefined,
+  onStatus:patch=>{if(session!==voiceSessionEpoch)return;if(patch.error){voiceListening=false;$('#voiceStatusText').textContent='Voz local: error recuperable.';}else $('#voiceStatusText').textContent=patch.state;}});
+ const current=voiceRecognition;await current.start({forceWasm});if(!voiceMonitoring||current!==voiceRecognition||session!==voiceSessionEpoch)return false;
+ voiceEngineMode='offline';setVoiceActiveUi('Voz offline activa · esperando “Nexus”');return true;
 }
 function normalizeVoiceTranscriptCandidate(text){
  let s=String(text||'').trim();if(!s)return '';
@@ -2348,30 +2412,47 @@ function voiceLocalPlanScore(text){
  return 60;
 }
 function chooseVoiceTranscript(result){
+ // Priorizar evidencia acústica, nunca forzar un comando por su parecido léxico.
  const candidates=[];
  for(let i=0;i<Math.min(Number(result?.length||0),5);i++){
-  const alt=result[i],text=normalizeVoiceTranscriptCandidate(alt?.transcript);if(!text)continue;
-  candidates.push({text,confidence:Number(alt?.confidence||0),local:voiceLocalPlanScore(text),index:i});
+  const alt=result[i],text=normalizeVoiceTranscriptCandidate(alt?.transcript);
+  if(!text)continue;
+  const confidence=Number(alt?.confidence),hasConfidence=Number.isFinite(confidence)&&confidence>0;
+  candidates.push({text,confidence:hasConfidence?confidence:0,hasConfidence,index:i});
  }
  if(!candidates.length)return '';
- candidates.sort((a,b)=>b.local-a.local||b.confidence-a.confidence||a.index-b.index);
- return candidates[0].text;
+ const measured=candidates.filter(x=>x.hasConfidence);
+ if(!measured.length)return candidates[0].text;
+ measured.sort((a,b)=>b.confidence-a.confidence||a.index-b.index);
+ return measured[0].text;
 }
+function desiredVoiceEngine(){return state.web&&navigator.onLine!==false&&(globalThis.SpeechRecognition||globalThis.webkitSpeechRecognition)?'online':'offline';}
+function scheduleVoiceEngineAlignment(){
+ if(!voiceMonitoring||desiredVoiceEngine()===voiceEngineMode)return;
+ clearTimeout(voiceSwitchTimer);
+ voiceSwitchTimer=setTimeout(async()=>{
+  if(!voiceMonitoring||desiredVoiceEngine()===voiceEngineMode)return;
+  if(voiceSpeaking||voiceCommandBusy||voiceAwaitingCommand||Date.now()-voiceLastInputAt<1800){scheduleVoiceEngineAlignment();return;}
+  stopVoiceRecognition({manual:false});
+  await startVoiceRecognition({automatic:true});
+ },900);
+}
+
 async function startBrowserVoice(SR,engine){
- const recognizer=new SR();recognizer.lang='es-AR';recognizer.continuous=true;recognizer.interimResults=true;recognizer.maxAlternatives=5;let fallingBack=false;
- const fallback=async reason=>{if(fallingBack||!voiceMonitoring)return;fallingBack=true;recognizer.onend=null;recognizer.onerror=null;try{recognizer.abort?.()}catch{};$('#voiceStatusText').textContent=`Voz online no disponible (${reason}). Activando respaldo offline…`;try{await startOfflineVoice(engine,{forceWasm:true})}catch(error){voiceMonitoring=false;voiceListening=false;$('#voiceStatus')?.classList.remove('active');$('#voiceStatusText').textContent='No se pudo iniciar la voz: '+error.message}};
- recognizer.onstart=()=>{if(!fallingBack)setVoiceActiveUi('Voz online activa · esperando “Nexus”')};
- recognizer.onresult=e=>{if(!voiceMonitoring||fallingBack)return;for(let i=e.resultIndex;i<e.results.length;i++){const result=e.results[i],text=result?.isFinal?chooseVoiceTranscript(result):normalizeVoiceTranscriptCandidate(result?.[0]?.transcript);if(!text)continue;result.isFinal?receiveVoiceTranscript(text):receiveVoicePartial(text)}};
- recognizer.onerror=e=>{if(!voiceMonitoring||fallingBack)return;const code=e?.error||'error';if(['not-allowed','audio-capture'].includes(code)){voiceMonitoring=false;voiceListening=false;$('#voiceStatus')?.classList.remove('active');$('#voiceStatusText').textContent=code==='not-allowed'?'Micrófono bloqueado para NEXUS-X.':'No se pudo capturar el micrófono.';return}if(!['no-speech','aborted'].includes(code))void fallback(code)};
- recognizer.onend=()=>{voiceListening=false;if(!voiceMonitoring||fallingBack)return;clearTimeout(voiceRestartTimer);voiceRestartTimer=setTimeout(()=>{if(!voiceMonitoring||fallingBack)return;try{recognizer.start()}catch{void fallback('reinicio')}},350)};
+ const session=voiceSessionEpoch,recognizer=new SR();recognizer.lang='es-AR';recognizer.continuous=true;recognizer.interimResults=true;recognizer.maxAlternatives=5;let fallingBack=false;
+ const fallback=async reason=>{if(fallingBack||!voiceMonitoring||session!==voiceSessionEpoch)return;fallingBack=true;recognizer.onend=null;recognizer.onerror=null;try{recognizer.abort?.()}catch{};$('#voiceStatusText').textContent=`Voz online no disponible (${reason}). Activando respaldo offline…`;try{await startOfflineVoice(engine,{forceWasm:true})}catch(error){voiceMonitoring=false;voiceListening=false;$('#voiceStatus')?.classList.remove('active');$('#voiceStatusText').textContent='No se pudo iniciar la voz: '+error.message}};
+ recognizer.onstart=()=>{if(!fallingBack&&session===voiceSessionEpoch){voiceEngineMode='online';setVoiceActiveUi('Voz online activa · esperando “Nexus”')}};
+ recognizer.onresult=e=>{if(!voiceMonitoring||fallingBack||session!==voiceSessionEpoch)return;for(let i=e.resultIndex;i<e.results.length;i++){const result=e.results[i],text=result?.isFinal?chooseVoiceTranscript(result):normalizeVoiceTranscriptCandidate(result?.[0]?.transcript);if(!text)continue;result.isFinal?receiveVoiceTranscript(text):receiveVoicePartial(text)}};
+ recognizer.onerror=e=>{if(!voiceMonitoring||fallingBack||session!==voiceSessionEpoch)return;const code=e?.error||'error';if(['not-allowed','audio-capture'].includes(code)){voiceMonitoring=false;voiceListening=false;$('#voiceStatus')?.classList.remove('active');$('#voiceStatusText').textContent=code==='not-allowed'?'Micrófono bloqueado para NEXUS-X.':'No se pudo capturar el micrófono.';return}if(!['no-speech','aborted'].includes(code))void fallback(code)};
+ recognizer.onend=()=>{if(session!==voiceSessionEpoch)return;voiceListening=false;if(!voiceMonitoring||fallingBack)return;clearTimeout(voiceRestartTimer);voiceRestartTimer=setTimeout(()=>{if(!voiceMonitoring||fallingBack)return;try{recognizer.start()}catch{void fallback('reinicio')}},350)};
  voiceRecognition=recognizer;recognizer.start();return true;
 }
 async function startVoiceRecognition({automatic=false}={}){
  if(voiceMonitoring)return true;const engine=globalThis.NexusOffline;if(!engine){$('#voiceStatusText').textContent='Motor local no disponible. Recargá NEXUS.';return false}
- const granted=await requestMicrophonePermission({silent:automatic});if(!granted)return false;voiceMonitoring=true;voiceSpeaking=false;voicePartialInterrupted=false;
+ const granted=await requestMicrophonePermission({silent:automatic});if(!granted)return false;++voiceSessionEpoch;voiceMonitoring=true;voiceSpeaking=false;voicePartialInterrupted=false;
  const SR=globalThis.SpeechRecognition||globalThis.webkitSpeechRecognition;
- try{if(navigator.onLine!==false&&SR)return await startBrowserVoice(SR,engine);return await startOfflineVoice(engine)}
- catch(error){if(voiceMonitoring&&navigator.onLine!==false&&SR){try{return await startOfflineVoice(engine,{forceWasm:true})}catch{}}voiceMonitoring=false;voiceListening=false;$('#voiceStatus')?.classList.remove('active');$('#voiceStatusText').textContent=error.message||'No se pudo iniciar la voz.';return false}
+ try{if(desiredVoiceEngine()==='online'&&SR)return await startBrowserVoice(SR,engine);return await startOfflineVoice(engine)}
+ catch(error){if(voiceMonitoring&&desiredVoiceEngine()==='online'&&SR){try{return await startOfflineVoice(engine,{forceWasm:true})}catch{}}voiceMonitoring=false;voiceListening=false;$('#voiceStatus')?.classList.remove('active');$('#voiceStatusText').textContent=error.message||'No se pudo iniciar la voz.';return false}
 }
 function spanishVoiceScore(voice){const lang=String(voice?.lang||'').toLowerCase();let score=lang==='es-ar'?300:lang==='es-es'?240:lang.startsWith('es-')?190:lang==='es'?170:-1;if(score<0)return score;if(voice?.localService)score+=30;return score}
 function selectSpanishVoice(voices,{localOnly=false}={}){return (voices||[]).filter(v=>spanishVoiceScore(v)>=0&&(!localOnly||v.localService)).sort((a,b)=>spanishVoiceScore(b)-spanishVoiceScore(a))[0]||null}
