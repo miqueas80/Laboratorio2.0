@@ -135,3 +135,31 @@ Para probar el laboratorio desde un Codespace sin alterar la expo:
 runtime según la sección anterior, servir con `python3 -m http.server 4173`
 y acceder a `http://localhost:4173/next/demo.html` desde ese entorno.
 Si se quiere usar Service Worker, acceder por `localhost` o HTTPS.
+
+
+## Verificación real: Web Worker, RAG e Internet desactivado
+
+GitHub Actions ejecutó un navegador Chromium real, cargó el modelo cuantizado
+de 118 MB con ONNX/WASM, generó 384 dimensiones y buscó mediante BM25/HNSW
+el archivo correcto a partir de una pregunta en español:
+
+https://github.com/miqueas80/Laboratorio2.0/actions/runs/37837465076
+
+Después, el navegador almacenó la interfaz y el runtime experimental
+en su propio Service Worker, preparó cinco archivos del modelo, cortó
+la red, **recargó la página** y generó otra representación vectorial
+sin Internet (resultado `browserOffline.success: true`):
+
+https://github.com/miqueas80/Laboratorio2.0/actions/runs/37837966140
+
+La función `prepareOfflineShell({includeInventory:true})` agrega una
+copia canónica de solo lectura de `inventory.json` bajo el scope `next/`
+para que el inventario experimental no dependa del SW de producción.
+La copia se valida contra 111 IDs únicos y no sustituye al inventario
+original. El laboratorio experimental intenta primero leer el
+inventario original al estar online y, si no está disponible, usa
+el snapshot cacheado. Los documentos permanecen en IndexedDB de origen.
+
+**El prototipo completo sigue pendiente de validación física Android y
+de sincronización P2P real entre dos teléfonos; los ensayos anteriores
+solo verifican Chromium de escritorio.**
