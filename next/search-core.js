@@ -34,7 +34,7 @@ export function buildIndex(rows,{dimension=384,maxRows=150000}={}) {
  * Sorted BM25 scores with optional cosine scores. Similarity is not a calibrated probability.
  * Exact IDs/CAS get a keyword boost; no unrelated semantic results without a real vector.
  */
-export function searchIndex(index,query,{vector=null,limit=20,lexicalWeight=.7,semanticWeight=.3}={}) {
+export function searchIndex(index,query,{vector=null,limit=20,lexicalWeight=.7,semanticWeight=.3,candidateIds=null}={}) {
   if(!index?.docs||!index?.postings)throw Error('Índice no inicializado');
   const terms=[...new Set(tokenize(query))].slice(0,24);
   const qVector=vectorize(vector,index.dimension);
@@ -50,7 +50,7 @@ export function searchIndex(index,query,{vector=null,limit=20,lexicalWeight=.7,s
   }
   let maxBm25=0;for(const value of scores.values())if(value>maxBm25)maxBm25=value;
   const out=[],exact=fold(query).trim();
-  const ids=qVector?index.docs.keys():scores.keys();
+  const ids=qVector?(candidateIds?new Set([...candidateIds,...scores.keys()]):index.docs.keys()):scores.keys();
   for(const id of ids){
     const doc=index.docs.get(id),lexical=scores.get(id)||0;
     const semantic=qVector&&doc.vector?doc.vector.reduce((total,v,i)=>total+v*qVector[i],0):null;
