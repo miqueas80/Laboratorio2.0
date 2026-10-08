@@ -40,9 +40,14 @@ servidor que sirva ESTA rama, no desde la URL de producción actual.
   ediciones concurrentes por campo y fragmentación de estados grandes.
   **Todo permanece restringido a la base de prueba; el inventario remoto
   está denegado por defecto y requiere autorización explícita.**
-- **Visión y voz**: `lens-preprocess-worker.js` y `voice-guard.js`
-  son módulos optativos; la detección por energía NO es un wake-word
-  entrenado y no sustituye Vosk.
+- **Lens y voz reales**: `lens-edge.js` reutiliza MobileCLIP-S0
+  (49 prototipos), QR local y OCR PP-OCRv6 Tiny opcional por región.
+  `voice-edge.js` reutiliza Vosk WASM existente para recibir comandos,
+  exigir «Nexus» y responder con síntesis española local.
+  `voice-frame.html` mantiene la excepción CSP del Vosk heredado fuera
+  de la interfaz principal. La activación es por transcripción,
+  **no es un wake-word neural entrenado** y Lens NO certifica identidades
+  químicas inferidas de fotos.
 - **Telemetría**: `telemetry.js` limita y sanea los eventos locales.
 
 ## Preparación de un modelo multilingüe, sin obligar a la expo a descargarlo
@@ -203,3 +208,37 @@ semántico de 118 MB se preparan después mediante una acción explícita.
 
 Ver también `docs/EDGE_RELEASE_GATES.md` para la matriz de aceptación
 y las pruebas presenciales pendientes antes de tocar `main`.
+
+## Lens y voz locales en la versión experimental para Android
+
+La prueba `edge-lens-browser.yml` comprobó la carga efectiva de
+MobileCLIP-S0 y PP-OCRv6 Tiny en Chromium/WASM con recursos locales;
+MobileCLIP rechazó una imagen sintética sin inventar identidad química.
+Una segunda prueba guardó los modelos, **desconectó Internet, recargó el
+navegador y volvió a analizar**:
+
+https://github.com/miqueas80/Laboratorio2.0/actions/runs/37845072935
+
+La prueba `edge-voice-browser.yml` arrancó Vosk WASM con un micrófono
+simulado alimentado por WAV local; comprobó «Nexus» y la entrega a
+NEXUS IA Edge. También cortó Internet, recargó la página y volvió a
+arrancar el reconocedor con una orden local:
+
+https://github.com/miqueas80/Laboratorio2.0/actions/runs/37845199881
+
+El nuevo Service Worker auxiliar `offline/edge-sw.js` solo actúa sobre
+la ruta `/offline/`, reutiliza las copias verificadas del caché local
+y no borra recursos de NEXUS estable.
+
+`next/demo.html` ahora incluye foto, cámara, OCR de etiqueta central
+solo si se selecciona, controles Vosk y manifiesto de **PWA experimental
+instalable**. El ZIP de prueba aislado empaqueta los modelos y sus licencias,
+además de Transformers.js, ONNX y Yjs; la descarga adicional del modelo de
+embeddings multilingües sigue siendo opcional.
+
+**Limitaciones:** los ensayos de cámara/voz anteriores usaron una imagen
+sintética y un micrófono WAV virtual en Chromium de escritorio. Todavía no
+existe evaluación de precisión por clases reales en Android, KWS neuronal
+entrenado, evaluación química certificada ni integración final en la
+PWA estable. El desarrollo permanece en PR borrador y no debe fusionarse
+antes de las pruebas físicas.
