@@ -65,7 +65,17 @@ try{
   const {prepareOfflineShell,offlineShellStatus}=await import('./offline-shell.js');
   await prepareOfflineShell({includeVendor:false,includeInventory:true});
   const sw=await navigator.serviceWorker.register('./semantic-sw.js',{scope:'./'});
+  const engineSW=await navigator.serviceWorker.register('../offline/edge-sw.js',{scope:'../offline/'});
   await navigator.serviceWorker.ready;
+  if(!engineSW.active){
+   const installing=engineSW.installing||engineSW.waiting;
+   if(!installing)throw Error('SW del motor visual no inició');
+   await new Promise((resolve,reject)=>{
+    const timer=setTimeout(()=>reject(Error('SW de modelo no activó')),12000);
+    const check=()=>{if(engineSW.active){clearTimeout(timer);installing.removeEventListener('statechange',check);resolve()}};
+    installing.addEventListener('statechange',check);check();
+   });
+  }
   if(!sw.active)throw Error('Service Worker experimental no activo');
   if(!navigator.serviceWorker.controller){
    await new Promise((resolve,reject)=>{
