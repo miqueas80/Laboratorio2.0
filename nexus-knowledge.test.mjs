@@ -83,3 +83,53 @@ test('seguimiento sin entidad previa pide aclaración y jamás inventa un regist
   assert.equal(answer.actions.length,0);
  }finally{h.close()}
 });
+
+
+test('Internet no desplaza la evidencia local sobre una sustancia real',async()=>{
+ const h=harness({online:true,stored:master.records,fetcher:()=>{throw Error('No se debe consultar el Gateway para evidencia local')}});
+ try{
+  await h.api.loadMaster();h.api.state.web=true;
+  const result=await h.api.nexusAgentTurn('Nexus, qué es ácido nítrico');
+  assert.equal(result.route,'LOCAL');
+  assert.match(result.answer,/inventario local/i);
+  assert.match(result.answer,/ácido nítrico/i);
+  assert.equal(h.calls.length,0);
+ }finally{h.close()}
+});
+
+test('Consulta ambigua no inventa identidad de un ácido ni una ubicación',async()=>{
+ const h=harness({online:false,stored:master.records});
+ try{
+  await h.api.loadMaster();
+  const evidence=h.window.NexusKnowledge.find('ácido',{inventory:master.records});
+  assert.equal(evidence.supported,false);
+  assert.equal(evidence.reason,'ambiguous-inventory');
+  const answer=await h.api.nexusAgentTurn('Nexus, qué es ácido',{localOnly:true});
+  assert.doesNotMatch(answer.answer,/código NEXUS-X-\d{4}/i);
+  assert.equal(h.calls.length,0);
+ }finally{h.close()}
+});
+
+test('NEXUS explica capacidades reales y conversa igual con Internet ON',async()=>{
+ const h=harness({online:true,stored:master.records,fetcher:()=>{throw Error('La ayuda es local')}});
+ try{
+  await h.api.loadMaster();h.api.state.web=true;
+  const help=await h.api.nexusAgentTurn('Nexus, qué podés hacer');
+  assert.equal(help.route,'LOCAL');
+  assert.match(help.answer,/voz funciona localmente|sin Internet/i);
+  assert.match(help.answer,/Lens/i);
+  const thanks=await h.api.nexusAgentTurn('Nexus, gracias',{localOnly:true});
+  assert.equal(thanks.route,'LOCAL');
+  assert.match(thanks.answer,/de nada/i);
+  assert.equal(h.calls.length,0);
+ }finally{h.close()}
+});
+
+test('NEXUS no confunde preguntar qué es inventario con contar registros',async()=>{
+ const h=harness({online:false,stored:master.records});
+ try{
+  await h.api.loadMaster();
+  assert.doesNotMatch(h.api.localAssistantResponse('¿Qué es el inventario?'),/^El inventario cargado contiene/i);
+  assert.match(h.api.localAssistantResponse('¿Cuántos registros hay?'),/registros/i);
+ }finally{h.close()}
+});
