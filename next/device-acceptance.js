@@ -5,7 +5,7 @@
  */
 import {EDGE_RELEASE_CHECKS,evaluateEdgeRelease,createEdgeAcceptanceReport} from './acceptance.js';
 import {inspectMigration} from './storage.js';
-import {readPublishedDocumentCache} from './document-source.js';
+import {readEdgeAvailableDocuments} from './canonical-source.js';
 import {offlineShellStatus} from './offline-shell.js';
 
 export function deriveAutomaticEdgeChecks({
