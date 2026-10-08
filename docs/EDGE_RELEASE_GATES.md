@@ -14,7 +14,7 @@ químico certificado ni garantiza 60 FPS en todos los teléfonos.
 | Embeddings multilingües | Modelo ONNX q8, 384 dimensiones, Web Worker con conexión bloqueada | https://github.com/miqueas80/Laboratorio2.0/actions/runs/37837465076 | Experimento Chromium OK |
 | Reinicio sin Internet | Recarga offline de interfaz y motor, inferencia local y snapshot de 111 registros | https://github.com/miqueas80/Laboratorio2.0/actions/runs/37838343563 | Experimento Chromium OK |
 | 100.001 registros | Worker BM25, DOM virtual: 16–24 nodos, scroll profundo | https://github.com/miqueas80/Laboratorio2.0/actions/runs/37840611987 | Chromium OK |
-| Rendimiento 60 FPS | 54,5 FPS observados en runner Chromium | https://github.com/miqueas80/Laboratorio2.0/actions/runs/37840611987 | **NO APROBADO** |
+| Rendimiento 60 FPS | 60 FPS promedio con 100.001 filas, desplazamiento activo; p95 16,7 ms y criterio estricto no aprobado | https://github.com/miqueas80/Laboratorio2.0/actions/runs/37842461900 | **NO APROBADO / Android sin medir** |
 | Memoria total 80 MiB | Node heap 78,08 MiB; RSS total 150,76 MiB | https://github.com/miqueas80/Laboratorio2.0/actions/runs/37836674104 | **NO APROBADO / Android sin medir** |
 | Orquestación DAG y agente | Pregunta «abrí inventario y buscá ácido nítrico» → registro NEXUS-X-0001, sin mutación | https://github.com/miqueas80/Laboratorio2.0/actions/runs/37840611987 | Prototipo OK |
 | WebRTC cifrado | ECDH, AES-GCM, dos bases IndexedDB y reproducción del estado | https://github.com/miqueas80/Laboratorio2.0/actions/runs/37839498129 | Chromium loopback OK |
@@ -72,3 +72,30 @@ Los flujos GitHub Actions producen artefactos temporales de bibliotecas locales
 con versiones fijadas; deben copiarse e instalarse explícitamente en el origen
 de prueba antes de usarlos. Este proceso evita CDNs durante inferencia y
 modificaciones accidentales de la versión estable.
+
+
+## Refuerzo 100k y químico — CI verificada el 8 de octubre
+
+- El renderizado virtual ahora reutiliza nodos DOM, evita renderizar cuando
+  el rango visible no cambió y registra métricas de reutilización. La carga
+  de 100.001 registros en Chromium completó el índice y desplazamiento.
+- Se agregó medición activa de scroll a 100.001 registros: **60 FPS promedio**,
+  pero p95 16,7 ms y `metTarget: false`. La tasa real de Android continúa
+  desconocida.
+- `chemical-worker.js` ejecuta advertencias químicas fuera del hilo principal;
+  `chemical-client.js` soporta cancelación y tiempo límite, con reinicio
+  solo a petición. El ensayo en Chromium analizó 100.001 sustancias
+  intencionalmente sin SDS y reportó `unresolved:100001`,
+  `reviewRequired:true` en 17 ms de cálculo Worker (sin contar clonación/
+  transmisión). No declaró ninguna como segura.
+- El motor químico ahora limita alertas masivas, indica cuando el reporte
+  se trunca y reconoce SDS, zona de almacenaje o clases de peligro ausentes.
+  Nunca autentica por sí mismo una SDS: `verified:true` sigue siendo una
+  declaración del operador, no una firma del fabricante.
+- El HEAD de esta etapa completó **214/214 pruebas automatizadas** en CI:
+  https://github.com/miqueas80/Laboratorio2.0/actions/runs/37842470156
+- Ensayo Chromium de desplazamiento y Worker químico:
+  https://github.com/miqueas80/Laboratorio2.0/actions/runs/37842461900
+
+Los tests automáticos no reemplazan una inspección por responsables del
+laboratorio. Ningún estado químico se considera certificado por NEXUS.
