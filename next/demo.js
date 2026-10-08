@@ -57,6 +57,21 @@ $('stress').onclick=()=>task(async()=>{
 $('search').onclick=()=>task(async()=>{if(!client)throw Error('Primero prepará un índice');output('results',await client.query($('query').value,{limit:10}))},'results');
 $('integrity').onclick=()=>task(async()=>output('checks',inspectMigration(await getRecords())),'checks');
 $('safety').onclick=()=>task(async()=>output('checks',evaluateStorage(await getRecords())),'checks');
+$('fabricStatus').onclick=()=>task(async()=>output('fabricResults',await semanticCacheStatus()),'fabricResults');
+$('fabricInstall').onclick=()=>task(async()=>{
+ const runtimeURL=new URL('./vendor/transformers/transformers.min.js',import.meta.url);
+ const wasmURL=new URL('./vendor/onnx/ort-wasm-simd-threaded.jsep.wasm',import.meta.url);
+ const status=await Promise.all([fetch(runtimeURL,{method:'HEAD'}),fetch(wasmURL,{method:'HEAD'})]);
+ if(!status.every(r=>r.ok))throw Error('Primero hay que instalar Transformers.js y ONNX WASM en el mismo origen. No se descargarán pesos inutilizables.');
+ if(!confirm('¿Autorizar la descarga de unos 140 MB adicionales y su almacenamiento local? Solo se instalará el modelo si hay espacio y su SHA-256 coincide.'))return;
+ if(!navigator.serviceWorker)throw Error('Service Worker no disponible');
+ const registration=await navigator.serviceWorker.register('./semantic-sw.js',{scope:'./'});
+ await navigator.serviceWorker.ready;
+ if(!registration.active)throw Error('Activá el Service Worker del laboratorio Edge y reintentá');
+ output('fabricResults','Descargando y verificando archivos…');
+ const result=await prepareSemanticAssets({onProgress:p=>output('fabricResults',p)});
+ output('fabricResults',{...result,note:'Para usar el modelo, recargá esta pestaña y luego indexá los documentos.'});
+},'fabricResults');
 $('fabricLoad').onclick=()=>task(async()=>{
  const source=await readPublishedDocumentCache();
  if(!source.available||!source.documents.length)throw Error(source.reason||'Primero indexá los documentos en NEXUS estable');
