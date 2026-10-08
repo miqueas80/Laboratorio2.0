@@ -56,6 +56,11 @@ $('stress').onclick=()=>task(async()=>{
  await build(rows);
 },'results');
 $('search').onclick=()=>task(async()=>{if(!client)throw Error('Primero prepará un índice');output('results',await client.query($('query').value,{limit:10}))},'results');
+$('measureFPS').onclick=()=>task(async()=>{
+ output('performanceResult','Midiendo fotogramas reales de este dispositivo…');
+ const [frames,memory]=await Promise.all([benchmarkAnimation({durationMs:1600}),memoryEstimate()]);
+ output('performanceResult',{frames,memory,device:navigator.userAgent,note:'Los FPS de una prueba aislada no garantizan la fluidez de todas las pantallas.'});
+},'performanceResult');
 $('integrity').onclick=()=>task(async()=>output('checks',inspectMigration(await getRecords())),'checks');
 $('safety').onclick=()=>task(async()=>output('checks',evaluateStorage(await getRecords())),'checks');
 $('fabricStatus').onclick=()=>task(async()=>output('fabricResults',await semanticCacheStatus()),'fabricResults');
