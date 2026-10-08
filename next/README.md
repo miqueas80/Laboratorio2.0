@@ -104,3 +104,34 @@ directamente en un commit normal.
 
 **No fusionar ni activar esta rama por tener CI verde.** Requiere respaldo
 verificado, ensayos Android y decisión de publicación después de la expo.
+
+
+## Resultados medidos en CI del 8 de octubre de 2026
+
+- `NEXUS Voice V2 regression`: 176/176 pruebas aprobadas después de la
+  reestructuración del caché semántico y del índice BM25.
+- `NEXUS Edge local embedding runtime`: se instaló realmente la dependencia
+  fija `@huggingface/transformers@3.8.1`, se copiaron sus archivos ONNX WASM
+  locales y la importación ESM pasó. Artefacto temporal del runtime:
+  https://github.com/miqueas80/Laboratorio2.0/actions/runs/37836106369
+  (retención de 3 días, requiere acceso al repositorio).
+- `NEXUS Edge 100k desktop benchmark`: 100.001 filas sintéticas,
+  construcción BM25 545 ms, memoria incremental 51,30 MiB, heap de Node
+  78,08 MiB, RSS total 150,76 MiB, latencia de consulta p95 16,75 ms.
+  https://github.com/miqueas80/Laboratorio2.0/actions/runs/37836674104
+  **Estos resultados son de Node en Linux, NO son medidas de Android ni de
+  60 FPS.** El total RSS sigue por encima de 80 MiB.
+- `next/model-provisioner.js` exige SHA-256 de `tokenizer.json` y del ONNX
+  cuantizado incluso para los hits previos de caché, valida sintácticamente
+  los metadatos JSON y solo después escribe un recibo de instalación final.
+  `semantic-sw.js` no sirve modelos sin dicho recibo.
+- `NEXUS Edge real Spanish embedding inference`: workflow independiente
+  para cargar el ONNX real y validar tres textos en un Chromium con peticiones
+  remotas bloqueadas. No debe declararse completo salvo que el workflow quede
+  en verde; una importación ESM aislada no demuestra inferencia.
+
+Para probar el laboratorio desde un Codespace sin alterar la expo:
+`git checkout feature/nexus-x-edge-architecture-v1`, preparar y copiar el
+runtime según la sección anterior, servir con `python3 -m http.server 4173`
+y acceder a `http://localhost:4173/next/demo.html` desde ese entorno.
+Si se quiere usar Service Worker, acceder por `localhost` o HTTPS.
