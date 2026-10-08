@@ -66,3 +66,28 @@ test('Offline shell only stores successful responses and stops on missing assets
  }),/Recurso offline no disponible/);
  assert.equal((await offlineShellStatus({cacheStorage:db.storage,includeVendor:false})).ready,false);
 });
+
+
+test('Copia de inventario offline es read-only, valida 111 registros y no modifica el origen',async()=>{
+ const fs=await import('node:fs');
+ const source=fs.readFileSync('inventory.json','utf8');
+ const db=memoryCache();
+ const out=await prepareOfflineShell({cacheStorage:db.storage,includeVendor:false,includeInventory:true,
+  cryptoObject:globalThis.crypto,
+  fetcher:async url=>new Response(url.endsWith('/inventory.json')?source:'// archivo experimental')
+ });
+ assert.equal(out.ready,true);assert.equal(out.hasInventory,true);
+ const status=await offlineShellStatus({cacheStorage:db.storage,includeVendor:false,includeInventory:true});
+ assert.equal(status.ready,true);assert.equal(status.inventoryCached,true);
+ const key=[...db.values.keys()].find(x=>x.endsWith('/snapshot/inventory.json'));
+ assert.ok(key);
+ const cached=JSON.parse(await db.cache.match(key).then(response=>response.text()));
+ assert.equal(cached.records.length,111);
+ assert.equal(fs.readFileSync('inventory.json','utf8'),source);
+ const invalid=memoryCache();
+ await assert.rejects(prepareOfflineShell({cacheStorage:invalid.storage,includeVendor:false,includeInventory:true,
+  cryptoObject:globalThis.crypto,
+  fetcher:async url=>new Response(url.endsWith('/inventory.json')?'{"records":[]}':'// archivo')
+ }),/Inventario canónico inesperado/);
+ assert.equal((await offlineShellStatus({cacheStorage:invalid.storage,includeVendor:false,includeInventory:true})).ready,false);
+});
