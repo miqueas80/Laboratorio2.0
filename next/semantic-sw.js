@@ -13,7 +13,10 @@ self.addEventListener('fetch',event=>{
  const request=event.request;
  if(!['GET','HEAD'].includes(request.method))return;
  const url=new URL(request.url);
- if(url.origin!==ROOT.origin||!url.pathname.startsWith(ROOT.pathname))return;
+ const PARENT=new URL('../',ROOT);
+ const sensorAsset=url.pathname.startsWith(new URL('./offline/',PARENT).pathname)||
+   url.pathname===new URL('./jsQR.js',PARENT).pathname;
+ if(url.origin!==ROOT.origin||(!url.pathname.startsWith(ROOT.pathname)&&!sensorAsset))return;
  const canonical=new URL(url);canonical.search='';canonical.hash='';
  event.respondWith((async()=>{
   const cache=await caches.open(CACHE);
