@@ -6,6 +6,7 @@ on:
     paths:
       - ".github/workflows/edge-real-embedding.yml"
       - "scripts/smoke-edge-embeddings.mjs"
+      - "next/embedding-worker.js"
 permissions:
   contents: read
 jobs:
