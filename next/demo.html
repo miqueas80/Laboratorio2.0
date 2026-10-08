@@ -11,7 +11,14 @@
 <main>
 <h1>NEXUS-X · Edge Lab</h1>
 <p><strong>EXPERIMENTAL:</strong> esta página no modifica el inventario ni los documentos de la PWA de producción.</p>
-<section>
+<section id="agentConsole">
+<h2>NEXUS IA Edge · agente local experimental</h2>
+<p>Interpreta consultas en español, consulta el inventario y la evidencia documental y puede abrir las secciones de esta página. No modifica datos ni llama a xKiro.</p>
+<label>Pedile algo a NEXUS <input id="agentText" autocomplete="off" placeholder="Nexus, abrí inventario y buscá ácido nítrico"></label>
+<button id="agentAsk">Ejecutar consulta local</button>
+<pre id="agentOutput" aria-live="polite">NEXUS IA Edge lista para consultas locales.</pre>
+</section>
+<section id="inventorySection">
 <h2>Búsqueda local BM25 · Web Worker</h2>
 <button id="load">Cargar índice con inventario canónico</button>
 <button id="stress">Probar 100.001 registros sintéticos</button>
