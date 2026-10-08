@@ -11,6 +11,11 @@ on:
       - "inventory.json"
       - "offline/**"
       - "docs/EDGE_RELEASE_GATES.md"
+      - "documents-manifest.json"
+      - "scripts/build-edge-documents.py"
+      - "**/*.pdf"
+      - "**/*.docx"
+      - "**/*.xlsx"
 permissions:
   contents: read
 jobs:
@@ -23,6 +28,10 @@ jobs:
         with:
           node-version: '22'
           cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python3 -m pip install --disable-pip-version-check --no-cache-dir pypdf==5.9.0
       - run: npm ci --ignore-scripts --no-audit --no-fund
       - name: Install pinned browser runtimes without postinstall scripts
         run: npm install --no-save --ignore-scripts --no-audit --no-fund @huggingface/transformers@3.8.1 yjs@13.6.32 esbuild@0.25.9
@@ -34,7 +43,7 @@ jobs:
           test -s next/vendor/onnx/ort-wasm-simd-threaded.jsep.wasm
           test -s next/vendor/yjs/yjs.bundle.mjs
           node --check next/vendor/yjs/yjs.bundle.mjs
-      - name: Assemble self-contained experimental static preview, NO production code or auto-model weights
+      - name: Assemble isolated PWA with pinned local runtimes and six canonical read-only documents
         shell: bash
         run: |
           set -euo pipefail
@@ -48,6 +57,7 @@ jobs:
           cp jsQR.js LICENSE-jsqr.txt icon-192.png icon-512.png dist/nexus-edge/
           mkdir -p dist/nexus-edge/docs
           cp docs/EDGE_RELEASE_GATES.md dist/nexus-edge/docs/EDGE_RELEASE_GATES.md
+          python3 scripts/build-edge-documents.py --out dist/nexus-edge/next/snapshot/canonical-documents.json --copy-originals dist/nexus-edge
           cat > dist/nexus-edge/index.html <<'HTML'
           <!doctype html>
           <html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="refresh" content="0;url=next/demo.html"><title>NEXUS Edge · Pruebas</title></head>
@@ -59,8 +69,10 @@ jobs:
           Sirve la carpeta nexus-edge y abre /next/demo.html. La descarga del
           modelo semántico es opcional y requiere consentimiento.
           El inventario de 111 registros es una COPIA ESTÁTICA de solo lectura.
-          Los seis documentos no están embebidos: dependen de IndexedDB
-          del navegador bajo el mismo origen o de futuras herramientas de importación.
+          Se adjuntan COPIAS de los seis documentos canónicos originales y un
+          índice de TEXTO local extraído y verificado por revision Git SHA-1.
+          Usá "Indexar mis documentos en el Worker" para buscar en la copia.
+          La lectura de archivos sin texto extraíble no equivale a OCR del PDF.
           No sustituye el código estable ni hace push a main.
           TXT
           du -sh dist/nexus-edge
