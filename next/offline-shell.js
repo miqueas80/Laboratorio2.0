@@ -12,7 +12,7 @@ export const EDGE_SHELL_FILES=Object.freeze([
  'storage.js','dexie-adapter.js','virtual-list.js','benchmarks.js',
  'chemical-engine.js','agent-dag.js','inspection-dag.js',
  'manual-webrtc.js','p2p-crypto.js','sync-controller.js','sync-core.js',
- 'lens-preprocess-worker.js','voice-guard.js','telemetry.js'
+ 'lens-preprocess-worker.js','voice-guard.js','telemetry.js','yjs-lab.js'
 ]);
 export const EDGE_VENDOR_FILES=Object.freeze([
  {path:'vendor/transformers/transformers.min.js',sha256:'aa5002b70e789798da263f5f99c62bd3e8fcd0c119258a493c40c180648365fa'},
