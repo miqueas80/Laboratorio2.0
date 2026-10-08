@@ -47,6 +47,7 @@ try{
    speechSynthesis:null,Utterance:null
   });
   try{
+   await voice.prepare();
    const started=await voice.start();
    if(!started.active||started.recognizer!=='Vosk WASM')throw Error('Vosk real no inició');
    await new Promise(resolve=>setTimeout(resolve,2500));
