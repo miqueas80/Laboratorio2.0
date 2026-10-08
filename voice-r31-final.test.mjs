@@ -4,7 +4,7 @@ import {harness,master} from './harness.mjs';
 function offlineEngine(h){let callbacks,starts=0,opts=[];h.window.NexusOffline={diagnostics:{voice:{}},nativeVoice:async()=>null,cacheStatus:async()=>({ready:true}),createVoice:o=>{callbacks=o;return {start:async options=>{starts++;opts.push(options||{});o.onStatus({state:'Fallback local activo'})},stop(){}}}};h.window.navigator.mediaDevices={getUserMedia:async()=>({getTracks:()=>[{stop(){}}]})};return {get callbacks(){return callbacks},get starts(){return starts},get opts(){return opts}}}
 function speech(h,voices=[{name:'local AR',lang:'es-AR',localService:true}]){let last,count=0;h.window.SpeechSynthesisUtterance=class{constructor(text){this.text=text}};h.window.speechSynthesis={getVoices:()=>voices,cancel(){},speak:u=>{last=u;count++}};return {get last(){return last},get count(){return count}}}
 
-test('r31 final: online restaura SpeechRecognition del navegador y no arranca Vosk primero',async()=>{const h=harness({stored:master.records,online:true});try{await h.api.loadMaster();const off=offlineEngine(h);let rec;h.window.SpeechRecognition=class{constructor(){rec=this}start(){this.onstart?.()}abort(){}stop(){}};assert.equal(await h.api.startVoiceRecognition(),true);assert.equal(off.starts,0);assert.equal(rec.lang,'es-AR');assert.equal(rec.continuous,true);assert.equal(rec.maxAlternatives,5);assert.match(h.document.querySelector('#voiceStatusText').textContent,/online activa/i)}finally{h.api.stopVoiceRecognition();h.close()}});
+test('r31 final: online restaura SpeechRecognition del navegador y no arranca Vosk primero',async()=>{const h=harness({stored:master.records,online:true});try{await h.api.loadMaster();h.api.state.web=true;const off=offlineEngine(h);let rec;h.window.SpeechRecognition=class{constructor(){rec=this}start(){this.onstart?.()}abort(){}stop(){}};assert.equal(await h.api.startVoiceRecognition(),true);assert.equal(off.starts,0);assert.equal(rec.lang,'es-AR');assert.equal(rec.continuous,true);assert.equal(rec.maxAlternatives,5);assert.match(h.document.querySelector('#voiceStatusText').textContent,/online activa/i)}finally{h.api.stopVoiceRecognition();h.close()}});
 
 test('r31 final: sin red usa motor local/Vosk y no SpeechRecognition online',async()=>{const h=harness({stored:master.records,online:false});try{await h.api.loadMaster();const off=offlineEngine(h);let made=0;h.window.SpeechRecognition=class{constructor(){made++}};assert.equal(await h.api.startVoiceRecognition(),true);assert.equal(made,0);assert.equal(off.starts,1);assert.match(h.document.querySelector('#voiceStatusText').textContent,/offline activa/i)}finally{h.api.stopVoiceRecognition();h.close()}});
 
@@ -27,9 +27,9 @@ test('r31.1: Internet no desactiva calendario local ni dispara red para recordat
  }finally{h.close()}
 });
 
-test('r31.1: ASR online prefiere una alternativa que conserva una acción local',()=>{
+test('voice v2: ASR online prioriza confianza acústica sobre coincidencias con comandos locales',()=>{
  const h=harness({stored:master.records,online:true});try{
   const result={0:{transcript:'Nexus explicame cualquier cosa',confidence:.92},1:{transcript:'Nexo recordame mañana revisar el inventario',confidence:.71},length:2};
-  const chosen=h.api.chooseVoiceTranscript(result);assert.match(chosen,/recordame/i);assert.match(chosen,/Nexus/i);
+  const chosen=h.api.chooseVoiceTranscript(result);assert.match(chosen,/explicame/i);assert.match(chosen,/Nexus/i);
  }finally{h.close()}
 });
