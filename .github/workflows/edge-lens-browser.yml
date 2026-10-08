@@ -9,6 +9,9 @@ on:
       - "next/lens-edge.js"
       - "offline/vision-worker.js"
       - "offline/core.js"
+      - "offline/edge-sw.js"
+      - "next/offline-shell.js"
+      - "next/semantic-sw.js"
 permissions:
   contents: read
 jobs:
