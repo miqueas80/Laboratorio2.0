@@ -66,11 +66,49 @@
   } catch (_) {}return null;
  }
  function grammar(vocabulary=[]) {
-  const terms=['nexus','nexos','nexo','nexus x','abrir','abrí','abre','cerrar','mostrar','busca','buscar','buscá','inventario','documentos','ficha','cámara','lens','analizar','analiza','analizá','esto','escáner','internet','estado','diagnóstico','calendario','agenda','agendá','agendar','agrega','agregá','recordame','tarea','evento','recordatorio','hoy','mañana','pasado mañana','lunes','martes','miércoles','jueves','viernes','sábado','domingo','preparar','revisar','reactivos','expo','ácido nítrico','ácido clorhídrico','ácido sulfúrico','hidróxido','sodio','potasio','reactivo','probeta','pipeta','bureta','matraz','erlenmeyer','vaso','microscopio','balanza','agitador','mechero','y','el','la','los','las','de','en','para','qué','tenemos'];
-  const clean=s=>String(s).toLowerCase().replace(/[^a-záéíóúüñ\s]/g,' ').replace(/\s+/g,' ').trim();
-  const commands=['nexus abre inventario','nexus abrir inventario','nexus abrí inventario','nexus abre documentos','nexus abre lens','nexus analiza esto','nexus abre calendario','nexus agrega una tarea','nexus recordame mañana revisar inventario','nexus agenda preparar reactivos mañana'];
-  for(const name of vocabulary.slice(0,111).map(clean).filter(Boolean))commands.push('nexus busca '+name,'nexus abre inventario y busca '+name);
-  return JSON.stringify([...new Set([...terms,...commands,...vocabulary.slice(0,250).flatMap(v=>[clean(v),...clean(v).split(' ')])].filter(Boolean)), '[unk]']);
+  // Vocabulario local es-AR: lenguaje natural del laboratorio, sin servicio cloud.
+  // Incluimos vocabulario suelto, frases frecuentes y las sustancias reales.
+  const terms=['nexus','nexos','nexo','nexus x','hola','buenas','abrir','abrí','abre','abrime',
+   'cerrar','cerrá','detené','frená','iniciá','inicia','prendé','prende','activá','activa',
+   'poné','poneme','llevame','mostrame','muestra','explicame','explicá','decime',
+   'busca','buscar','buscá','encontrame','encontrá','dónde','donde','qué','cual','cuál',
+   'inventario','material','materiales','sustancias','documentos','archivos','ficha',
+   'fórmula','formula','ubicación','ubicacion','guardamos','tenemos','datos','información',
+   'cámara','camara','lente','lens','visión','qr','escáner','escaner','analizar','analiza','analizá','esto',
+   'estado','diagnóstico','diagnostico','calendario','agenda','agendá','agendar',
+   'agregá','agrega','recordame','recuérdame','recordatorio','tarea','evento',
+   'hoy','mañana','pasado mañana','lunes','martes','miércoles','jueves','viernes','sábado','domingo',
+   'preparar','revisar','expo','ácido nítrico','ácido clorhídrico','ácido sulfúrico',
+   'hidróxido','sodio','potasio','reactivo','probeta','pipeta','bureta','matraz',
+   'erlenmeyer','vaso','microscopio','balanza','agitador','mechero','y','el','la',
+   'los','las','de','en','para','con','que','quiero','necesito','ver','sobre','su','las','nuestro','haceme'];
+  const clean=t=>String(t).toLowerCase().replace(/[^a-záéíóúüñ\s]/g,' ').replace(/\s+/g,' ').trim();
+  const phrases=[
+    'nexus abrí inventario','nexus mostrame el inventario','nexus poneme el inventario',
+    'nexus llevame al inventario','nexus abrí documentos','nexus mostrame los documentos',
+    'nexus abrí lens','nexus iniciá la cámara','nexus prendé la cámara',
+    'nexus poné en marcha la cámara','nexus apagá la cámara',
+    'nexus abrí el escáner qr','nexus buscá ácido nítrico',
+    'nexus buscá ácido clorhídrico','nexus buscá ácido sulfúrico',
+    'nexus abrí inventario y buscá ácido nítrico',
+    'nexus dónde guardamos el ácido nítrico',
+    'nexus cuál es su fórmula','nexus y su fórmula','nexus dónde está',
+    'nexus qué documentos tenemos sobre óxidos',
+    'nexus explicame qué es un átomo',
+    'nexus quiero ver los documentos','nexus abrí calendario',
+    'nexus recordame mañana preparar reactivos',
+    'nexus recordame mañana revisar el inventario',
+    'nexus agregá una tarea','nexus analizá esto','nexus analizá la cámara',
+    'nexus decime el estado del sistema','nexus quiero saber la ubicación',
+    'nexus cuántos registros tenemos','nexus abrir inventario',
+    'nexus cerrar la cámara','nexus mostrámelo','nexus abrí la ficha'
+  ];
+  // Conservar el límite histórico del diccionario dinámico para evitar
+  // modelos enormes, y no inventar clases de sustancias ajenas al inventario.
+  const dynamic=vocabulary.slice(0,111).map(clean).filter(Boolean);
+  for(const name of dynamic)phrases.push('nexus busca '+name,'nexus abre inventario y busca '+name);
+  const words=vocabulary.slice(0,250).flatMap(v=>[clean(v),...clean(v).split(' ')]);
+  return JSON.stringify([...new Set([...terms,...phrases,...words].filter(Boolean)),'[unk]']);
  }
  let ownedVoiceModel=null,voiceModelPending=false;
  function destroyModel(model) { if(model){try{model.terminate();}catch(_){}try{model.worker?.terminate();}catch(_){}if(ownedVoiceModel===model)ownedVoiceModel=null;} }
