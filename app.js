@@ -2205,7 +2205,7 @@ function resolveIntent(text){
  const split=q.match(/^(.+?)\s+y\s+(.+)$/i);
  if(external&&split){const local=fastAgentPlan(split[1].replace(/\b(nuestro|nuestra|nuestros|nuestras)\s+/gi,''));if(local)return {kind:'HÍBRIDO',local,externalQuery:split[2]}}
  if(external)return {kind:'EXTERNO',externalQuery:q};
- if(/(?:que es|explica|explicame|como funciona|informacion externa)/.test(n))return {kind:'EXTERNO',externalQuery:q};
+ if(/(?:que es|explica|explicame|como funciona|informacion externa)/.test(n))return state.web&&navigator.onLine?{kind:'EXTERNO',externalQuery:q}:{kind:'LOCAL',local:null};
  if(state.web&&navigator.onLine)return {kind:'EXTERNO',externalQuery:q};
  return {kind:'LOCAL',local:null};
 }
