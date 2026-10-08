@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Produce a READ-ONLY, provenance-checked search snapshot of the six original docs.
 Requires pypdf==5.9.0 for PDF extraction. Never writes/updates source files.
-No OCR or LLM; unreadable scanned PDF pages are explicitly reported as such.
+Optional build-time OCR of scanned PDF pages uses local Tesseract CLI only in CI;
+no OCR runtime, LLM, network inference or Tesseract library ships in Edge.
 """
 import argparse
 import hashlib
@@ -9,7 +10,11 @@ import io
 import json
 import pathlib
 import re
+import os
 import sys
+import time
+import subprocess
+import tempfile
 import xml.etree.ElementTree as ET
 import zipfile
 
@@ -86,7 +91,39 @@ def xlsx_text(data):
             if total>MAX_FILE_CHARS:break
         return "\n".join(lines)
 
-def pdf_text(data):
+def ocr_pdf_pages(pdf_path, page_count, *, max_pages=150, max_seconds=220):
+    """Bounded offline CI OCR. Not a browser dependency, no external services."""
+    if not (shutil_which("pdftoppm") and shutil_which("tesseract")):
+        return "", 0, "OCR build tools unavailable"
+    lines=[];pages=0
+    start=time.monotonic()
+    with tempfile.TemporaryDirectory(prefix="nexus-edge-ocr-") as folder:
+        for number in range(1,min(page_count,max_pages)+1):
+            if time.monotonic()-start>=max_seconds:break
+            prefix=str(pathlib.Path(folder)/"frame")
+            try:
+                subprocess.run(["pdftoppm","-f",str(number),"-l",str(number),
+                    "-scale-to","1650","-gray","-singlefile","-png",
+                    str(pdf_path),prefix],check=True,stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,timeout=20)
+                output=subprocess.run(["tesseract",prefix+".png","stdout",
+                    "-l","spa","--psm","3"],check=True,stdout=subprocess.PIPE,
+                    stderr=subprocess.DEVNULL,timeout=24,
+                    env={**os.environ,"OMP_THREAD_LIMIT":"1"}).stdout
+                text=compact(output.decode("utf-8","replace"))
+                if text:lines.append(f"PÁGINA {number} · OCR LOCAL\n{text[:15000]}")
+            except (OSError,subprocess.CalledProcessError,subprocess.TimeoutExpired):
+                pass
+            pages+=1
+            pathlib.Path(prefix+".png").unlink(missing_ok=True)
+            if sum(map(len,lines))>MAX_FILE_CHARS:break
+    return "\n\n".join(lines),pages,None
+
+def shutil_which(name):
+    import shutil
+    return shutil.which(name)
+
+def pdf_text(data,pdf_path):
     from pypdf import PdfReader
     reader=PdfReader(io.BytesIO(data),strict=False)
     if reader.is_encrypted:
@@ -101,7 +138,16 @@ def pdf_text(data):
             lines.append(f"PÁGINA {number}\n{content}")
             total+=len(content)
         if total>MAX_FILE_CHARS:break
-    return "\n\n".join(lines)
+    extracted="\n\n".join(lines)
+    page_count=len(reader.pages)
+    info={"pdfPages":page_count,"ocrPages":0,"ocrAttempted":False,"ocrNote":None}
+    # Low extracted coverage indicates a scanned PDF: use local CI-only OCR.
+    if len(extracted)<200 and page_count>0:
+        ocr,pages,note=ocr_pdf_pages(pdf_path,page_count)
+        info.update(ocrPages=pages,ocrAttempted=True,ocrNote=note)
+        if ocr:
+            extracted=(extracted+"\n\n"+ocr).strip()
+    return extracted,info
 
 def run(out):
     manifest=json.loads(MANIFEST.read_text(encoding="utf-8"))
@@ -117,10 +163,11 @@ def run(out):
         raw=source.read_bytes()
         if len(raw)!=entry["size"] or sha_blob(raw)!=entry["revision"]:
             raise ValueError("Original document provenance mismatch: "+path)
+        info={}
         try:
             if path.lower().endswith(".docx"):text=docx_text(raw)
             elif path.lower().endswith(".xlsx"):text=xlsx_text(raw)
-            elif path.lower().endswith(".pdf"):text=pdf_text(raw)
+            elif path.lower().endswith(".pdf"):text,info=pdf_text(raw,source)
             else:raise ValueError("Extension not supported")
             error=None
         except Exception as exc:
@@ -137,8 +184,12 @@ def run(out):
             "originalBytes":len(raw),
             "text":text,
             "textCharacters":len(text),
-            "extractionStatus":"error" if error else "no-text" if not text else "truncated" if truncated else "text",
-            "extractionError":error
+            "extractionStatus":"error" if error else "no-text" if not text else "truncated" if truncated else
+                 "ocr-partial" if info.get("ocrPages",0)<info.get("pdfPages",0) and info.get("ocrPages",0)>0 else
+                 "ocr-complete" if info.get("ocrPages",0)>0 else "text",
+            "extractionError":error,
+            "pdfPages":info.get("pdfPages"),"ocrPages":info.get("ocrPages"),
+            "ocrNote":info.get("ocrNote")
         })
     snapshot={"schema":"nexus-edge-canonical-documents-v1","version":1,
               "provenance":"Canonical Git blobs checked against documents-manifest.json",
@@ -148,7 +199,7 @@ def run(out):
     print(json.dumps({"documents":len(documents),
         "indexedTextChars":sum(len(d["text"]) for d in documents),
         "entries":[{"path":d["path"],"chars":d["textCharacters"],
-                    "status":d["extractionStatus"]} for d in documents],
+                    "status":d["extractionStatus"],"pdfPages":d["pdfPages"],"ocrPages":d["ocrPages"]} for d in documents],
         "output":str(out),"bytes":out.stat().st_size},ensure_ascii=False))
     if all(not d["text"] for d in documents):
         raise RuntimeError("No canonical document text was recoverable")
