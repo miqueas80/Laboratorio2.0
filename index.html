@@ -10,48 +10,86 @@
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <title>NEXUS-X · Gestión de Laboratorio</title>
 <style>
-/* NEXUS-X — presentación de arranque experimental (sin alterar el núcleo). */
-#nexus-boot-splash{position:fixed;inset:0;z-index:2147483000;display:grid;place-items:center;overflow:hidden;isolation:isolate;background:radial-gradient(ellipse 62% 48% at 50% 53%,#164970 0%,#091f37 64%,#040c1b 100%);color:#e7faff;font:inherit;text-align:center;clip-path:circle(160% at 50% 50%);opacity:1;transition:clip-path .8s cubic-bezier(.65,.05,.2,1),opacity .8s ease;touch-action:manipulation}
-#nexus-boot-splash:before{content:"";position:absolute;inset:-25%;pointer-events:none;background:radial-gradient(circle at 20% 32%,#3bccff4d 0 1px,transparent 2px),radial-gradient(circle at 83% 23%,#5cd5ffb3 0 1px,transparent 3px),radial-gradient(circle at 71% 76%,#2a9eef91 0 1px,transparent 3px);background-size:240px 240px,360px 360px,400px 400px;opacity:.7}
-#nexus-boot-splash[data-phase="reveal"]{clip-path:circle(0% at 96% 93%);opacity:0;pointer-events:none}
-.nx-boot-center{position:relative;z-index:1;width:min(96vw,620px);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;transform:translateY(-2vh)}
-.nx-boot-brand{font-size:clamp(31px,8vw,63px);font-weight:900;letter-spacing:.12em;margin:0;background:linear-gradient(105deg,#fff 10%,#93dfff 45%,#168efe 70%,#e3fbff 97%);color:transparent;background-clip:text;-webkit-background-clip:text;text-shadow:0 0 44px #239cfa55}
-.nx-boot-kicker{font-size:clamp(10px,2.5vw,14px);letter-spacing:.25em;color:#c3ddec;text-transform:uppercase;margin:0}
-.nx-boot-space{position:relative;width:min(78vw,350px);height:min(78vw,350px);display:grid;place-items:center;margin:2vh 0 0}
-.nx-boot-space:before,.nx-boot-space:after{content:"";position:absolute;width:90%;height:48%;border:2px solid #48bfff88;border-radius:50%;transform:rotate(-25deg);box-shadow:0 0 24px #0f8bef55;animation:nx-boot-orbit 6s linear infinite}
-.nx-boot-space:after{transform:rotate(32deg);border-color:#58ebff73;animation-direction:reverse}
-.nx-boot-aura{position:absolute;inset:13%;border-radius:50%;background:radial-gradient(circle,#23c9ff69 0%,#167cb536 38%,transparent 72%);filter:blur(23px)}
-.nx-boot-flyer{position:relative;z-index:2;width:100%;height:100%;display:grid;place-items:center;transform-origin:50% 55%;will-change:transform}
-.nx-boot-flyer img{width:108%;height:108%;object-fit:contain;filter:drop-shadow(0 16px 22px #001127bd) drop-shadow(0 0 18px #1cd8ff65);animation:nx-boot-hover 3s ease-in-out infinite}
-.nx-boot-greeting{display:inline-block;position:relative;margin-top:-9px;padding:12px 19px;border:1px solid #62d8ff94;background:#103759c9;box-shadow:0 0 32px #137eff33;border-radius:20px;font-size:clamp(14px,3.5vw,18px);font-weight:650;line-height:1.5;opacity:1;transform:translateY(0);transition:opacity .35s ease,transform .35s ease}
-.nx-boot-greeting:after{content:"";position:absolute;top:-7px;left:calc(50% - 7px);width:12px;height:12px;transform:rotate(45deg);border-left:1px solid #62d8ff94;border-top:1px solid #62d8ff94;background:#103759}
-.nx-boot-sub{font-size:12px;color:#91c8dd;letter-spacing:.08em;margin:12px 0 0}
-.nx-boot-skip{position:absolute;top:calc(16px + env(safe-area-inset-top,0px));right:17px;z-index:5;border:1px solid #8be6ff82;color:#eaffff;background:#ffffff0d;border-radius:25px;padding:10px 17px;min-height:44px;font-size:13px;cursor:pointer}
-.nx-boot-skip:hover{background:#ffffff26}.nx-boot-skip:focus-visible{outline:3px solid #8defff;outline-offset:4px}
-#nexus-boot-splash[data-phase="flight"] .nx-boot-flyer{animation:nx-boot-fly 1.25s cubic-bezier(.33,.55,.16,1) forwards}
-#nexus-boot-splash[data-phase="flight"] .nx-boot-flyer img{animation:none}
-#nexus-boot-splash[data-phase="flight"] .nx-boot-greeting,#nexus-boot-splash[data-phase="flight"] .nx-boot-sub{opacity:0;transform:translateY(12px)}
-#nexus-boot-splash[data-phase="flight"] .nx-boot-brand,#nexus-boot-splash[data-phase="flight"] .nx-boot-kicker{opacity:.35;transition:opacity .4s ease}
-@keyframes nx-boot-orbit{50%{filter:brightness(1.5)}}
-@keyframes nx-boot-hover{0%,100%{transform:translateY(5px) rotate(-2deg)}50%{transform:translateY(-10px) rotate(3deg)}}
-@keyframes nx-boot-fly{
-0%{transform:translate3d(0,0,0) rotate(0) scale(1)}
-26%{transform:translate3d(-5vw,-14vh,0) rotate(-10deg) scale(1.18)}
-56%{transform:translate3d(16vw,-21vh,0) rotate(13deg) scale(.84)}
-100%{transform:translate3d(calc(50vw - 75px),calc(49vh - 72px),0) rotate(0) scale(.21)}
+/* NEXUS startup: el robot saluda ANTES del dashboard y al volar va revelando la interfaz normal. */
+#nexus-boot-splash{position:fixed;inset:0;z-index:2147483000;isolation:isolate;overflow:hidden;pointer-events:auto;color:#e9f9ff;font-family:Inter,ui-sans-serif,system-ui,Arial,sans-serif;touch-action:manipulation}
+.nx-boot-curtain{position:absolute;inset:0;overflow:hidden;background:radial-gradient(ellipse 67% 55% at 50% 51%,#174d74 0%,#0a294b 49%,#020d20 100%);clip-path:inset(0 0 0 0%);will-change:clip-path}
+.nx-boot-curtain:before{content:"";position:absolute;inset:-30%;background-image:radial-gradient(#b9f7ff77 1px,transparent 1px),radial-gradient(#29abf955 1.5px,transparent 1.5px);background-size:121px 119px,179px 173px;background-position:0 0,57px 43px;opacity:.52}
+.nx-boot-curtain:after{content:"";position:absolute;inset:0;background:radial-gradient(circle at 50% 55%,#4fe4ff24,transparent 39%),repeating-linear-gradient(0deg,transparent,transparent 48px,#47d8ff09 49px,transparent 50px);pointer-events:none}
+.nx-boot-actor{position:absolute;z-index:3;left:50%;top:49%;width:min(83vw,420px);aspect-ratio:1;transform:translate(-50%,-50%);pointer-events:none;will-change:transform,left,top}
+.nx-boot-actor:before{content:"";position:absolute;inset:13%;background:radial-gradient(circle,#39d5ff56,transparent 67%);border-radius:50%;filter:blur(19px)}
+.nx-boot-robot{position:relative;display:block;width:100%;height:100%;object-fit:contain;filter:drop-shadow(0 18px 24px #00111cbd) drop-shadow(0 0 14px #15c9ff55);animation:nx-boot-smile-wave 2.3s ease-in-out both}
+.nx-boot-smile{position:absolute;left:58.4%;top:51.6%;width:12%;height:7%;opacity:0;filter:drop-shadow(0 0 5px #17bbff);animation:nx-boot-smile-on 1.4s ease-out .2s both}
+.nx-boot-smile path{fill:none;stroke:#76f4ff;stroke-linecap:round;stroke-width:4}
+.nx-boot-wave{position:absolute;z-index:4;left:9%;top:40%;width:19%;height:23%;animation:nx-boot-hand-gesture .7s ease-in-out 2 .3s both;transform-origin:85% 80%}
+.nx-boot-wave svg{display:block;width:100%;height:100%;filter:drop-shadow(0 0 7px #3ad5ff)}
+.nx-boot-wave path{fill:none;stroke:#aafaff;stroke-width:4;stroke-linecap:round}
+.nx-boot-talk{position:absolute;left:50%;bottom:max(11vh,48px);z-index:4;transform:translateX(-50%);width:min(90vw,330px);text-align:center;pointer-events:none}
+.nx-boot-talk strong{display:block;color:#fff;font-size:clamp(20px,6vw,28px);line-height:1.3;letter-spacing:.01em;text-shadow:0 0 20px #47d8ff93}
+.nx-boot-talk small{display:block;color:#b8e5f4;font-size:12px;letter-spacing:.09em;margin-top:10px}
+.nx-boot-talk strong:after{content:"";display:block;width:60px;height:2px;margin:12px auto 0;background:linear-gradient(90deg,transparent,#8cf2ff,transparent);box-shadow:0 0 12px #3dc7ff}
+.nx-boot-skip{position:absolute;z-index:8;top:calc(14px + env(safe-area-inset-top,0px));right:14px;padding:10px 15px;min-height:44px;border:1px solid #b0efff80;border-radius:24px;background:#071e34bd;color:#effaff;font-size:13px;cursor:pointer}
+.nx-boot-skip:focus-visible{outline:3px solid #8cf8ff;outline-offset:3px}
+.nx-boot-skip:hover{background:#1c5275}
+.nx-boot-trail{position:absolute;top:0;bottom:0;left:-12px;z-index:2;width:12px;opacity:0;background:linear-gradient(90deg,transparent,#45d7ffc7,#e2ffff,transparent);box-shadow:0 0 33px 13px #3dc5ff61;pointer-events:none}
+#nexus-boot-splash[data-phase="flight"] .nx-boot-curtain{animation:nx-boot-open-ui 2.45s linear both}
+#nexus-boot-splash[data-phase="flight"] .nx-boot-actor{animation:nx-boot-flight 2.45s ease-in-out both}
+#nexus-boot-splash[data-phase="flight"] .nx-boot-robot{animation:none}
+#nexus-boot-splash[data-phase="flight"] .nx-boot-smile,#nexus-boot-splash[data-phase="flight"] .nx-boot-wave{opacity:0;animation:none}
+#nexus-boot-splash[data-phase="flight"] .nx-boot-talk{opacity:0;transition:opacity .18s ease}
+#nexus-boot-splash[data-phase="flight"] .nx-boot-trail{opacity:1;animation:nx-boot-scan 2.45s linear both}
+#nexus-boot-splash[data-phase="flight"] .nx-boot-skip{opacity:0;pointer-events:none}
+#nexus-boot-splash[data-phase="done"]{pointer-events:none}
+@keyframes nx-boot-smile-wave{
+  0%{transform:translateY(6px) rotate(-3deg) scale(.94)}
+  28%{transform:translateY(-5px) rotate(2deg) scale(1)}
+  52%{transform:translateY(-10px) rotate(-3deg) scale(1.045)}
+  75%{transform:translateY(-2px) rotate(4deg) scale(1)}
+  100%{transform:translateY(0) rotate(0deg) scale(1)}
+}
+@keyframes nx-boot-smile-on{0%{opacity:0;transform:scale(.5)}45%,85%{opacity:1;transform:scale(1)}100%{opacity:.85}}
+@keyframes nx-boot-hand-gesture{
+0%,100%{opacity:0;transform:rotate(-18deg) scale(.85)}
+30%{opacity:1;transform:rotate(9deg) scale(1)}
+60%{opacity:1;transform:rotate(-12deg) scale(1.15)}
+}
+@keyframes nx-boot-open-ui{
+0%,12%{clip-path:inset(0 0 0 0%)}
+25%{clip-path:inset(0 0 0 16%)}
+45%{clip-path:inset(0 0 0 45%)}
+68%{clip-path:inset(0 0 0 78%)}
+85%,100%{clip-path:inset(0 0 0 100%)}
+}
+@keyframes nx-boot-scan{
+0%,12%{left:-15px}
+25%{left:16%}
+45%{left:45%}
+68%{left:78%}
+85%,100%{left:calc(100% + 15px)}
+}
+@keyframes nx-boot-flight{
+0%{left:50%;top:49%;transform:translate(-50%,-50%) rotate(0deg) scale(1)}
+12%{left:5%;top:41%;transform:translate(-50%,-50%) rotate(-20deg) scale(.70)}
+25%{left:16%;top:36%;transform:translate(-50%,-50%) rotate(12deg) scale(.64)}
+45%{left:45%;top:49%;transform:translate(-50%,-50%) rotate(-8deg) scale(.51)}
+68%{left:78%;top:39%;transform:translate(-50%,-50%) rotate(12deg) scale(.42)}
+85%{left:101%;top:64%;transform:translate(-50%,-50%) rotate(12deg) scale(.30)}
+100%{left:calc(100% - 44px);top:calc(100% - 51px);transform:translate(-50%,-50%) rotate(0deg) scale(.20)}
 }
 @media(max-width:600px){
-.nx-boot-center{transform:translateY(-3vh)}
-.nx-boot-brand{letter-spacing:.07em}
-.nx-boot-space{width:min(86vw,340px);height:min(86vw,340px);margin-top:3vh}
-.nx-boot-kicker{letter-spacing:.14em}
-@keyframes nx-boot-fly{
-0%{transform:translate3d(0,0,0) rotate(0) scale(1)}
-23%{transform:translate3d(-9vw,-15vh,0) rotate(-11deg) scale(1.12)}
-55%{transform:translate3d(11vw,-20vh,0) rotate(11deg) scale(.78)}
-100%{transform:translate3d(calc(50vw - 63px),calc(49vh - 67px),0) rotate(0) scale(.20)}
+.nx-boot-actor{width:min(91vw,360px);top:47%}
+.nx-boot-talk{bottom:max(12vh,66px)}
+@keyframes nx-boot-flight{
+0%{left:50%;top:47%;transform:translate(-50%,-50%) rotate(0deg) scale(1)}
+12%{left:6%;top:39%;transform:translate(-50%,-50%) rotate(-22deg) scale(.73)}
+25%{left:16%;top:35%;transform:translate(-50%,-50%) rotate(10deg) scale(.63)}
+45%{left:45%;top:50%;transform:translate(-50%,-50%) rotate(-8deg) scale(.50)}
+68%{left:78%;top:43%;transform:translate(-50%,-50%) rotate(9deg) scale(.40)}
+85%{left:102%;top:63%;transform:translate(-50%,-50%) rotate(9deg) scale(.30)}
+100%{left:calc(100% - 38px);top:calc(100% - 43px);transform:translate(-50%,-50%) rotate(0deg) scale(.19)}
 }}
-@media(prefers-reduced-motion:reduce){#nexus-boot-splash{transition:none!important}#nexus-boot-splash *,#nexus-boot-splash:before,#nexus-boot-splash:after{animation:none!important;transition:none!important}}
+@media(prefers-reduced-motion:reduce){
+#nexus-boot-splash *{animation:none!important;transition:none!important}
+}
 </style>
 <style>
 :root{--nav:#0b5368;--nav2:#0d647b;--bg:#eef3f6;--card:#fff;--ink:#26343b;--muted:#708089;--line:#dbe4e8;--accent:#2fa9b5;--ok:#42a98a;--warn:#e3ad45;--danger:#d96961;--shadow:0 8px 24px rgba(24,58,70,.10);--radius:9px}
@@ -78,25 +116,30 @@ button:focus-visible,a:focus-visible{outline:3px solid #157d93;outline-offset:3p
 </style>
 </head>
 <body>
-<!-- Presentación visible ANTES de mostrar la aplicación. La app se prepara debajo. -->
-<div id="nexus-boot-splash" data-phase="hello" aria-label="Bienvenida de NEXUS-X" role="dialog" aria-modal="true">
-  <button id="nexus-boot-skip" class="nx-boot-skip" type="button">Omitir presentación</button>
-  <div class="nx-boot-center">
-    <h1 class="nx-boot-brand">NEXUS-X</h1>
-    <p class="nx-boot-kicker">Gestión de Laboratorio Integral</p>
-    <div class="nx-boot-space" aria-hidden="true"><span class="nx-boot-aura"></span><div class="nx-boot-flyer"><img src="./mascot/nexus-mascota-3d.webp" alt="" width="350" height="350" fetchpriority="high"></div></div>
-    <div class="nx-boot-greeting">¡Hola! Soy NEXUS <span aria-hidden="true">👋</span><div>¡Bienvenido a tu laboratorio!</div></div>
-    <p class="nx-boot-sub">IA LOCAL · VISIÓN · VOZ · CONOCIMIENTO</p>
+<!-- Bienvenida previa al arranque visual; NEXUS-X conserva el dashboard al finalizar. -->
+<div id="nexus-boot-splash" data-phase="greet" role="dialog" aria-modal="true" aria-label="Presentación de NEXUS-X">
+  <div class="nx-boot-curtain" aria-hidden="true"></div>
+  <div class="nx-boot-trail" aria-hidden="true"></div>
+  <div class="nx-boot-actor" aria-hidden="true">
+    <img class="nx-boot-robot" src="./mascot/nexus-mascota-3d.webp" alt="" width="420" height="420" fetchpriority="high">
+    <svg class="nx-boot-smile" viewBox="0 0 42 24" aria-hidden="true"><path d="M5 6 Q21 24 37 6"/></svg>
+    <span class="nx-boot-wave" aria-hidden="true"><svg viewBox="0 0 90 100"><path d="M61 18 Q78 33 73 50 M34 10 Q54 26 48 43 M17 34 Q27 43 26 56"/></svg></span>
   </div>
+  <div class="nx-boot-talk" role="status"><strong>¡Hola! Soy NEXUS 👋</strong><small>Bienvenido a tu laboratorio</small></div>
+  <button id="nexus-boot-skip" class="nx-boot-skip" type="button">Omitir presentación</button>
 </div>
 <script>
-/* Red de seguridad: la aplicación nunca queda atrapada detrás de la presentación. */
+/* Fallback independiente del módulo; evita pantalla bloqueada ante un fallo de red. */
 (function(){
- var splash=document.getElementById('nexus-boot-splash');
- function release(){if(splash&&splash.isConnected)splash.remove();var app=document.querySelector('.app');if(app)app.removeAttribute('inert')}
- var skip=document.getElementById('nexus-boot-skip');
- if(skip)skip.addEventListener('click',release);
- window.setTimeout(release,9000);
+  var splash=document.getElementById('nexus-boot-splash');
+  function release(){
+    if(splash&&splash.isConnected)splash.remove();
+    var app=document.querySelector('.app');
+    if(app)app.removeAttribute('inert');
+  }
+  var skip=document.getElementById('nexus-boot-skip');
+  if(skip)skip.addEventListener('click',release);
+  window.setTimeout(release,9000);
 })();
 </script>
 
