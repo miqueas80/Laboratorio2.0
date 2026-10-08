@@ -3,6 +3,7 @@ import {NexusEdgeAgent} from './agent-runtime.js';
 import {EdgeLens} from './lens-edge.js';
 import {EdgeVoiceCoordinator} from './voice-edge.js';
 import {VoiceFrameEngine} from './voice-frame-client.js';
+import {setupDeviceAcceptance} from './device-acceptance.js';
 import {createVirtualList} from './virtual-list.js';
 import {inspectMigration} from './storage.js';
 import {ChemicalSafetyClient} from './chemical-client.js';
@@ -17,7 +18,7 @@ import {prepareSemanticAssets,semanticCacheStatus} from './model-provisioner.js'
 import {prepareOfflineShell,offlineShellStatus} from './offline-shell.js';
 import {benchmarkAnimation,benchmarkVirtualScroll,memoryEstimate} from './benchmarks.js';
 const $=id=>document.getElementById(id);
-let client=null,records=null,peer=null,replica=null,edgeDB=null,documentFabric=null,edgeAgent=null,yjsBoard=null,safetyClient=null,lensBridge=null,voiceBridge=null,videoStream=null,voiceFrame=null;
+let client=null,records=null,peer=null,replica=null,edgeDB=null,documentFabric=null,edgeAgent=null,yjsBoard=null,safetyClient=null,lensBridge=null,voiceBridge=null,videoStream=null,voiceFrame=null,lastScrollPerformance=null;
 const actorKey='nexus_edge_demo_actor_v1';
 const actor=localStorage.getItem(actorKey)||'edge-'+crypto.randomUUID().replaceAll('-','');
 localStorage.setItem(actorKey,actor);
@@ -184,6 +185,7 @@ $('measureFPS').onclick=()=>task(async()=>{
 $('measureScroll').onclick=()=>task(async()=>{
  output('performanceResult','Midiendo desplazamiento activo con filas virtualizadas…');
  const result=await benchmarkVirtualScroll($('virtual'),{durationMs:1200,stepPx:620});
+ lastScrollPerformance=result;
  output('performanceResult',{activeScroll:result,
   layout:virtual.metrics(),memory:await memoryEstimate(),device:navigator.userAgent});
 },'performanceResult');
@@ -304,4 +306,6 @@ $('yjsSync').onclick=()=>task(async()=>{
  if(!yjsBoard)throw Error('Primero activá Yjs');
  output('yjsStatus',{sent:await yjsBoard.sendSnapshot(),tasks:yjsBoard.listTasks()});
 },'yjsStatus');
-window.addEventListener('pagehide',()=>{client?.close();documentFabric?.close();safetyClient?.close();lensBridge?.close();voiceBridge?.stop();voiceFrame?.close();videoStream?.getTracks().forEach(track=>track.stop());yjsBoard?.close();peer?.close();edgeDB?.close();virtual.close()},{once:true});
+const acceptance=setupDeviceAcceptance({readInventory:getRecords,performanceResult:()=>lastScrollPerformance,
+ virtualMetrics:()=>virtual.metrics(),output});
+window.addEventListener('pagehide',()=>{acceptance.close();client?.close();documentFabric?.close();safetyClient?.close();lensBridge?.close();voiceBridge?.stop();voiceFrame?.close();videoStream?.getTracks().forEach(track=>track.stop());yjsBoard?.close();peer?.close();edgeDB?.close();virtual.close()},{once:true});
