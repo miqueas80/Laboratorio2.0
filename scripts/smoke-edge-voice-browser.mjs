@@ -40,7 +40,7 @@ try{
   const adapter=new VoiceFrameEngine();
   const events=[];
   const voice=new EdgeVoiceCoordinator({
-   engine:globalThis.NexusOffline,
+   engine:adapter,
    agent:{turn:async query=>({ok:true,reply:'Resultado local',query})},
    onResult:result=>events.push(result),
    onStatus:status=>events.push({status:status.state||''}),
