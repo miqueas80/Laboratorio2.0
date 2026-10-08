@@ -93,6 +93,12 @@ $('measureFPS').onclick=()=>task(async()=>{
  const [frames,memory]=await Promise.all([benchmarkAnimation({durationMs:1600}),memoryEstimate()]);
  output('performanceResult',{frames,memory,device:navigator.userAgent,note:'Los FPS de una prueba aislada no garantizan la fluidez de todas las pantallas.'});
 },'performanceResult');
+$('measureScroll').onclick=()=>task(async()=>{
+ output('performanceResult','Midiendo desplazamiento activo con filas virtualizadas…');
+ const result=await benchmarkVirtualScroll($('virtual'),{durationMs:1200,stepPx:620});
+ output('performanceResult',{activeScroll:result,
+  layout:virtual.metrics(),memory:await memoryEstimate(),device:navigator.userAgent});
+},'performanceResult');
 $('integrity').onclick=()=>task(async()=>output('checks',inspectMigration(await getRecords())),'checks');
 $('safety').onclick=()=>task(async()=>output('checks',evaluateStorage(await getRecords())),'checks');
 $('fabricStatus').onclick=()=>task(async()=>output('fabricResults',{
