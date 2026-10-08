@@ -215,4 +215,4 @@ $('yjsSync').onclick=()=>task(async()=>{
  if(!yjsBoard)throw Error('Primero activá Yjs');
  output('yjsStatus',{sent:await yjsBoard.sendSnapshot(),tasks:yjsBoard.listTasks()});
 },'yjsStatus');
-window.addEventListener('pagehide',()=>{client?.close();documentFabric?.close();yjsBoard?.close();peer?.close();edgeDB?.close();virtual.close()},{once:true});
+window.addEventListener('pagehide',()=>{client?.close();documentFabric?.close();safetyClient?.close();yjsBoard?.close();peer?.close();edgeDB?.close();virtual.close()},{once:true});
