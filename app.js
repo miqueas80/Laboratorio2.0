@@ -16,7 +16,7 @@ const REPO_OWNER='miqueas80';
 const REPO_NAME='';
 const REPO_BRANCH='';
 const DOC_MAX_BYTES=16*1024*1024;
-const APP_VERSION='2026.10.08-nexus-voice-v2-knowledge-dev';
+const APP_VERSION='2026.10.08-nexus-voice-r3-production';
 const INVENTORY_RECOVERY_KEY='nexus_x_inventory_recovery_v1';
 const health={storage:'sin comprobar',documents:'sin comprobar',errors:[],boot:'BOOT'};
 const LENS_EXTERNAL_CACHE_TTL=30*60*1000;
@@ -1947,8 +1947,8 @@ async function handleVoicePendingTurn(input){
 function contextualLocalPlan(q){
  const n=norm(q).replace(/^(?:nexus(?:[- ]?x)?)[,:\s]+/,'').replace(/^(?:por favor|porfa|quiero que|necesito que|podes|podrias)\s+/,'').replace(/[?.!,;:]+/g,' ').replace(/\s+/g,' ').trim();
  if(/^(?:como|por que|que ocurre|que pasa|explica|explicame)\b/.test(n))return null;
- const start=/^(?:inicia|iniciar|arranca|arrancar|activa|activar|enciende|encender|prende|prender|prendi|abri|abre|abrir|quiero iniciar|quiero activar|mostrame|muestrame)\s+(?:(?:la|el|una)\s+)?(?:camara|video|escanner|escaner)(?:\s+(?:de|del|en)\s+(?:nexus\s+)?(lens|qr|vision))?$/;
- const stop=/^(?:detene|detener|apaga|apagar|para|parar|cerrar|cerra|cierra)\s+(?:(?:la|el)\s+)?(?:camara|video|escanner|escaner)(?:\s+(?:de|del|en)\s+(?:nexus\s+)?(lens|qr|vision))?$/;
+ const start=/^(?:inicia|iniciar|arranca|arrancar|activa|activar|enciende|encender|prende|prender|prendi|pone|poneme|pone en marcha|abri|abre|abrir|quiero iniciar|quiero activar|mostrame|muestrame)\s+(?:(?:la|el|una)\s+)?(?:camara|video|escanner|escaner)(?:\s+(?:de|del|en)\s+(?:nexus\s+)?(lens|qr|vision))?$/;
+ const stop=/^(?:detene|detener|frena|frenar|apaga|apagar|para|parar|cerrar|cerra|cierra)\s+(?:(?:la|el)\s+)?(?:camara|video|escanner|escaner)(?:\s+(?:de|del|en)\s+(?:nexus\s+)?(lens|qr|vision))?$/;
  const startMatch=n.match(start),stopMatch=n.match(stop);
  if(startMatch||stopMatch){
   const target=(startMatch||stopMatch)[1]||state.view;
@@ -1956,7 +1956,17 @@ function contextualLocalPlan(q){
   if(target==='qr')return {action:startMatch?'start_camera':'stop_camera'};
   return {clarification:'¿Querés usar la cámara de NEXUS Lens o el escáner QR? Decime «iniciá cámara Lens» o «iniciá cámara QR».'};
  }
- const search=n.match(/^(?:busca|buscar|buscame|encontra|encontrar|mostrame)\s+(.+)$/);
+ const navigate=n.match(/^(?:llevame|lleva|poneme|pone|mostrame|mostrar|quiero ver|necesito ver|entra|anda)\s+(?:(?:a|al|el|la|los)\s+)?(inventario|documentos|archivos|calendario|agenda|lens|qr|inicio|ajustes|informes)$/);
+ if(navigate){
+  const views={inventario:'inventory',documentos:'documents',archivos:'documents',inicio:'dashboard',ajustes:'settings',informes:'reports'};
+  if(navigate[1]==='lens')return {action:'open_lens'};
+  if(navigate[1]==='qr')return {action:'open_qr'};
+  if(['calendario','agenda'].includes(navigate[1]))return {action:'open_calendar'};
+  return {action:'open_view',query:views[navigate[1]]};
+ }
+ const location=n.match(/^(?:donde (?:guardamos|tenemos|esta|se encuentra)|en que lugar (?:guardamos|esta))\s+(?:el|la|los|las)?\s*(.+)$/);
+ if(location&&location[1])return {action:'search_inventory',query:location[1]};
+ const search=n.match(/^(?:busca|buscar|buscame|encontrame|encontra|encontrar|mostrame)\s+(.+)$/);
  if(search&&state.view==='inventory')return {action:'search_inventory',query:search[1]};
  if(search&&state.view==='documents')return {action:'search_documents',query:search[1]};
  return null;
@@ -1968,12 +1978,17 @@ function fastAgentPlan(q){
   if(contextual)return contextual;
   const calendarDraft=parseNaturalCalendarDraft(raw);
   if(calendarDraft?.date&&calendarDraft.text)return {action:'create_calendar_event',date:calendarDraft.date,text:calendarDraft.text};
-  const parts=raw.split(/\s+(?:y|luego|despues|después|tambien|también)\s+/i).map(x=>x.trim()).filter(Boolean);
+  const sequenceRaw=raw.replace(/^(?:nexus(?:[- ]?x)?|nexo|nexos)[,;:\s]+/i,'');
+  const parts=sequenceRaw.split(/\s+(?:y|luego|despues|después|tambien|también)\s+|[,;]\s*(?=(?:busca|buscar|buscá|abrir|abrí|abre|abrime|mostrame|inicia|iniciá|prende|prendé|detene|detené|agendá|recordame|recuérdame)(?:\s|$))/i).map(x=>x.trim()).filter(Boolean);
   if(parts.length>1){
     const steps=parts.map(parseLocalAssistantAction);
     if(steps.every(Boolean)&&steps.length<=8){
       const contextual=steps.map((step,i)=>{
-        if(i>0&&['research'].includes(step.action)&&['open_view'].includes(steps[i-1]?.action)&&steps[i-1]?.query==='inventory')return {action:'search_inventory',query:step.query};
+        if(i>0&&step.action==='research'&&steps[i-1]?.action==='open_view'&&steps[i-1]?.query==='inventory')return {action:'search_inventory',query:step.query};
+        if(i>0&&['start_camera','stop_camera','analyze_camera'].includes(step.action)&&
+          (steps[i-1]?.action==='open_lens'||steps[i-1]?.action==='start_lens_camera')){
+         return {action:({start_camera:'start_lens_camera',stop_camera:'stop_lens_camera',analyze_camera:'analyze_lens_camera'})[step.action]};
+        }
         return step;
       });
       return {action:'sequence',steps:contextual};
@@ -2244,9 +2259,19 @@ function resolveIntent(text){
  if(state.web&&navigator.onLine)return {kind:'EXTERNO',externalQuery:q};
  return {kind:'LOCAL',local:null};
 }
-async function nexusAgentTurn(userText,{speak=false}={}){
+async function nexusAgentTurn(userText,{speak=false,localOnly=false}={}){
  const q=String(userText||'').trim();if(!q)return {answer:'',actions:[],fast:true};
- const t0=performance.now(),route=resolveIntent(q),actions=[];let answer='',localResult;
+ const t0=performance.now(),resolved=resolveIntent(q),actions=[];let answer='',localResult;
+ // La voz nunca solicita ni ejecuta una consulta externa. El chat escrito conserva xKiro.
+ // Una intención local tiene prioridad y conserva el mismo Action Registry.
+ const blockedVoiceActions=new Set(['web_search','sync_repository','delete_inventory_item','delete_calendar_event']);
+ const unsafeVoicePlan=plan=>!!plan&&(blockedVoiceActions.has(plan.action)||(plan.action==='sequence'&&plan.steps?.some(unsafeVoicePlan)));
+ let route=resolved;
+ if(localOnly){
+  if(unsafeVoicePlan(resolved.local))route={kind:'LOCAL',local:null,clarification:'Esa acción no se ejecuta por voz. Abrí el módulo correspondiente y confirmala desde la pantalla.'};
+  else if(resolved.kind==='HÍBRIDO')route={kind:'LOCAL',local:resolved.local};
+  else if(resolved.kind==='EXTERNO'){const evidence=localEvidenceAnswer(q);route={kind:'LOCAL',local:null,clarification:evidence||'No encontré evidencia local suficiente para responder. Para una investigación externa, escribí la pregunta en el chat de NEXUS IA.'};}
+ }
  const emergency=emergencyLabResponse(q);if(emergency){answer='LOCAL · '+emergency;state.agentHistory.push({role:'user',text:q},{role:'assistant',text:answer});state.agentHistory=state.agentHistory.slice(-12);if(speak)speakText(answer);return {answer,actions,fast:true,route:'SEGURIDAD_LOCAL'};}
  if(route.local){localResult=await executeAssistantAction(route.local,{speak:false});actions.push({name:route.local.action,args:route.local,result:localResult});rememberNexusAction(route.local,localResult);answer='LOCAL · '+fastAgentAnswer(route.local,localResult)}
  if(route.followup)answer='LOCAL · '+answerNexusFollowup(route.followup);
@@ -2348,7 +2373,16 @@ async function executeVoiceCommand(q){
  const raw=String(q||'').trim();if(!raw)return false;
  if(voicePendingIntent&&await handleVoicePendingTurn(raw))return true;
  const draft=parseNaturalCalendarDraft(raw);if(draft&&(!draft.text||!draft.date)){const pending=setVoicePendingIntent(draft);speakText(voicePendingPrompt(pending));return true;}
- const out=await nexusAgentTurn(raw,{speak:true});return Boolean(out);
+ const out=await nexusAgentTurn(raw,{speak:true,localOnly:true});
+ // La transcripción por sí sola NO confirma que la acción haya funcionado.
+ const failed=out.actions?.filter(a=>!a.result?.ok)||[];
+ const response=out.answer||'No pude interpretar esa orden.';
+ const status=$('#voiceStatusText');
+ const details=$('#voiceResponse');
+ if(details)details.textContent=response;
+ if(status)status.textContent=failed.length?'No pude completar la orden · '+String(failed[0]?.result?.error||'revisá el resultado').slice(0,110):
+   (out.actions?.length?'Acción local ejecutada · Vosk escuchando':'NEXUS respondió · Vosk escuchando');
+ return failed.length===0;
 }
 function stopVoiceRecognition({manual=true}={}){
   ++voiceSessionEpoch;clearTimeout(voiceSwitchTimer);voiceSwitchTimer=null;voiceEngineMode='none';voiceASRConfidence=null;
@@ -2366,24 +2400,16 @@ function stopVoiceRecognition({manual=true}={}){
 }
 let voiceNativeInstallLang='es-AR';
 async function refreshLocalVoiceStatus(){
+ // Único motor de reconocimiento: Vosk WASM. No consultar ni instalar
+ // SpeechRecognition online/nativo al abrir los ajustes de voz.
  const el=$('#localVoiceStatus'),button=$('#installVoiceLanguage'),engine=globalThis.NexusOffline;
  if(button)button.hidden=true;
- const local=await engine?.nativeVoice();
  const cached=engine?await engine.cacheStatus('voice'):{ready:false};
- const SR=globalThis.SpeechRecognition||globalThis.webkitSpeechRecognition;
- if(!local&&button&&typeof SR?.available==='function'&&typeof SR?.install==='function'){
-  try{for(const lang of ['es-AR','es-ES'])if(await SR.available({langs:[lang],processLocally:true})==='downloadable'){voiceNativeInstallLang=lang;button.hidden=false;button.textContent='Descargar idioma nativo '+lang;break;}}catch{}
- }
- if(el)el.textContent=local?'Voz local nativa disponible':cached.ready?'Voz local lista · VOSK':'Modelo no disponible · preparar voz offline';
- return local?'available':cached.ready?'wasm-ready':'unavailable';
+ if(el)el.textContent=cached.ready?'Voz local lista · VOSK':'Modelo Vosk no preparado · descargar voz local';
+ return cached.ready?'wasm-ready':'unavailable';
 }
-async function installLocalVoiceLanguage(){
- const SR=globalThis.SpeechRecognition||globalThis.webkitSpeechRecognition,button=$('#installVoiceLanguage');
- if(typeof SR?.install!=='function')return false;if(button)button.disabled=true;
- try{const installed=await SR.install({langs:[voiceNativeInstallLang],processLocally:true});await refreshLocalVoiceStatus();return !!installed;}
- catch(error){toast('No se pudo instalar el idioma nativo. Prepará la voz Vosk offline.');return false;}
- finally{if(button)button.disabled=false;}
-}
+// API heredada sin instalador online: control desactivado, no instala servicios cloud.
+async function installLocalVoiceLanguage(){return false;}
 async function prepareOfflineEngine(group){
  const engine=globalThis.NexusOffline;if(!engine){toast('No se cargó el motor local. Recargá NEXUS.');return false}
  const button=$('#'+(group==='voice'?'prepareVoiceBtn':'prepareVisionBtn')),status=$('#'+(group==='voice'?'localVoiceStatus':'lensEngineStatus'));
@@ -2421,10 +2447,24 @@ function receiveVoiceTranscript(text){
  if(normalizedCommand===voiceLastCommand&&now-voiceLastCommandAt<2500)return;
  voiceLastCommand=normalizedCommand;voiceLastCommandAt=now;
  $('#voiceStatusText').textContent='Nexus activo · ejecutando orden…';
- voiceCommandQueue=voiceCommandQueue.then(async()=>{if(!voiceMonitoring)return;voiceCommandBusy=true;try{await executeVoiceCommand(command)}finally{voiceCommandBusy=false;if(voiceMonitoring&&!voiceSpeaking)$('#voiceStatusText').textContent='Dormido · esperando “Nexus”';scheduleVoiceEngineAlignment();}}).catch(error=>{$('#voiceStatusText').textContent='No pude completar la orden.';console.warn('Voice command failed',error?.name||'error');});
+ voiceCommandQueue=voiceCommandQueue.then(async()=>{
+  if(!voiceMonitoring)return;
+  voiceCommandBusy=true;
+  try{await executeVoiceCommand(command)}
+  finally{voiceCommandBusy=false;scheduleVoiceEngineAlignment();}
+ }).catch(error=>{
+  const status=$('#voiceStatusText'),response=$('#voiceResponse');
+  if(status)status.textContent='No pude completar la orden.';
+  if(response)response.textContent='Error al ejecutar la orden: '+String(error?.message||'Error recuperable');
+  if(!speakText('No pude completar esa orden. Revisá el resultado en pantalla.'))console.warn('Voice command failed',error?.name||'error');
+ });
  return voiceCommandQueue;
 }
-function voiceVocabulary(){return [...state.inventory,...state.catalog].flatMap(r=>[r.name,r.formula].filter(Boolean))}
+function voiceVocabulary(){
+ // Prioriza datos canónicos; el diccionario extendido se integra en grammar() sin
+ // desplazar sustancias del límite de candidatos de Vosk.
+ return [...state.inventory,...state.catalog].flatMap(r=>[r.name,r.formula].filter(Boolean));
+}
 function setVoiceActiveUi(label){voiceListening=true;writeStorage('nexus_voice_wake_enabled_v2','1');$('#voiceStatus')?.classList.add('active');$('#voiceStatusText').textContent=label;$('#voiceToggleBtn').textContent='■ Detener vigilancia';const pill=$('#agentStatePill');if(pill)pill.textContent='● Agente activo · esperando Nexus'}
 async function startOfflineVoice(engine,{forceWasm=false}={}){
  const session=voiceSessionEpoch;
@@ -2433,7 +2473,7 @@ async function startOfflineVoice(engine,{forceWasm=false}={}){
   onPartial:text=>session===voiceSessionEpoch?receiveVoicePartial(text):undefined,
   onStatus:patch=>{if(session!==voiceSessionEpoch)return;if(patch.error){voiceListening=false;$('#voiceStatusText').textContent='Voz local: error recuperable.';}else $('#voiceStatusText').textContent=patch.state;}});
  const current=voiceRecognition;await current.start({forceWasm});if(!voiceMonitoring||current!==voiceRecognition||session!==voiceSessionEpoch)return false;
- voiceEngineMode='offline';setVoiceActiveUi('Voz offline activa · esperando “Nexus”');return true;
+ voiceEngineMode='offline';setVoiceActiveUi('Vosk local activo · esperando “Nexus”');return true;
 }
 function normalizeVoiceTranscriptCandidate(text){
  let s=String(text||'').trim();if(!s)return '';
@@ -2467,44 +2507,78 @@ function chooseVoiceTranscript(result){
  voiceASRConfidence=measured[0].confidence;
  return measured[0].text;
 }
-function desiredVoiceEngine(){return state.web&&navigator.onLine!==false&&(globalThis.SpeechRecognition||globalThis.webkitSpeechRecognition)?'online':'offline';}
-function voiceRuntimeStatus(){return {active:voiceMonitoring,engine:voiceEngineMode,preferred:desiredVoiceEngine(),busy:voiceCommandBusy,confidence:voiceASRConfidence,lastTranscriptAt:voiceLastInputAt};}
+// Reconocimiento siempre local: Internet cambia el proveedor de RESPUESTAS, nunca el oído.
+function desiredVoiceEngine(){return 'offline';}
+function voiceRuntimeStatus(){return {active:voiceMonitoring,engine:voiceEngineMode,recognizer:'Vosk WASM',externalResponses:'text-only',textExternalAvailable:Boolean(state.web&&navigator.onLine!==false),preferred:desiredVoiceEngine(),busy:voiceCommandBusy,confidence:voiceASRConfidence,lastTranscriptAt:voiceLastInputAt};}
 function scheduleVoiceEngineAlignment(){
- if(!voiceMonitoring||desiredVoiceEngine()===voiceEngineMode)return;
- clearTimeout(voiceSwitchTimer);
- voiceSwitchTimer=setTimeout(async()=>{
-  if(!voiceMonitoring||desiredVoiceEngine()===voiceEngineMode)return;
-  if(voiceSpeaking||voiceCommandBusy||voiceAwaitingCommand||Date.now()-voiceLastInputAt<1800){scheduleVoiceEngineAlignment();return;}
-  stopVoiceRecognition({manual:false});
-  await startVoiceRecognition({automatic:true});
- },900);
+ // Nunca reiniciar el micrófono ni reemplazar Vosk por Chrome al cambiar conectividad.
+ if(!voiceMonitoring||voiceEngineMode!=='offline'||voiceSpeaking||voiceAwaitingCommand||voiceCommandBusy)return;
+ const target=$('#voiceStatusText');
+ if(target&&target.textContent?.startsWith('Vosk local activo'))target.textContent='NEXUS IA local · Vosk activo · esperando “Nexus”';
 }
 
-async function startBrowserVoice(SR,engine){
- const session=voiceSessionEpoch,recognizer=new SR();recognizer.lang='es-AR';recognizer.continuous=true;recognizer.interimResults=true;recognizer.maxAlternatives=5;let fallingBack=false;
- const fallback=async reason=>{if(fallingBack||!voiceMonitoring||session!==voiceSessionEpoch)return;fallingBack=true;recognizer.onend=null;recognizer.onerror=null;try{recognizer.abort?.()}catch{};$('#voiceStatusText').textContent=`Voz online no disponible (${reason}). Activando respaldo offline…`;try{await startOfflineVoice(engine,{forceWasm:true})}catch(error){voiceMonitoring=false;voiceListening=false;$('#voiceStatus')?.classList.remove('active');$('#voiceStatusText').textContent='No se pudo iniciar la voz: '+error.message}};
- recognizer.onstart=()=>{if(!fallingBack&&session===voiceSessionEpoch){voiceEngineMode='online';setVoiceActiveUi('Voz online activa · esperando “Nexus”')}};
- recognizer.onresult=e=>{if(!voiceMonitoring||fallingBack||session!==voiceSessionEpoch)return;for(let i=e.resultIndex;i<e.results.length;i++){const result=e.results[i],text=result?.isFinal?chooseVoiceTranscript(result):normalizeVoiceTranscriptCandidate(result?.[0]?.transcript);if(!text)continue;result.isFinal?receiveVoiceTranscript(text):receiveVoicePartial(text)}};
- recognizer.onerror=e=>{if(!voiceMonitoring||fallingBack||session!==voiceSessionEpoch)return;const code=e?.error||'error';if(['not-allowed','audio-capture'].includes(code)){voiceMonitoring=false;voiceListening=false;$('#voiceStatus')?.classList.remove('active');$('#voiceStatusText').textContent=code==='not-allowed'?'Micrófono bloqueado para NEXUS-X.':'No se pudo capturar el micrófono.';return}if(!['no-speech','aborted'].includes(code))void fallback(code)};
- recognizer.onend=()=>{if(session!==voiceSessionEpoch)return;voiceListening=false;if(!voiceMonitoring||fallingBack)return;clearTimeout(voiceRestartTimer);voiceRestartTimer=setTimeout(()=>{if(!voiceMonitoring||fallingBack)return;try{recognizer.start()}catch{void fallback('reinicio')}},350)};
- voiceRecognition=recognizer;recognizer.start();return true;
-}
 async function startVoiceRecognition({automatic=false}={}){
- if(voiceMonitoring)return true;const engine=globalThis.NexusOffline;if(!engine){$('#voiceStatusText').textContent='Motor local no disponible. Recargá NEXUS.';return false}
- const granted=await requestMicrophonePermission({silent:automatic});if(!granted)return false;++voiceSessionEpoch;voiceMonitoring=true;voiceSpeaking=false;voicePartialInterrupted=false;
- const SR=globalThis.SpeechRecognition||globalThis.webkitSpeechRecognition;
- try{if(desiredVoiceEngine()==='online'&&SR)return await startBrowserVoice(SR,engine);return await startOfflineVoice(engine)}
- catch(error){if(voiceMonitoring&&desiredVoiceEngine()==='online'&&SR){try{return await startOfflineVoice(engine,{forceWasm:true})}catch{}}voiceMonitoring=false;voiceListening=false;$('#voiceStatus')?.classList.remove('active');$('#voiceStatusText').textContent=error.message||'No se pudo iniciar la voz.';return false}
+ if(voiceMonitoring)return true;
+ const engine=globalThis.NexusOffline;
+ if(!engine){$('#voiceStatusText').textContent='Motor Vosk local no disponible. Recargá NEXUS.';return false;}
+ const granted=await requestMicrophonePermission({silent:automatic});
+ if(!granted)return false;
+ ++voiceSessionEpoch;voiceMonitoring=true;voiceSpeaking=false;voicePartialInterrupted=false;
+ try{
+  // forceWasm evita también el reconocimiento nativo opcional; usamos Vosk
+  // tanto con Internet activado como en modo avión.
+  return await startOfflineVoice(engine,{forceWasm:true});
+ }catch(error){
+  voiceMonitoring=false;voiceListening=false;
+  $('#voiceStatus')?.classList.remove('active');
+  $('#voiceStatusText').textContent='Vosk local no disponible. Prepará voz offline y reintentá.';
+  return false;
+ }
 }
 function spanishVoiceScore(voice){const lang=String(voice?.lang||'').toLowerCase();let score=lang==='es-ar'?300:lang==='es-es'?240:lang.startsWith('es-')?190:lang==='es'?170:-1;if(score<0)return score;if(voice?.localService)score+=30;return score}
 function selectSpanishVoice(voices,{localOnly=false}={}){return (voices||[]).filter(v=>spanishVoiceScore(v)>=0&&(!localOnly||v.localService)).sort((a,b)=>spanishVoiceScore(b)-spanishVoiceScore(a))[0]||null}
 function selectLocalSpanishVoice(voices){return selectSpanishVoice(voices,{localOnly:true})}
 function speechTextForTTS(text){let s=String(text??'').replace(/(?:^|\n)\s*EXTERNA NO DISPONIBLE\s*·[^\n]*/g,' El servicio externo no está disponible. Las funciones locales siguen disponibles.').replace(/[^\n]*(?:HTTP\s*\d{3}|authentication_error|User not found|Missing ClientApiKey|Error 1010|Ray ID)[^\n]*/gi,' El servicio externo no está disponible.').replace(/(?:^|\n)\s*(?:LOCAL|EXTERNA(?: NO DISPONIBLE)?)\s*·\s*/g,' ').replace(/\n\s*(?:Fuentes:|Sin fuentes web verificables).*$/is,'').replace(/https?:\/\/\S+/gi,' ').replace(/[*_`#]/g,' ').replace(/\s+/g,' ').trim();if(s.length>560){const cut=s.slice(0,560),stop=Math.max(cut.lastIndexOf('. '),cut.lastIndexOf('? '),cut.lastIndexOf('! '));s=(stop>180?cut.slice(0,stop+1):cut.trimEnd()+'…')}return s}
 function speakText(text){
- if(!globalThis.speechSynthesis||typeof globalThis.SpeechSynthesisUtterance!=='function')return false;const synth=globalThis.speechSynthesis,voices=typeof synth.getVoices==='function'?synth.getVoices():[],online=navigator.onLine!==false,voice=online?selectSpanishVoice(voices):selectLocalSpanishVoice(voices),spoken=speechTextForTTS(text);if(!spoken)return false;
- const token=++voiceUtteranceId;synth.cancel();voiceSpeaking=true;voiceLastSpoken=spoken.replace(/\bnexus(?:[- ]?x)?\b/gi,'el sistema');const utterance=new SpeechSynthesisUtterance(voiceLastSpoken);if(voice)utterance.voice=voice;utterance.lang=voice?.lang||'es-AR';utterance.rate=.98;utterance.pitch=1;
- if(globalThis.NexusOffline)globalThis.NexusOffline.diagnostics.voice.tts={name:voice?.name||'voz predeterminada',language:utterance.lang,local:voice?Boolean(voice.localService):null,mode:online?'online/híbrida':'offline/local-preferida'};
- const finish=()=>{if(token!==voiceUtteranceId)return;voiceSpeaking=false;voiceEchoUntil=Date.now()+2500;if(voiceMonitoring){if(voicePendingIntent){voiceAwaitingCommand=true;$('#voiceStatusText').textContent='Te escucho · respuesta pendiente'}else $('#voiceStatusText').textContent='Dormido · esperando “Nexus”'}};utterance.onend=finish;utterance.onerror=finish;synth.speak(utterance);return true;
+ const synth=globalThis.speechSynthesis,Utterance=globalThis.SpeechSynthesisUtterance;
+ if(!synth||typeof Utterance!=='function')return false;
+ const spoken=speechTextForTTS(text);
+ if(!spoken)return false;
+ const voices=typeof synth.getVoices==='function'?synth.getVoices():[];
+ const voice=selectLocalSpanishVoice(voices);
+ // En Android getVoices puede estar vacío o indicar localService=false aunque
+ // el sintetizador del dispositivo sí pueda hablar. Conservar el TTS instalado
+ // como preferencia; permitir el TTS predeterminado del sistema sin elegir
+ // explícitamente un proveedor remoto. Confirmar offline en el dispositivo.
+ const token=++voiceUtteranceId;
+ try{synth.cancel()}catch{}
+ const utterance=new Utterance(spoken.replace(/\bnexus(?:[- ]?x)?\b/gi,'el sistema'));
+ if(voice)utterance.voice=voice;
+ utterance.lang=voice?.lang||'es-AR';
+ utterance.rate=.98;utterance.pitch=1;
+ voiceSpeaking=true;voiceLastSpoken=utterance.text;
+ const mode=voice?'local-confirmada':'predeterminada-no-verificada';
+ if(globalThis.NexusOffline?.diagnostics?.voice)globalThis.NexusOffline.diagnostics.voice.tts={
+  name:voice?.name||'voz predeterminada del sistema',language:utterance.lang,local:voice?true:null,mode,
+  ready:true
+ };
+ const finish=error=>{
+  if(token!==voiceUtteranceId)return;
+  voiceSpeaking=false;voiceEchoUntil=Date.now()+2500;
+  if(error){const status=$('#voiceStatusText');if(status)status.textContent='La voz del dispositivo no pudo hablar · verificá TTS en Android';}
+  else if(voiceMonitoring){const status=$('#voiceStatusText');if(status&&status.textContent==='Nexus activo · ejecutando orden…')status.textContent='Dormido · esperando “Nexus”';}
+  if(voiceMonitoring&&voicePendingIntent)voiceAwaitingCommand=true;
+ };
+ utterance.onend=()=>finish(false);
+ utterance.onerror=()=>finish(true);
+ try{
+  synth.speak(utterance);
+  if(synth.paused&&typeof synth.resume==='function')synth.resume();
+  return true;
+ }catch(error){
+  finish(true);
+  return false;
+ }
 }
 function initVoice(){
  refreshLocalVoiceStatus().catch(()=>{});$('#installVoiceLanguage').onclick=installLocalVoiceLanguage;
