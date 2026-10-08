@@ -57,7 +57,7 @@ test('Dexie nunca acepta el nombre de la base de datos de producción',async()=>
 });
 test('Modelo de alta demanda debe fallar sin recursos; no existe fallback a servidores externos',async()=>{
  let fetchCount=0;
- const fakeCache={open:async()=>({match:async()=>null})};
+ const fakeCache={open:async()=>({match:async()=>null,delete:async()=>true})};
  await assert.rejects(prepareSemanticAssets({
   cacheStorage:fakeCache,
   cryptoObject:globalThis.crypto,
