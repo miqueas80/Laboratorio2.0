@@ -61,7 +61,42 @@ try{
     ocrReady:true,ocrBackend:ready.ocr.backend,dictionarySize:ready.ocr.dictionarySize};
   }finally{lens.close()}
  });
+ const cache=await page.evaluate(async()=>{
+  const {prepareOfflineShell,offlineShellStatus}=await import('./offline-shell.js');
+  await prepareOfflineShell({includeVendor:false,includeInventory:true});
+  const sw=await navigator.serviceWorker.register('./semantic-sw.js',{scope:'./'});
+  await navigator.serviceWorker.ready;
+  if(!sw.active)throw Error('Service Worker experimental no activo');
+  if(!navigator.serviceWorker.controller){
+   await new Promise((resolve,reject)=>{
+    const timer=setTimeout(()=>reject(Error('SW no tomó control de Edge')),15000);
+    navigator.serviceWorker.addEventListener('controllerchange',()=>{clearTimeout(timer);resolve()},{once:true});
+   });
+  }
+  const shell=await offlineShellStatus({includeVendor:false,includeInventory:true});
+  const vision=await NexusOffline.cacheStatus('vision');
+  if(!shell.ready||!vision.ready)throw Error('Modelo Lens o shell no preparado para offline');
+  return {ready:shell.ready,inventoryCached:shell.inventoryCached,visionCached:vision.ready};
+ });
+ await page.context().setOffline(true);
+ await page.reload({waitUntil:'domcontentloaded',timeout:30000});
+ const offline=await page.evaluate(async()=>{
+  const {EdgeLens}=await import('./lens-edge.js');
+  if(!globalThis.NexusOffline)throw Error('Runtime Lens no cargó tras modo avión');
+  const lens=new EdgeLens();
+  try{
+   await lens.prepare({forceWasm:true});
+   const canvas=document.createElement('canvas');canvas.width=320;canvas.height=260;
+   const ctx=canvas.getContext('2d');ctx.fillStyle='#ccc';ctx.fillRect(0,0,320,260);
+   ctx.fillStyle='#6b808f';ctx.fillRect(124,35,60,170);
+   const result=await lens.analyze(canvas,{skipQR:true,forceWasm:true});
+   if(result.model!=='MobileCLIP-S0'||result.backend!=='WASM'||result.identity!==null)
+    throw Error('Visión reiniciada offline devolvió un estado no válido');
+   return {success:true,model:result.model,backend:result.backend,
+    navigatorOnline:navigator.onLine,serviceWorkerControlled:!!navigator.serviceWorker.controller};
+  }finally{lens.close()}
+ });
  console.log(JSON.stringify({...info,elapsedMs:Math.round(performance.now()-start),
-  networkRequestsOutsideOrigin:'blocked',
+  cache,browserOffline:offline,networkRequestsOutsideOrigin:'blocked',
   context:'Synthetic canvas runtime smoke; no accuracy claim and NOT physical Android'},null,2));
 }finally{await browser?.close().catch(()=>{});server.kill('SIGTERM')}
