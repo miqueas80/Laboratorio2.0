@@ -1,5 +1,5 @@
 /** Bounded on-device diagnostic ring buffer; never records API keys or media frames. */
-const redact=s=>String(s).replace(/Bearer\s+\S+/gi,'Bearer [REDACTED]').replace(/(?:sk-|xk-)[a-z0-9_-]{8,}/gi,'[REDACTED]');
+const redact=s=>String(s).replace(/Bearer\s+[a-z0-9._~+\/-]+/gi,'Bearer [REDACTED]').replace(/(?:sk-|xk-)[a-z0-9_-]{8,}/gi,'[REDACTED]');
 export class LocalTelemetry {
  constructor({max=200,now=()=>new Date().toISOString()}={}){this.max=Math.min(1000,Math.max(10,max));this.now=now;this.events=[]}
  log(level,code,details={}){
