@@ -224,7 +224,7 @@ $('fabricInstall').onclick=()=>task(async()=>{
  output('fabricResults',{...result,shell,note:'Modelo y runtime local preparados. Recargá esta pestaña y probá el modo avión antes de usarlo.'});
 },'fabricResults');
 $('fabricLoad').onclick=()=>task(async()=>{
- const source=await readPublishedDocumentCache();
+ const source=await readEdgeAvailableDocuments();
  if(!source.available||!source.documents.length)throw Error(source.reason||'Primero indexá los documentos en NEXUS estable');
  documentFabric?.close();documentFabric=new SemanticEvidenceFabric();
  const result=await documentFabric.prepare(source.documents,{semantic:$('semanticMode').checked,
