@@ -21,6 +21,7 @@ function makeRows(rows){return rows.map(r=>({id:r.id,text:[r.id,r.name,r.formula
 async function build(rows){
  client?.close();client=new EdgeSearchClient();
  const started=performance.now(),info=await client.build(rows);
+ virtual.setRows(rows);
  output('results',{...info,ms:Math.round(performance.now()-started),note:'Tiempo solo orientativo: no es una prueba de 60 FPS ni de memoria RAM.'});
 }
 $('load').onclick=()=>task(async()=>build(makeRows(await getRecords())),'results');
