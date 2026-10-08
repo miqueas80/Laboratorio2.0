@@ -91,4 +91,4 @@ $('addTask').onclick=()=>task(async()=>{
 $('syncNow').onclick=()=>task(async()=>{
  await experimentalDB();output('syncResult',await replica.sendSnapshot());
 },'syncResult');
-window.addEventListener('pagehide',()=>client?.close(),{once:true});
+window.addEventListener('pagehide',()=>{client?.close();peer?.close();edgeDB?.close();virtual.close()},{once:true});
