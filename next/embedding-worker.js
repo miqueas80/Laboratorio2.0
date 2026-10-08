@@ -9,6 +9,8 @@ const selfBase=new URL('./',self.location.href);
 const modelBase=new URL('./models/',selfBase).href;
 const wasmBase=new URL('./vendor/onnx/',selfBase).href;
 const libraryURL=new URL('./vendor/transformers/transformers.min.js',selfBase).href;
+const wasmModuleURL=new URL('./vendor/onnx/ort-wasm-simd-threaded.jsep.mjs',selfBase).href;
+const wasmBinaryURL=new URL('./vendor/onnx/ort-wasm-simd-threaded.jsep.wasm',selfBase).href;
 let extractor=null,loading=null,backend='',state='missing';
 function respond(id,result,error){self.postMessage(error?{id,error:String(error)}:{id,result})}
 async function localExists(url){
@@ -16,13 +18,15 @@ async function localExists(url){
   catch{return false}
 }
 async function status(){
- const [lib,config,model,tokenizer]=await Promise.all([
+ const [lib,wasmModule,wasmBinary,config,model,tokenizer]=await Promise.all([
   localExists(libraryURL),
+  localExists(wasmModuleURL),
+  localExists(wasmBinaryURL),
   localExists(new URL('./models/'+MODEL+'/config.json',selfBase)),
   localExists(new URL('./models/'+MODEL+'/onnx/model_quantized.onnx',selfBase)),
   localExists(new URL('./models/'+MODEL+'/tokenizer.json',selfBase))
  ]);
- return {ready:Boolean(extractor),installed:lib&&config&&model&&tokenizer,library:lib,config,weights:model,tokenizer,model:MODEL,dimension:DIMENSION,backend};
+ return {ready:Boolean(extractor),installed:lib&&wasmModule&&wasmBinary&&config&&model&&tokenizer,library:lib,wasmModule,wasmBinary,config,weights:model,tokenizer,model:MODEL,dimension:DIMENSION,backend};
 }
 async function prepare(){
  if(extractor)return {ready:true,model:MODEL,backend,dimension:DIMENSION};
@@ -31,7 +35,9 @@ async function prepare(){
   const exists=await status();
   if(!exists.installed)throw Error('Embeddings no instalados: faltan archivos locales, no se permite conexión externa');
   const {pipeline,env}=await import(libraryURL);
+  // Disable a second 118MB browser cache: verified assets are already supplied by the model SW.
   env.allowRemoteModels=false;env.allowLocalModels=true;env.localModelPath=modelBase;
+  env.useBrowserCache=false;env.useFS=false;
   env.backends.onnx.wasm.wasmPaths=wasmBase;
   const target=self.navigator?.gpu?'webgpu':'wasm';
   try{
