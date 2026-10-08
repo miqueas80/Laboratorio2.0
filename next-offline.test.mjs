@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {EDGE_SHELL_FILES,EDGE_VENDOR_FILES,offlineShellStatus,prepareOfflineShell} from './next/offline-shell.js';
+import {EDGE_SHELL_FILES,EDGE_VENDOR_FILES,EDGE_YJS_VENDOR,offlineShellStatus,prepareOfflineShell} from './next/offline-shell.js';
 import {MODEL_CACHE} from './next/model-provisioner.js';
 
 function memoryCache(){
@@ -90,4 +90,25 @@ test('Copia de inventario offline es read-only, valida 111 registros y no modifi
   fetcher:async url=>new Response(url.endsWith('/inventory.json')?'{"records":[]}':'// archivo')
  }),/Inventario canónico inesperado/);
  assert.equal((await offlineShellStatus({cacheStorage:invalid.storage,includeVendor:false,includeInventory:true})).ready,false);
+});
+
+test('El módulo Yjs solo queda disponible offline tras validar su checksum',async()=>{
+ const memory=memoryCache();
+ const sha=EDGE_YJS_VENDOR.sha256;
+ const fakeCrypto={subtle:{async digest(_algorithm,buffer){
+  const digest=buffer.byteLength===73?sha:'0'.repeat(64);
+  return Uint8Array.from(digest.match(/../g).map(v=>parseInt(v,16))).buffer;
+ }}};
+ const cacheOptions={
+  includeVendor:false,includeYjs:true,includeInventory:false,
+  cryptoObject:fakeCrypto,cacheStorage:memory.storage,
+  fetcher:async url=>url.endsWith(EDGE_YJS_VENDOR.path)?new Response(new Uint8Array(73)):new Response('recurso local')
+ };
+ const ready=await prepareOfflineShell(cacheOptions);
+ assert.equal(ready.hasYjs,true);
+ assert.equal((await offlineShellStatus({cacheStorage:memory.storage,includeVendor:false,includeYjs:true})).ready,true);
+ const invalid=memoryCache();
+ await assert.rejects(prepareOfflineShell({...cacheOptions,cacheStorage:invalid.storage,
+  cryptoObject:globalThis.crypto}),/SHA-256 del runtime no coincide/);
+ assert.equal((await offlineShellStatus({cacheStorage:invalid.storage,includeVendor:false,includeYjs:true})).ready,false);
 });
