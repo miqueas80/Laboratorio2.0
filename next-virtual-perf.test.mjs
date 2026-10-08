@@ -17,9 +17,12 @@ test('Virtual list 100001 ítems conserva <=40 nodos de contenido',async()=>{
  try{
   list.setRows(rows);await pause();
   assert.ok(el.querySelectorAll('div').length<40);
+  // At zero, even a 1px scroll can expose a new row when viewport aligns
+  // exactly on a row boundary. Move inside a row before checking the no-op.
+  el.scrollTop=10;el.dispatchEvent(new dom.window.Event('scroll'));
+  await pause();
   const before=list.metrics(),first=el.textContent;
-  // Small offset within the same visible range must skip the DOM update.
-  el.scrollTop=4;el.dispatchEvent(new dom.window.Event('scroll'));
+  el.scrollTop=12;el.dispatchEvent(new dom.window.Event('scroll'));
   await pause();
   assert.equal(list.metrics().created,before.created);
   assert.equal(list.metrics().unchangedFrames,before.unchangedFrames+1);
