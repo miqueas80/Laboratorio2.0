@@ -1,0 +1,31 @@
+name: NEXUS Edge real encrypted WebRTC sync
+on:
+  workflow_dispatch:
+  push:
+    branches: [feature/nexus-x-edge-architecture-v1]
+    paths:
+      - ".github/workflows/edge-webrtc-browser.yml"
+      - "scripts/smoke-edge-webrtc.mjs"
+      - "next/manual-webrtc.js"
+      - "next/sync-controller.js"
+      - "next/sync-core.js"
+      - "next/p2p-crypto.js"
+      - "next/storage.js"
+permissions:
+  contents: read
+jobs:
+  verify-encrypted-sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npm install --no-save --ignore-scripts --no-audit --no-fund playwright-core@1.56.1
+      - name: Verify actual offline-LAN-style WebRTC candidates, authenticated AES and independent IndexedDB
+        run: |
+          command -v google-chrome
+          node scripts/smoke-edge-webrtc.mjs
