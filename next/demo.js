@@ -38,6 +38,7 @@ function makePeer(){
   },
   onStatus:status=>output('pairStatus',{...status,code:peer.getPairCode()||'Todavía no calculado'})
  });
+ if(yjsBoard)yjsBoard.transport=peer;
  return peer;
 }
 const virtual=createVirtualList($('virtual'),{rowHeight:44,renderRow:(row)=>{const el=document.createElement('div');el.className='virtual-row';el.textContent=row.id+' · '+row.text;return el}});
