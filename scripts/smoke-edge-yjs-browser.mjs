@@ -26,6 +26,7 @@ try{
  const result=await page.evaluate(async()=>{
   const Y=await import('./vendor/yjs/yjs.bundle.mjs');
   const {YjsLabBoard}=await import('./yjs-lab.js');
+  const {ManualWebRTCPeer}=await import('./manual-webrtc.js');
   const {openEdgeDB}=await import('./storage.js');
   const adapter=name=>({open:(_n,version)=>indexedDB.open(name,version)});
   const db1=await openEdgeDB({indexedDB:adapter('NEXUS_YJS_BROWSER_OFFLINE_1')});
@@ -49,8 +50,33 @@ try{
    const restart=new YjsLabBoard({Y,db:db2,room:'browser-test'});
    await restart.load();const persisted=restart.getTask('task1');restart.close();
    if(JSON.stringify(persisted)!==JSON.stringify(ra))throw Error('No persistió el estado Yjs');
+   // Move from a simulated transport to two ACTUAL peer-to-peer WebRTC
+   // DataChannels, and verify Yjs state traveling via the existing ECDH/AES channel.
+   let peerA=null,peerB=null;
+   try{
+    peerA=new ManualWebRTCPeer({onPayload:payload=>a.receive(payload)});
+    peerB=new ManualWebRTCPeer({onPayload:payload=>b.receive(payload)});
+    const offer=await peerA.createInvite(),answer=await peerB.acceptInvite(offer);
+    const codeA=await peerA.acceptAnswer(answer),codeB=peerB.getPairCode();
+    if(codeA!==codeB)throw Error('Los códigos Yjs ECDH no coinciden');
+    for(let i=0;i<240&&!(peerA.channel?.readyState==='open'&&peerB.channel?.readyState==='open');i++)
+     await new Promise(resolve=>setTimeout(resolve,50));
+    if(peerA.channel?.readyState!=='open'||peerB.channel?.readyState!=='open')
+     throw Error('No se estableció WebRTC para Yjs');
+    peerA.confirmSameCode(codeB);peerB.confirmSameCode(codeA);
+    a.transport=peerA;b.transport=peerB;
+    await a.updateTask('webrtc2',{title:'Consulta colectiva en laboratorio'});
+    for(let i=0;i<150&&!b.getTask('webrtc2');i++)await new Promise(resolve=>setTimeout(resolve,30));
+    if(b.getTask('webrtc2')?.title!=='Consulta colectiva en laboratorio')
+     throw Error('La tarea Yjs no llegó a B por WebRTC');
+    await b.updateTask('webrtc2',{notes:'Revisada por segundo equipo'});
+    for(let i=0;i<150&&!a.getTask('webrtc2')?.notes;i++)await new Promise(resolve=>setTimeout(resolve,30));
+    if(a.getTask('webrtc2')?.notes!=='Revisada por segundo equipo')
+     throw Error('La edición Yjs no volvió por WebRTC');
+   }finally{peerA?.close();peerB?.close()}
    return {version:'Yjs 13.6.32',concurrentFieldsMerged:true,persistentIndexedDB:true,
-    independentReplicas:2,room:'browser-test',title:ra.title,notes:ra.notes,
+    independentReplicas:2,webrtcE2E:true,aesEncrypted:true,room:'browser-test',
+    title:ra.title,notes:ra.notes,
     externalRequestsBlocked:true,environment:'Chromium on CI, not Android'};
   }finally{a.close();b.close();db1.close();db2.close()}
  });
