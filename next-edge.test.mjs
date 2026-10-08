@@ -110,3 +110,38 @@ test('Barge-in energy gate no dispara estando inactivo',()=>{
  assert.equal(count,1);clock+=100;
  assert.equal(gate.feed(Float32Array.of(.6,.6)),false);
 });
+
+test('100.001 filas: DOM virtual contiene sólo filas cercanas al viewport',async()=>{
+ const {JSDOM}=await import('jsdom');
+ const {createVirtualList}=await import('./next/virtual-list.js');
+ const dom=new JSDOM('<div id="list"></div>');
+ try{
+  const target=dom.window.document.querySelector('#list');
+  Object.defineProperty(target,'clientHeight',{value:320});
+  const virtual=createVirtualList(target,{rowHeight:40,overscan:6,renderRow:(row)=>{
+   const el=dom.window.document.createElement('div');el.textContent=row.id;return el;
+  }});
+  virtual.setRows(Array.from({length:100001},(_,i)=>({id:'NX-'+i})));
+  await new Promise(resolve=>setTimeout(resolve,30));
+  assert.ok(target.querySelectorAll('div').length<45);
+  target.scrollTop=40*55000;target.dispatchEvent(new dom.window.Event('scroll'));
+  await new Promise(resolve=>setTimeout(resolve,30));
+  assert.ok(target.textContent.includes('NX-55000'));
+  assert.ok(target.querySelectorAll('div').length<45);
+  virtual.close();
+ }finally{dom.window.close()}
+});
+
+test('IndexedDB revierte todas las escrituras ante una mutación inválida',async()=>{
+ const db=await openEdgeDB({indexedDB});
+ try{
+  const before=(await readEdgeStore(db,'calendar')).length;
+  await assert.rejects(atomicEdgeWrites(db,[
+   {store:'calendar',value:{id:'safe-rollback-test',text:'temp'}},
+   {store:'calendar',value:{text:'sin clave primaria'}}
+  ]));
+  const after=await readEdgeStore(db,'calendar');
+  assert.equal(after.length,before);
+  assert.equal(after.some(e=>e.id==='safe-rollback-test'),false);
+ }finally{db.close()}
+});
