@@ -5,6 +5,10 @@ on:
     branches: [feature/nexus-x-edge-architecture-v1]
     paths:
       - ".github/workflows/edge-preview.yml"
+      - "next/**"
+      - "scripts/vendor-edge-transformers.mjs"
+      - "scripts/vendor-edge-yjs.mjs"
+      - "inventory.json"
 permissions:
   contents: read
 jobs:
