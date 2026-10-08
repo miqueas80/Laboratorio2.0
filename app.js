@@ -16,7 +16,7 @@ const REPO_OWNER='miqueas80';
 const REPO_NAME='';
 const REPO_BRANCH='';
 const DOC_MAX_BYTES=16*1024*1024;
-const APP_VERSION='2026.10.08-nexus-voice-r3-production';
+const APP_VERSION='2026.10.08-nexus-knowledge-r4-expo';
 const INVENTORY_RECOVERY_KEY='nexus_x_inventory_recovery_v1';
 const health={storage:'sin comprobar',documents:'sin comprobar',errors:[],boot:'BOOT'};
 const LENS_EXTERNAL_CACHE_TTL=30*60*1000;
@@ -1839,14 +1839,22 @@ function answerNexusFollowup(kind){
  if(kind==='name')return 'El registro es '+r.name+', código '+r.id+'.';
  return 'No tengo información suficiente para continuar.';
 }
+function localEvidenceLookup(question){
+ // La misma evidencia se recupera con y sin Internet; las consultas externas son opcionales.
+ const normalized=norm(question).replace(/^(?:nexus(?:[- ]?x)?)[,:\s]+/,'').trim();
+ if(!/^(?:que|cual|para que|como|explica|explicame|decime|dime|informacion|donde|tenemos|hay)\b/.test(normalized))return null;
+ const k=globalThis.NexusKnowledge;
+ if(!k?.find)return null;
+ const result=k.find(normalized,{inventory:state.inventory,documents:state.docs});
+ return result?.supported?result:null;
+}
+function nexusHelpQuestion(question){
+ return /\b(?:que (?:podes|puedes|sabes) hacer|que funciones (?:tenes|tienes)|que capacidades (?:tenes|tienes)|que puedo pedirte|mostrame tus (?:funciones|capacidades))\b/.test(norm(question));
+}
 function localEvidenceAnswer(question){
  // Recuperación local verificable. No inventar síntesis científica ni ejecutar órdenes.
- const normalized=norm(question).replace(/^(?:nexus(?:[- ]?x)?)[,:\s]+/,'').trim();
- if(!/^(?:que|cual|para que|como|explica|explicame|decime|dime|informacion|donde|tenemos|hay)\b/.test(normalized))return '';
- const k=globalThis.NexusKnowledge;
- if(!k?.find)return '';
- const result=k.find(normalized,{inventory:state.inventory,documents:state.docs});
- if(!result.supported)return '';
+ const result=localEvidenceLookup(question);
+ if(!result)return '';
  if(result.type==='document'){
   rememberNexusLocalContext({documentPath:result.source});
   return 'En el documento local «'+result.title+'» encontré este fragmento: «'+result.excerpt+'». Es una cita de evidencia, no una conclusión independiente.';
@@ -1856,9 +1864,11 @@ function localEvidenceAnswer(question){
 }
 function localAssistantResponse(q){
  const n=norm(q);
+ if(nexusHelpQuestion(q))return 'Puedo abrir el inventario, buscar sustancias y su ubicación, consultar documentos, agendar recordatorios, abrir Lens y escanear códigos QR. Mi voz funciona localmente sin Internet. Lens propone hipótesis visuales, pero no confirma sustancias por su apariencia.';
+ if(/\b(?:muchas gracias|gracias)\b/.test(n))return 'De nada. Estoy listo para ayudarte en el laboratorio.';
  if(/\b(hola|buenas|hey|hola nexus)\b/.test(n))return'Hola. Soy NEXUS-X. Puedo buscar en el inventario, abrir módulos, analizar documentos y conversar cuando xKiro está conectado.';
  if(/quien eres|que eres|como te llamas/.test(n))return'Soy NEXUS-X, el asistente local del laboratorio.';
- if(/cuantos registros|cantidad de registros|inventario/.test(n)&&!/buscar|investigar/.test(n))return `El inventario cargado contiene ${state.inventory.length} registros.`;
+ if(/cuantos registros|cantidad de registros|cuantas sustancias|cuantos materiales/.test(n))return `El inventario cargado contiene ${state.inventory.length} registros.`;
  if(/estado|diagnostico|integridad/.test(n)){const x=runIntegrity();return `Integridad local: ${x.ok?'correcta':'requiere revisión'}. Registros: ${x.recordCount}. IDs únicos: ${x.uniqueIds}.`;}
  return localEvidenceAnswer(q)||'No encontré evidencia local suficiente para responder con certeza. Puedo buscar inventario, documentos y ejecutar órdenes; con Internet, xKiro amplía las respuestas.';
 }
@@ -2254,6 +2264,9 @@ function resolveIntent(text){
  }
  const split=q.match(/^(.+?)\s+y\s+(.+)$/i);
  if(external&&split&&state.web&&navigator.onLine){const local=fastAgentPlan(split[1].replace(/\b(nuestro|nuestra|nuestros|nuestras)\s+/gi,''));if(local?.action)return {kind:'HÍBRIDO',local,externalQuery:split[2]}}
+ if(nexusHelpQuestion(q))return {kind:'LOCAL',local:null};
+ // El conocimiento propio nunca se reemplaza por xKiro sólo porque volvió Internet.
+ if(!external&&localEvidenceLookup(q))return {kind:'LOCAL',local:null};
  if(external)return state.web&&navigator.onLine?{kind:'EXTERNO',externalQuery:q}:{kind:'LOCAL',local:null};
  if(/(?:que es|explica|explicame|como funciona|informacion externa)/.test(n))return state.web&&navigator.onLine?{kind:'EXTERNO',externalQuery:q}:{kind:'LOCAL',local:null};
  if(state.web&&navigator.onLine)return {kind:'EXTERNO',externalQuery:q};
