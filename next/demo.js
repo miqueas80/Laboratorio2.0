@@ -87,7 +87,8 @@ $('fabricInstall').onclick=()=>task(async()=>{
  if(!registration.active)throw Error('Activá el Service Worker del laboratorio Edge y reintentá');
  output('fabricResults','Descargando y verificando archivos…');
  const result=await prepareSemanticAssets({onProgress:p=>output('fabricResults',p)});
- output('fabricResults',{...result,note:'Para usar el modelo, recargá esta pestaña y luego indexá los documentos.'});
+ const shell=await prepareOfflineShell({onProgress:p=>output('fabricResults',{preparando:'interfaz offline',...p})});
+ output('fabricResults',{...result,shell,note:'Modelo y runtime local preparados. Recargá esta pestaña y probá el modo avión antes de usarlo.'});
 },'fabricResults');
 $('fabricLoad').onclick=()=>task(async()=>{
  const source=await readPublishedDocumentCache();
