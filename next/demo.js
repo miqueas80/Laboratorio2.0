@@ -60,6 +60,26 @@ async function getRecords(){
  records=parsed.records;return records;
 }
 function output(node,value){$(node).textContent=typeof value==='string'?value:JSON.stringify(value,null,2)}
+async function registerSensorOfflineWorker(){
+ if(!navigator.serviceWorker)throw Error('Service Worker requerido para modelos de voz y visión offline');
+ const registration=await navigator.serviceWorker.register('../offline/edge-sw.js',{scope:'../offline/'});
+ if(registration.active)return registration;
+ const installing=registration.installing||registration.waiting;
+ if(!installing)throw Error('Worker de modelos no pudo activarse');
+ await new Promise((resolve,reject)=>{
+  const timer=setTimeout(()=>reject(Error('La activación del cache visual/voz tardó demasiado')),12000);
+  const check=()=>{
+   if(registration.active||installing.state==='activated'){
+    clearTimeout(timer);installing.removeEventListener('statechange',check);resolve()
+   }else if(installing.state==='redundant'){
+    clearTimeout(timer);installing.removeEventListener('statechange',check);
+    reject(Error('Service Worker de modelos descartado'))
+   }
+  };
+  installing.addEventListener('statechange',check);check();
+ });
+ return registration;
+}
 async function task(fn,node){
  try{await fn()}catch(error){output(node,'Error: '+String(error.message||error))}
 }
@@ -89,7 +109,8 @@ $('lensPrepare').onclick=()=>task(async()=>{
  lensBridge||=new EdgeLens({inventory:await getRecords()});
  output('edgeLensResult','Preparando MobileCLIP y PP-OCR localmente, sin enviar fotos a Internet…');
  const state=await lensBridge.prepare({onProgress:p=>output('edgeLensResult',p)});
- output('edgeLensResult',{prepared:true,engine:state});
+ await registerSensorOfflineWorker();
+ output('edgeLensResult',{prepared:true,engine:state,sensorOfflineCache:true});
 },'edgeLensResult');
 async function localEdgeAgent(){
  if(!edgeAgent)edgeAgent=new NexusEdgeAgent({inventory:await getRecords(),fabric:documentFabric});
@@ -114,7 +135,9 @@ function edgeVoice(){
 }
 $('voicePrepare').onclick=()=>task(async()=>{
  output('edgeVoiceStatus','Preparando Vosk local por decisión del operador…');
- output('edgeVoiceStatus',await edgeVoice().prepare(p=>output('edgeVoiceStatus',p)));
+ const state=await edgeVoice().prepare(p=>output('edgeVoiceStatus',p));
+ await registerSensorOfflineWorker();
+ output('edgeVoiceStatus',{prepared:true,state,sensorOfflineCache:true});
 },'edgeVoiceStatus');
 $('voiceStart').onclick=()=>task(async()=>output('edgeVoiceStatus',await edgeVoice().start()),'edgeVoiceStatus');
 $('voiceStop').onclick=()=>{voiceBridge?.stop();output('edgeVoiceStatus','Escucha detenida')};
@@ -180,7 +203,8 @@ $('offlineShell').onclick=()=>task(async()=>{
  if(!navigator.serviceWorker)throw Error('Service Worker no disponible');
  await navigator.serviceWorker.register('./semantic-sw.js',{scope:'./'});
  await navigator.serviceWorker.ready;
- output('fabricResults',{...result,note:'La próxima recarga utilizará los recursos locales si no hay Internet. Los modelos semánticos se instalan por separado.'});
+ await registerSensorOfflineWorker();
+ output('fabricResults',{...result,note:'Interfaz y caché visual/voz preparados para recarga offline. Los pesos de los modelos se preparan aparte.'});
 },'fabricResults');
 $('fabricInstall').onclick=()=>task(async()=>{
  const runtimeURL=new URL('./vendor/transformers/transformers.min.js',import.meta.url);
