@@ -115,3 +115,31 @@ test('comandos de voz finales repetidos no ejecutan dos veces la misma orden',as
   assert.equal(h.api.state.view,'inventory');
  }finally{h.api.stopVoiceRecognition();h.close()}
 });
+
+test('motor online→offline deja de usar ASR cloud tras desactivar Internet',async()=>{
+ const h=harness({online:true});try{
+  const local=fakeLocal(h);let oldRecognizer;
+  h.window.SpeechRecognition=class{
+   constructor(){oldRecognizer=this;}
+   start(){this.onstart?.();}
+   abort(){}stop(){}
+  };
+  await h.api.loadMaster();h.api.state.web=true;
+  assert.equal(await h.api.startVoiceRecognition(),true);
+  assert.equal(h.api.voiceRuntimeStatus().engine,'online');
+  h.api.state.web=false;h.api.scheduleVoiceEngineAlignment();
+  await new Promise(resolve=>setTimeout(resolve,1450));
+  assert.equal(h.api.voiceRuntimeStatus().engine,'offline');
+  assert.equal(local.starts,1);
+  const data=[Object.assign([{transcript:'Nexus abrí inventario',confidence:.98}],{isFinal:true})];
+  oldRecognizer.onresult?.({resultIndex:0,results:data});
+  assert.equal(h.api.state.view,'dashboard','un evento de la sesión online vieja no ejecuta comandos');
+ }finally{h.api.stopVoiceRecognition();h.close()}
+});
+
+test('al desactivar Internet no se solicita información externa con palabras de actualidad',()=>{
+ const h=harness({online:false});try{
+  const route=h.api.resolveIntent('Nexus, información de actualidad sobre átomos');
+  assert.equal(route.kind,'LOCAL');assert.equal(route.local,null);
+ }finally{h.close()}
+});
