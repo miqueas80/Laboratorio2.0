@@ -139,5 +139,51 @@ imágenes y objetos físicos desconocidos, falsos positivos (por ejemplo,
 cosméticos y envases de medicamentos), voz en ambientes ruidosos,
 persistencia real Android, permisos de audio/cámara, carga de memoria,
 un medidor de confianza calibrado con dataset independiente, y validación
-de seguridad química basada en SDS auténticas. Los seis documentos no
-están precargados en la demo aislada; deben provenir de IndexedDB legítimo.
+de seguridad química basada en SDS auténticas. Desde la compilación
+de candidato del 8 de octubre, las seis fuentes originales SÍ se incluyen
+en la distribución aislada, con revisiones Git y SHA-256 cotejados, texto
+indexado y copias binarias disponibles desde CacheStorage tras preparación
+offline explícita. Ninguna copia sustituye el repositorio estable.
+
+## Cierre de la rama Edge · documentos + QR + aceptación en dispositivo
+
+**Verificaciones automáticas de esta etapa:**
+
+- Los seis documentos originales declarados en `documents-manifest.json`
+  coinciden exactamente con sus **Git blob SHA-1** y tamaños. La compilación
+  genera `next/snapshot/canonical-documents.json` y los incluye como
+  archivos originales de solo lectura, sin cambiar los fuentes.
+- El PDF escaneado `QUÍMICA (1) (1).pdf` pasó de solo 29 caracteres
+  extraíbles a aproximadamente 15.591 caracteres recuperados mediante OCR
+  local en español de **13 de 13 páginas**. Tesseract se usa SOLO en el
+  entorno de compilación de GitHub Actions. **No se añade al navegador,
+  a NEXUS Lens ni al paquete distribuido**. La exactitud científica del
+  OCR (fórmulas, subíndices, signos) NO está certificada.
+- Los seis documentos contienen unos 96.516 caracteres de texto
+  extraíble y produjeron **134 fragmentos**. Chromium los indexó en
+  modo BM25, apagó la red, recargó Edge y volvió a recuperar evidencia
+  de formación de óxidos.
+- El navegador también recuperó de CacheStorage el PDF original de
+  **8.487.276 bytes** con validación SHA-256 íntegra. El índice y los
+  seis binarios se guardan solo cuando el operador autoriza su
+  preparación offline.
+- El código QR de `tests/fixtures/nexus-qr.png` se decodificó
+  con jsQR real; NEXUS-X-0001 se vinculó solo por coincidencia exacta.
+- El panel `Control de aceptación · Android` ejecuta 7 controles
+  automáticos y pide 7 verificaciones físicas del operador.
+  Si falta evidencia de documentos, cámara, voz, P2P, medidas de RAM,
+  60 FPS p95, SDS o restauración, el resultado es
+  `NOT_READY`, no un falso 100%.
+  El JSON exportado omite audio, imágenes, textos originales y claves.
+- Prueba del paquete documental en Chromium:
+  https://github.com/miqueas80/Laboratorio2.0/actions/runs/37850694639
+- QR real:
+  https://github.com/miqueas80/Laboratorio2.0/actions/runs/37849417617
+- Regresiones Node con estas reglas:
+  https://github.com/miqueas80/Laboratorio2.0/actions/runs/37850375642
+
+**Criterio final:** Esta rama es un **release candidate probado en Chromium**,
+no una versión certificada ni puesta en `main`. Se requiere la aprobación
+física documentada del dispositivo Android y responsable del laboratorio
+antes de sustituir la app de la expo. Véase
+`docs/EDGE_ANDROID_RELEASE_RUNBOOK.md`.
