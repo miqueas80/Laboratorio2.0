@@ -6,9 +6,11 @@ import {openEdgeDB,readEdgeStore} from '../next/storage.js';
 import {YjsLabBoard} from '../next/yjs-lab.js';
 
 const isolated=name=>({open:(_original,version)=>indexedDB.open(name,version)});
+let scenario=0;
 async function boards(){
- const db1=await openEdgeDB({indexedDB:isolated('NEXUS_EDGE_YJS_TEST_1')});
- const db2=await openEdgeDB({indexedDB:isolated('NEXUS_EDGE_YJS_TEST_2')});
+ const id=++scenario;
+ const db1=await openEdgeDB({indexedDB:isolated('NEXUS_EDGE_YJS_TEST_'+id+'_A')});
+ const db2=await openEdgeDB({indexedDB:isolated('NEXUS_EDGE_YJS_TEST_'+id+'_B')});
  const a=new YjsLabBoard({Y,db:db1,room:'lab-course-4'});
  const b=new YjsLabBoard({Y,db:db2,room:'lab-course-4'});
  const ta={confirmed:true,send:payload=>b.receive(payload)};
