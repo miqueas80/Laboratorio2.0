@@ -100,7 +100,12 @@ $('measureScroll').onclick=()=>task(async()=>{
   layout:virtual.metrics(),memory:await memoryEstimate(),device:navigator.userAgent});
 },'performanceResult');
 $('integrity').onclick=()=>task(async()=>output('checks',inspectMigration(await getRecords())),'checks');
-$('safety').onclick=()=>task(async()=>output('checks',evaluateStorage(await getRecords())),'checks');
+$('safety').onclick=()=>task(async()=>{
+ if(!safetyClient)safetyClient=new ChemicalSafetyClient();
+ output('checks','Comprobando seguridad química en segundo plano…');
+ const result=await safetyClient.evaluate(await getRecords());
+ output('checks',result);
+},'checks');
 $('fabricStatus').onclick=()=>task(async()=>output('fabricResults',{
  model:await semanticCacheStatus(),shell:await offlineShellStatus({includeInventory:true})
 }),'fabricResults');
