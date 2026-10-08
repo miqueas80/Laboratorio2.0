@@ -64,7 +64,17 @@ $('measureFPS').onclick=()=>task(async()=>{
 },'performanceResult');
 $('integrity').onclick=()=>task(async()=>output('checks',inspectMigration(await getRecords())),'checks');
 $('safety').onclick=()=>task(async()=>output('checks',evaluateStorage(await getRecords())),'checks');
-$('fabricStatus').onclick=()=>task(async()=>output('fabricResults',await semanticCacheStatus()),'fabricResults');
+$('fabricStatus').onclick=()=>task(async()=>output('fabricResults',{
+ model:await semanticCacheStatus(),shell:await offlineShellStatus()
+}),'fabricResults');
+$('offlineShell').onclick=()=>task(async()=>{
+ if(!confirm('¿Autorizar la preparación offline de Edge Lab? Se guardarán la interfaz y los motores locales, aproximadamente 23 MB adicionales, en el navegador.'))return;
+ const result=await prepareOfflineShell({onProgress:p=>output('fabricResults',p)});
+ if(!navigator.serviceWorker)throw Error('Service Worker no disponible');
+ await navigator.serviceWorker.register('./semantic-sw.js',{scope:'./'});
+ await navigator.serviceWorker.ready;
+ output('fabricResults',{...result,note:'La próxima recarga utilizará los recursos locales si no hay Internet. Los modelos semánticos se instalan por separado.'});
+},'fabricResults');
 $('fabricInstall').onclick=()=>task(async()=>{
  const runtimeURL=new URL('./vendor/transformers/transformers.min.js',import.meta.url);
  const wasmURL=new URL('./vendor/onnx/ort-wasm-simd-threaded.jsep.wasm',import.meta.url);
