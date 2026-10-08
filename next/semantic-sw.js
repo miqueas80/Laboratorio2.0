@@ -15,7 +15,9 @@ self.addEventListener('fetch',event=>{
  const url=new URL(request.url);
  const PARENT=new URL('../',ROOT);
  const sensorAsset=url.pathname.startsWith(new URL('./offline/',PARENT).pathname)||
-   url.pathname===new URL('./jsQR.js',PARENT).pathname;
+   url.pathname===new URL('./jsQR.js',PARENT).pathname||
+   url.pathname===new URL('./icon-192.png',PARENT).pathname||
+   url.pathname===new URL('./icon-512.png',PARENT).pathname;
  if(url.origin!==ROOT.origin||(!url.pathname.startsWith(ROOT.pathname)&&!sensorAsset))return;
  const canonical=new URL(url);canonical.search='';canonical.hash='';
  event.respondWith((async()=>{
