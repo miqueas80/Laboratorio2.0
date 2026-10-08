@@ -170,4 +170,26 @@ $('addTask').onclick=()=>task(async()=>{
 $('syncNow').onclick=()=>task(async()=>{
  await experimentalDB();output('syncResult',await replica.sendSnapshot());
 },'syncResult');
-window.addEventListener('pagehide',()=>{client?.close();documentFabric?.close();peer?.close();edgeDB?.close();virtual.close()},{once:true});
+$('yjsEnable').onclick=()=>task(async()=>{
+ await experimentalDB();
+ if(yjsBoard){yjsBoard.close();yjsBoard=null}
+ let Y;
+ try{Y=await import('./vendor/yjs/yjs.bundle.mjs')}
+ catch{throw Error('Runtime Yjs no instalado: copiá el artefacto local a next/vendor/yjs/. No se usará ninguna CDN.')}
+ yjsBoard=new YjsLabBoard({Y,db:edgeDB,room:$('yjsRoom').value.trim(),transport:peer});
+ const restored=await yjsBoard.load();
+ output('yjsStatus',{restored,tasks:yjsBoard.listTasks()});
+},'yjsStatus');
+$('yjsWrite').onclick=()=>task(async()=>{
+ if(!yjsBoard)throw Error('Primero activá el motor Yjs local');
+ const fields={};
+ if($('yjsTitle').value.trim())fields.title=$('yjsTitle').value.trim();
+ if($('yjsNotes').value.trim())fields.notes=$('yjsNotes').value.trim();
+ const saved=await yjsBoard.updateTask($('yjsTaskId').value.trim(),fields);
+ output('yjsStatus',{saved,tasks:yjsBoard.listTasks(),note:'Cambios guardados en IndexedDB local. La comunicación depende del emparejamiento.'});
+},'yjsStatus');
+$('yjsSync').onclick=()=>task(async()=>{
+ if(!yjsBoard)throw Error('Primero activá Yjs');
+ output('yjsStatus',{sent:await yjsBoard.sendSnapshot(),tasks:yjsBoard.listTasks()});
+},'yjsStatus');
+window.addEventListener('pagehide',()=>{client?.close();documentFabric?.close();yjsBoard?.close();peer?.close();edgeDB?.close();virtual.close()},{once:true});
