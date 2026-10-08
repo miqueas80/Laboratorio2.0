@@ -86,7 +86,7 @@ try{
    if(!String(url).startsWith(prefix))throw Error('Origen remoto inesperado');
    return fetch('./models/Xenova/paraphrase-multilingual-MiniLM-L12-v2/'+String(url).slice(prefix.length),options);
   };
-  await prepareOfflineShell({includeVendor:true});
+  await prepareOfflineShell({includeVendor:true,includeInventory:true});
   await prepareSemanticAssets({fetcher});
   const registration=await navigator.serviceWorker.register('./semantic-sw.js',{scope:'./'});
   await navigator.serviceWorker.ready;
@@ -97,9 +97,9 @@ try{
     navigator.serviceWorker.addEventListener('controllerchange',()=>{clearTimeout(limit);resolve()},{once:true});
    });
   }
-  const shell=await offlineShellStatus(),model=await semanticCacheStatus();
+  const shell=await offlineShellStatus({includeInventory:true}),model=await semanticCacheStatus();
   if(!shell.ready||!model.installed)throw Error('Preparación offline incompleta');
-  return {shellFiles:shell.cached,modelFiles:model.files,controlled:!!navigator.serviceWorker.controller};
+  return {shellFiles:shell.cached,modelFiles:model.files,inventoryCached:shell.inventoryCached,controlled:!!navigator.serviceWorker.controller};
  });
  await page.context().setOffline(true);
  await page.reload({waitUntil:'domcontentloaded'});
@@ -114,8 +114,13 @@ try{
     networkOnline:navigator.onLine,serviceWorker:!!navigator.serviceWorker.controller};
   }finally{client.close()}
  });
+ await page.locator('#load').click();
+ await page.waitForFunction(()=>{
+  try{return JSON.parse(document.querySelector('#results')?.textContent||'{}').count===111}catch{return false}
+ },null,{timeout:20000});
+ const inventoryOffline=JSON.parse(await page.locator('#results').innerText());
  console.log(JSON.stringify({...data,elapsedMs:Math.round(performance.now()-started),
-  browserOffline:offline,prepared,
+  browserOffline:offline,inventoryOfflineCount:inventoryOffline.count,prepared,
   externalRequestsBlocked:true,environment:'headless Chromium / WASM, not Android'},null,2));
 }finally{
  await browser?.close().catch(()=>{});
