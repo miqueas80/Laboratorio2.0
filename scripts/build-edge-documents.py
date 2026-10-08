@@ -156,5 +156,16 @@ def run(out):
 if __name__=="__main__":
     parser=argparse.ArgumentParser()
     parser.add_argument("--out",required=True)
+    parser.add_argument("--copy-originals",help="Optional isolated distribution directory")
     args=parser.parse_args()
     run(pathlib.Path(args.out).resolve())
+    if args.copy_originals:
+        import shutil
+        destination=pathlib.Path(args.copy_originals).resolve()
+        destination.mkdir(parents=True,exist_ok=True)
+        for relative in EXPECTED:
+            target=destination/relative
+            target.parent.mkdir(parents=True,exist_ok=True)
+            shutil.copy2(ROOT/relative,target)
+        shutil.copy2(MANIFEST,destination/"documents-manifest.json")
+        print("Copied exactly six canonical binaries without modifying originals")
