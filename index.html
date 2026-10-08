@@ -10,6 +10,88 @@
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <title>NEXUS-X · Gestión de Laboratorio</title>
 <style>
+/* NEXUS startup: el robot saluda ANTES del dashboard y al volar va revelando la interfaz normal. */
+#nexus-boot-splash{position:fixed;inset:0;z-index:2147483000;isolation:isolate;overflow:hidden;pointer-events:auto;color:#e9f9ff;font-family:Inter,ui-sans-serif,system-ui,Arial,sans-serif;touch-action:manipulation}
+.nx-boot-curtain{position:absolute;inset:0;overflow:hidden;background:radial-gradient(ellipse 67% 55% at 50% 51%,#174d74 0%,#0a294b 49%,#020d20 100%);clip-path:inset(0 0 0 0%);will-change:clip-path}
+.nx-boot-curtain:before{content:"";position:absolute;inset:-30%;background-image:radial-gradient(#b9f7ff77 1px,transparent 1px),radial-gradient(#29abf955 1.5px,transparent 1.5px);background-size:121px 119px,179px 173px;background-position:0 0,57px 43px;opacity:.52}
+.nx-boot-curtain:after{content:"";position:absolute;inset:0;background:radial-gradient(circle at 50% 55%,#4fe4ff24,transparent 39%),repeating-linear-gradient(0deg,transparent,transparent 48px,#47d8ff09 49px,transparent 50px);pointer-events:none}
+.nx-boot-actor{position:absolute;z-index:3;left:50%;top:49%;width:min(83vw,420px);aspect-ratio:1;transform:translate(-50%,-50%);pointer-events:none;will-change:transform,left,top}
+.nx-boot-actor:before{content:"";position:absolute;inset:13%;background:radial-gradient(circle,#39d5ff56,transparent 67%);border-radius:50%;filter:blur(19px)}
+.nx-boot-robot{position:relative;display:block;width:100%;height:100%;object-fit:contain;filter:drop-shadow(0 18px 24px #00111cbd) drop-shadow(0 0 14px #15c9ff55);animation:nx-boot-smile-wave 2.3s ease-in-out both}
+.nx-boot-smile{position:absolute;left:58.4%;top:51.6%;width:12%;height:7%;opacity:0;filter:drop-shadow(0 0 5px #17bbff);animation:nx-boot-smile-on 1.4s ease-out .2s both}
+.nx-boot-smile path{fill:none;stroke:#76f4ff;stroke-linecap:round;stroke-width:4}
+.nx-boot-wave{position:absolute;z-index:4;left:9%;top:40%;width:19%;height:23%;animation:nx-boot-hand-gesture .7s ease-in-out 2 .3s both;transform-origin:85% 80%}
+.nx-boot-wave svg{display:block;width:100%;height:100%;filter:drop-shadow(0 0 7px #3ad5ff)}
+.nx-boot-wave path{fill:none;stroke:#aafaff;stroke-width:4;stroke-linecap:round}
+.nx-boot-talk{position:absolute;left:50%;bottom:max(11vh,48px);z-index:4;transform:translateX(-50%);width:min(90vw,330px);text-align:center;pointer-events:none}
+.nx-boot-talk strong{display:block;color:#fff;font-size:clamp(20px,6vw,28px);line-height:1.3;letter-spacing:.01em;text-shadow:0 0 20px #47d8ff93}
+.nx-boot-talk small{display:block;color:#b8e5f4;font-size:12px;letter-spacing:.09em;margin-top:10px}
+.nx-boot-talk strong:after{content:"";display:block;width:60px;height:2px;margin:12px auto 0;background:linear-gradient(90deg,transparent,#8cf2ff,transparent);box-shadow:0 0 12px #3dc7ff}
+.nx-boot-skip{position:absolute;z-index:8;top:calc(14px + env(safe-area-inset-top,0px));right:14px;padding:10px 15px;min-height:44px;border:1px solid #b0efff80;border-radius:24px;background:#071e34bd;color:#effaff;font-size:13px;cursor:pointer}
+.nx-boot-skip:focus-visible{outline:3px solid #8cf8ff;outline-offset:3px}
+.nx-boot-skip:hover{background:#1c5275}
+.nx-boot-trail{position:absolute;top:0;bottom:0;left:-12px;z-index:2;width:12px;opacity:0;background:linear-gradient(90deg,transparent,#45d7ffc7,#e2ffff,transparent);box-shadow:0 0 33px 13px #3dc5ff61;pointer-events:none}
+#nexus-boot-splash[data-phase="flight"] .nx-boot-curtain{animation:nx-boot-open-ui 2.45s linear both}
+#nexus-boot-splash[data-phase="flight"] .nx-boot-actor{animation:nx-boot-flight 2.45s ease-in-out both}
+#nexus-boot-splash[data-phase="flight"] .nx-boot-robot{animation:none}
+#nexus-boot-splash[data-phase="flight"] .nx-boot-smile,#nexus-boot-splash[data-phase="flight"] .nx-boot-wave{opacity:0;animation:none}
+#nexus-boot-splash[data-phase="flight"] .nx-boot-talk{opacity:0;transition:opacity .18s ease}
+#nexus-boot-splash[data-phase="flight"] .nx-boot-trail{opacity:1;animation:nx-boot-scan 2.45s linear both}
+#nexus-boot-splash[data-phase="flight"] .nx-boot-skip{opacity:0;pointer-events:none}
+#nexus-boot-splash[data-phase="done"]{pointer-events:none}
+@keyframes nx-boot-smile-wave{
+  0%{transform:translateY(6px) rotate(-3deg) scale(.94)}
+  28%{transform:translateY(-5px) rotate(2deg) scale(1)}
+  52%{transform:translateY(-10px) rotate(-3deg) scale(1.045)}
+  75%{transform:translateY(-2px) rotate(4deg) scale(1)}
+  100%{transform:translateY(0) rotate(0deg) scale(1)}
+}
+@keyframes nx-boot-smile-on{0%{opacity:0;transform:scale(.5)}45%,85%{opacity:1;transform:scale(1)}100%{opacity:.85}}
+@keyframes nx-boot-hand-gesture{
+0%,100%{opacity:0;transform:rotate(-18deg) scale(.85)}
+30%{opacity:1;transform:rotate(9deg) scale(1)}
+60%{opacity:1;transform:rotate(-12deg) scale(1.15)}
+}
+@keyframes nx-boot-open-ui{
+0%,12%{clip-path:inset(0 0 0 0%)}
+25%{clip-path:inset(0 0 0 16%)}
+45%{clip-path:inset(0 0 0 45%)}
+68%{clip-path:inset(0 0 0 78%)}
+85%,100%{clip-path:inset(0 0 0 100%)}
+}
+@keyframes nx-boot-scan{
+0%,12%{left:-15px}
+25%{left:16%}
+45%{left:45%}
+68%{left:78%}
+85%,100%{left:calc(100% + 15px)}
+}
+@keyframes nx-boot-flight{
+0%{left:50%;top:49%;transform:translate(-50%,-50%) rotate(0deg) scale(1)}
+12%{left:5%;top:41%;transform:translate(-50%,-50%) rotate(-20deg) scale(.70)}
+25%{left:16%;top:36%;transform:translate(-50%,-50%) rotate(12deg) scale(.64)}
+45%{left:45%;top:49%;transform:translate(-50%,-50%) rotate(-8deg) scale(.51)}
+68%{left:78%;top:39%;transform:translate(-50%,-50%) rotate(12deg) scale(.42)}
+85%{left:101%;top:64%;transform:translate(-50%,-50%) rotate(12deg) scale(.30)}
+100%{left:calc(100% - 44px);top:calc(100% - 51px);transform:translate(-50%,-50%) rotate(0deg) scale(.20)}
+}
+@media(max-width:600px){
+.nx-boot-actor{width:min(91vw,360px);top:47%}
+.nx-boot-talk{bottom:max(12vh,66px)}
+@keyframes nx-boot-flight{
+0%{left:50%;top:47%;transform:translate(-50%,-50%) rotate(0deg) scale(1)}
+12%{left:6%;top:39%;transform:translate(-50%,-50%) rotate(-22deg) scale(.73)}
+25%{left:16%;top:35%;transform:translate(-50%,-50%) rotate(10deg) scale(.63)}
+45%{left:45%;top:50%;transform:translate(-50%,-50%) rotate(-8deg) scale(.50)}
+68%{left:78%;top:43%;transform:translate(-50%,-50%) rotate(9deg) scale(.40)}
+85%{left:102%;top:63%;transform:translate(-50%,-50%) rotate(9deg) scale(.30)}
+100%{left:calc(100% - 38px);top:calc(100% - 43px);transform:translate(-50%,-50%) rotate(0deg) scale(.19)}
+}}
+@media(prefers-reduced-motion:reduce){
+#nexus-boot-splash *{animation:none!important;transition:none!important}
+}
+</style>
+<style>
 :root{--nav:#0b5368;--nav2:#0d647b;--bg:#eef3f6;--card:#fff;--ink:#26343b;--muted:#708089;--line:#dbe4e8;--accent:#2fa9b5;--ok:#42a98a;--warn:#e3ad45;--danger:#d96961;--shadow:0 8px 24px rgba(24,58,70,.10);--radius:9px}
 *{box-sizing:border-box}html,body{margin:0;min-height:100%;font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",Arial,sans-serif;color:var(--ink);background:linear-gradient(135deg,#f4f7f9,#e9eff2)}button,input,select,textarea{font:inherit}button{cursor:pointer;border:0}.app{min-height:100vh;display:grid;grid-template-columns:118px 1fr;grid-template-rows:64px 1fr}.topbar{grid-column:1/-1;background:linear-gradient(90deg,#0a5267,#0b6077);color:#fff;display:flex;align-items:center;padding:0 22px;gap:22px;box-shadow:0 2px 8px #0002;z-index:10}.brand{display:flex;align-items:center;gap:10px;min-width:265px}.brand-mark{width:34px;height:34px;border:2px solid #4fc0c8;border-radius:50%;display:grid;place-items:center;font-weight:800;color:#7fe0e4}.brand-name{font-weight:800;letter-spacing:.5px}.brand-sub{font-size:12px;opacity:.78}.top-search{flex:1;max-width:650px;position:relative}.top-search input{width:100%;border:1px solid #ffffff35;background:#ffffff16;color:#fff;border-radius:18px;padding:9px 42px 9px 15px;outline:0}.top-search input::placeholder{color:#d7ebee}.top-search button{position:absolute;right:4px;top:3px;background:transparent;color:#fff;font-size:20px;padding:5px}.top-actions{margin-left:auto;display:flex;align-items:center;gap:10px}.top-actions button{background:#ffffff16;color:#fff;border-radius:8px;padding:8px 10px}.user{display:flex;align-items:center;gap:8px;font-size:13px}.avatar{width:31px;height:31px;border-radius:50%;background:#d9f2ef;color:#155a67;display:grid;place-items:center;font-weight:800}.sidebar{background:linear-gradient(#0a5267,#0b6178);color:#d9edf0;padding:15px 7px}.nav-btn{width:100%;padding:12px 5px;margin:2px 0;background:transparent;color:#d5ebee;border-radius:8px;display:flex;flex-direction:column;align-items:center;gap:5px;font-size:11px}.nav-btn span:first-child{font-size:19px}.nav-btn.active,.nav-btn:hover{background:#ffffff18;color:#fff}.main{padding:20px 18px 28px;overflow:auto}.view{display:none;max-width:1180px;margin:auto}.view.active{display:block}.page-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}.page-head h1{font-size:22px;margin:0}.page-head p{margin:4px 0 0;color:var(--muted);font-size:13px}.toolbar{display:flex;gap:8px;flex-wrap:wrap}.btn{background:#fff;border:1px solid var(--line);border-radius:7px;padding:9px 12px;color:var(--ink);box-shadow:0 1px 2px #00000008}.btn.primary{background:var(--nav);color:#fff;border-color:var(--nav)}.btn.teal{background:#e7f6f7;color:#146b75;border-color:#c3e7e9}.btn.danger{color:#a84640}.grid{display:grid;gap:14px}.grid.stats{grid-template-columns:repeat(4,1fr)}.grid.two{grid-template-columns:1.2fr 1fr}.card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:15px}.card h2,.card h3{margin:0 0 12px;font-size:16px}.stat{min-height:100px}.stat small{display:block;color:var(--muted);font-size:11px}.stat strong{display:block;font-size:31px;line-height:1.15;margin-top:7px}.stat .accent{color:#229ca7}.stat .warn{color:#d89632}.stat .danger{color:#c65d58}.stat .ok{color:#359b7d}.task{display:flex;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:1px solid var(--line);font-size:13px}.task:last-child{border-bottom:0}.task i{font-style:normal}.task .ok{color:var(--ok)}.task .warn{color:var(--warn)}.donut-wrap{display:flex;align-items:center;justify-content:center;gap:25px;min-height:190px}.donut{width:145px;height:145px;border-radius:50%;background:conic-gradient(var(--nav) 0 45%,#2fa9b5 45% 70%,#b8c3c8 70% 80%,#d96b63 80% 100%);position:relative}.donut:after{content:"";position:absolute;inset:30px;background:#fff;border-radius:50%}.legend{font-size:12px;line-height:1.9}.legend b{display:inline-block;width:9px;height:9px;border-radius:50%;background:currentColor;margin-right:6px}.activity{display:flex;gap:10px;padding:11px 0;border-bottom:1px solid var(--line);font-size:13px}.activity:last-child{border-bottom:0}.activity .time{margin-left:auto;color:var(--muted);font-size:11px}.calendar{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;font-size:11px;text-align:center}.calendar span{padding:7px 2px}.calendar .today{background:#e0f3f2;border-radius:5px}.calendar .event{grid-column:1/-1;background:#e2f5f2;border-left:3px solid #38a69c;padding:9px;text-align:left;border-radius:5px}.section{margin-top:14px}.table-wrap{overflow:auto;background:#fff;border:1px solid var(--line);border-radius:var(--radius)}table{width:100%;border-collapse:collapse;font-size:12px;min-width:780px}th,td{padding:10px 11px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}th{background:#f6f9fa;color:#53656c;position:sticky;top:0;z-index:1}tr:hover td{background:#fbfdfd}.id{font-family:ui-monospace,SFMono-Regular,monospace;color:#176b76;font-weight:700}.badge{display:inline-block;padding:3px 7px;border-radius:12px;background:#edf2f3;color:#53656c;font-size:10px}.badge.ok{background:#e5f5ef;color:#247e67}.badge.warn{background:#fff3d9;color:#996c1e}.badge.danger{background:#fde8e6;color:#a84740}.search-row{display:flex;gap:8px;margin-bottom:10px}.search-row input,.field input,.field select,.field textarea{width:100%;border:1px solid var(--line);background:#fff;border-radius:7px;padding:9px 10px;outline:0}.search-row input:focus,.field input:focus,.field select:focus,.field textarea:focus{border-color:#64b7c0;box-shadow:0 0 0 3px #64b7c01c}.field{margin-bottom:10px}.field label{display:block;font-size:11px;color:var(--muted);margin-bottom:4px}.form-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:0 12px}.form-grid .wide{grid-column:1/-1}.modal-backdrop{display:none;position:fixed;inset:0;background:#10252a99;z-index:30;align-items:center;justify-content:center;padding:18px}.modal-backdrop.open{display:flex}.modal{width:min(920px,100%);max-height:92vh;overflow:auto;background:#fff;border-radius:12px;box-shadow:0 30px 80px #0004;padding:18px}.modal-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}.modal-head h2{margin:0;font-size:18px}.close{background:#eef2f3;border-radius:7px;padding:7px 10px}.result-card{padding:12px;border:1px solid var(--line);border-radius:8px;margin:8px 0}.result-card strong{display:block;margin-bottom:3px}.muted{color:var(--muted)}.notice{padding:10px 12px;border-radius:8px;background:#f2f7f8;font-size:12px;color:#53666d}.notice.warn{background:#fff6df;color:#805d21}.notice.error{background:#fdecea;color:#98473f}.chat{height:280px;overflow:auto;border:1px solid var(--line);border-radius:8px;padding:10px;background:#f8fafb}.msg{padding:9px 11px;border-radius:8px;margin:7px 0;max-width:90%;white-space:pre-wrap;font-size:13px}.msg.user{margin-left:auto;background:#dff1f2}.msg.bot{background:#fff;border:1px solid var(--line)}.qr-stage{background:#081317;border-radius:9px;min-height:310px;display:grid;place-items:center;overflow:hidden;position:relative}.qr-stage video{width:100%;height:310px;object-fit:cover}.qr-stage.black video{visibility:hidden}.qr-stage .scanline{position:absolute;left:12%;right:12%;top:50%;height:2px;background:#4fc5c8;box-shadow:0 0 14px #4fc5c8}.diagnostic{font-family:ui-monospace,monospace;font-size:11px;background:#0c171a;color:#c9eef0;border-radius:8px;padding:10px;white-space:pre-wrap;max-height:220px;overflow:auto}.footer-note{font-size:11px;color:var(--muted);margin-top:10px}.toast{position:fixed;right:18px;bottom:18px;background:#143f49;color:#fff;padding:10px 14px;border-radius:8px;box-shadow:var(--shadow);z-index:80;display:none;max-width:380px;font-size:12px}.toast.show{display:block}.status-dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--ok);margin-right:5px}.empty{padding:25px;text-align:center;color:var(--muted)}
 .command-list{display:grid;gap:7px}.command-item{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 12px;border:1px solid var(--line);border-radius:8px;background:#f8fafb}.command-item:hover{background:#eef7f8;border-color:#b9dfe2}.kbd{font:11px ui-monospace,monospace;background:#e8eef0;border:1px solid #d5dfe2;border-radius:5px;padding:2px 6px;color:#53656c}.system-pill{display:inline-flex;align-items:center;gap:6px;padding:5px 8px;border-radius:999px;background:#ffffff16;color:#d9edf0;font-size:11px}.system-pill.offline{color:#ffe1b1;background:#6b4b1c55}.favorite-btn{background:transparent;border:0;color:#9aa8ad;font-size:17px;padding:3px 6px}.favorite-btn.active{color:#d99b25}.row-actions{display:flex;align-items:center;gap:4px}
@@ -34,7 +116,34 @@ button:focus-visible,a:focus-visible{outline:3px solid #157d93;outline-offset:3p
 </style>
 </head>
 <body>
-<div class="app">
+<!-- Bienvenida previa al arranque visual; NEXUS-X conserva el dashboard al finalizar. -->
+<div id="nexus-boot-splash" data-phase="greet" role="dialog" aria-modal="true" aria-label="Presentación de NEXUS-X">
+  <div class="nx-boot-curtain" aria-hidden="true"></div>
+  <div class="nx-boot-trail" aria-hidden="true"></div>
+  <div class="nx-boot-actor" aria-hidden="true">
+    <img class="nx-boot-robot" src="./mascot/nexus-mascota-3d.webp" alt="" width="420" height="420" fetchpriority="high">
+    <svg class="nx-boot-smile" viewBox="0 0 42 24" aria-hidden="true"><path d="M5 6 Q21 24 37 6"/></svg>
+    <span class="nx-boot-wave" aria-hidden="true"><svg viewBox="0 0 90 100"><path d="M61 18 Q78 33 73 50 M34 10 Q54 26 48 43 M17 34 Q27 43 26 56"/></svg></span>
+  </div>
+  <div class="nx-boot-talk" role="status"><strong>¡Hola! Soy NEXUS 👋</strong><small>Bienvenido a tu laboratorio</small></div>
+  <button id="nexus-boot-skip" class="nx-boot-skip" type="button">Omitir presentación</button>
+</div>
+<script>
+/* Fallback independiente del módulo; evita pantalla bloqueada ante un fallo de red. */
+(function(){
+  var splash=document.getElementById('nexus-boot-splash');
+  function release(){
+    if(splash&&splash.isConnected)splash.remove();
+    var app=document.querySelector('.app');
+    if(app)app.removeAttribute('inert');
+  }
+  var skip=document.getElementById('nexus-boot-skip');
+  if(skip)skip.addEventListener('click',release);
+  window.setTimeout(release,9000);
+})();
+</script>
+
+<div class="app" inert>
 <header class="topbar">
   <div class="brand"><div class="brand-mark">N</div><div><div class="brand-name">NEXUS-X</div><div class="brand-sub">Gestión de Laboratorio Integral</div></div></div>
   <div class="top-search"><input id="globalSearch" placeholder="Buscar en NEXUS-X…" autocomplete="off"><button id="globalSearchBtn" title="Buscar">⌕</button></div>
@@ -255,5 +364,8 @@ button:focus-visible,a:focus-visible{outline:3px solid #157d93;outline-offset:3p
 <script src="offline/core.js" defer></script>
 <script src="offline/knowledge.js" defer></script>
 <script src="app.js" defer></script>
+<!-- Mascota experimental: autónoma; no cambia el núcleo NEXUS -->
+<script src="./mascot/nexus-mascot.js" defer></script>
+<script src="./mascot/nexus-boot.js" defer></script>
 </body>
 </html>
