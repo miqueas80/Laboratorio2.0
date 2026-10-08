@@ -129,7 +129,9 @@ test('NEXUS no confunde preguntar qué es inventario con contar registros',async
  const h=harness({online:false,stored:master.records});
  try{
   await h.api.loadMaster();
-  assert.doesNotMatch(h.api.localAssistantResponse('¿Qué es el inventario?'),/^El inventario cargado contiene/i);
-  assert.match(h.api.localAssistantResponse('¿Cuántos registros hay?'),/registros/i);
+  const explanation=await h.api.nexusAgentTurn('Nexus, qué es el inventario');
+  assert.doesNotMatch(explanation.answer,/El inventario cargado contiene/i);
+  const count=await h.api.nexusAgentTurn('Nexus, cuántos registros hay');
+  assert.match(count.answer,/111 registros/i);
  }finally{h.close()}
 });
