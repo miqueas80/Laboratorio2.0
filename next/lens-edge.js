@@ -64,8 +64,8 @@ export function captureLensCanvas(source,{maxSide=960,documentObject=globalThis.
  return canvas;
 }
 export class EdgeLens {
- constructor({engine=globalThis.NexusOffline,inventory=[],decode=decodeExactQr}={}){
-  this.engine=engine;this.inventory=inventory;this.decode=decode;
+ constructor({engine=globalThis.NexusOffline,inventory=[],decode=decodeExactQr,documentObject=globalThis.document}={}){
+  this.engine=engine;this.inventory=inventory;this.decode=decode;this.documentObject=documentObject;
  }
  async prepare({onProgress=()=>{},forceWasm=false}={}){
   if(!this.engine?.prepareVision||!this.engine?.prepare)
@@ -76,7 +76,7 @@ export class EdgeLens {
  }
  async analyze(source,{skipQR=false,forceWasm=false}={}){
   if(!this.engine?.analyze)throw Error('Motor visual NEXUS local ausente');
-  const canvas=captureLensCanvas(source);
+  const canvas=captureLensCanvas(source,{documentObject:this.documentObject});
   try{
    const code=skipQR?null:await this.decode(canvas);
    if(code&&this.inventory.some(r=>r.id===code))
