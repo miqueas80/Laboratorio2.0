@@ -29,10 +29,11 @@ export class ChemicalSafetyClient{
    item.reject(error);
   }
   this.pending.clear();
-  if(!this.closed)this.#start();
+  // Restart lazily on the next explicit evaluation, never in an error loop.
  }
  evaluate(records,{maxAlerts=1000,maxUnverified=5000,signal}={}){
   if(this.closed)throw Error('Motor cerrado');
+  if(!this.worker)this.#start();
   if(!Array.isArray(records)||records.length>300000)throw Error('Inventario excede límites del análisis');
   if(signal?.aborted)return Promise.reject(Error('Análisis cancelado'));
   const id=++this.seq;
