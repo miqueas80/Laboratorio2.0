@@ -13,11 +13,15 @@ on:
       - "docs/EDGE_RELEASE_GATES.md"
       - "documents-manifest.json"
       - "scripts/build-edge-documents.py"
+      - "scripts/smoke-edge-documents-preview.mjs"
       - "**/*.pdf"
       - "**/*.docx"
       - "**/*.xlsx"
 permissions:
   contents: read
+concurrency:
+  group: edge-preview-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   prepare:
     runs-on: ubuntu-latest
@@ -44,7 +48,7 @@ jobs:
           tesseract --list-langs 2>&1 | grep -x spa
       - run: npm ci --ignore-scripts --no-audit --no-fund
       - name: Install pinned browser runtimes without postinstall scripts
-        run: npm install --no-save --ignore-scripts --no-audit --no-fund @huggingface/transformers@3.8.1 yjs@13.6.32 esbuild@0.25.9
+        run: npm install --no-save --ignore-scripts --no-audit --no-fund @huggingface/transformers@3.8.1 yjs@13.6.32 esbuild@0.25.9 playwright-core@1.56.1
       - name: Build local ONNX/WASM and Yjs ESM libraries
         run: |
           node scripts/vendor-edge-transformers.mjs
@@ -86,6 +90,8 @@ jobs:
           No sustituye el código estable ni hace push a main.
           TXT
           du -sh dist/nexus-edge
+      - name: Validate real six-document RAG in Chromium, then reload without Internet
+        run: node scripts/smoke-edge-documents-preview.mjs dist/nexus-edge
       - uses: actions/upload-artifact@v4
         with:
           name: nexus-edge-isolated-android-preview
