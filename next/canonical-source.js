@@ -4,6 +4,7 @@
  * is ever upgraded or written; fallback to IndexedDB is read-only.
  */
 import {readPublishedDocumentCache} from './document-source.js';
+import {MODEL_CACHE} from './model-provisioner.js';
 export const CANONICAL_DOCS=Object.freeze([
  {path:'Formación de óxidos.docx',size:677101,revision:'08d7616ff076d6d98a9462bca3a5b0f327a5fa19'},
  {path:'QUÍMICA (1) (1).pdf',size:8487276,revision:'448c6830fed0786a782245e44588a4ebbcce54c1'},
@@ -71,4 +72,35 @@ export async function readEdgeAvailableDocuments({indexedDB=globalThis.indexedDB
   return {available:false,documents:[],total:0,source:'none',
    reason:'Los seis documentos canónicos no están indexados ni disponibles en esta instalación'};
  }
+}
+
+
+/**
+ * Download the exact original binary from verified local CacheStorage only.
+ * Does not call the Internet, even if the browser reports online.
+ */
+export async function readCachedOriginalDocument(path,{
+ cacheStorage=globalThis.caches,cryptoObject=globalThis.crypto
+}={}){
+ const expected=CANONICAL_DOCS.find(d=>d.path===path);
+ if(!expected)throw Error('Documento fuera de los seis canónicos');
+ if(!cacheStorage||!cryptoObject?.subtle)throw Error('Se requiere almacenamiento offline verificado');
+ const cache=await cacheStorage.open(MODEL_CACHE);
+ const root=new URL('./',import.meta.url);
+ const manifestURL=new URL('snapshot/canonical-documents.json',root).href;
+ const snapshotResponse=await cache.match(manifestURL);
+ if(!snapshotResponse)throw Error('Prepará primero los seis documentos para modo avión');
+ const snapshot=JSON.parse(await snapshotResponse.text());
+ validateCanonicalSnapshot(snapshot);
+ const entry=snapshot.documents.find(d=>d.path===path);
+ const url=new URL('../'+path,root);
+ const response=await cache.match(url.href);
+ if(!response)throw Error('El archivo original no está disponible offline. Prepará los documentos.');
+ const bytes=await response.arrayBuffer();
+ if(bytes.byteLength!==expected.size)throw Error('Tamaño inesperado del documento cacheado');
+ const digest=Array.from(new Uint8Array(await cryptoObject.subtle.digest('SHA-256',bytes)),
+  b=>b.toString(16).padStart(2,'0')).join('');
+ if(digest!==entry.sha256)throw Error('La verificación SHA-256 del documento cacheado falló');
+ return {name:path.split('/').at(-1),blob:new Blob([bytes],{type:response.headers.get('Content-Type')||
+  'application/octet-stream'}),sha256:digest};
 }
