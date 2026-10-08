@@ -4,6 +4,7 @@ import {inspectMigration} from './storage.js';
 import {evaluateStorage} from './chemical-engine.js';
 const $=id=>document.getElementById(id);
 let client=null,records=null;
+const virtual=createVirtualList($('virtual'),{rowHeight:44,renderRow:(row)=>{const el=document.createElement('div');el.className='virtual-row';el.textContent=row.id+' · '+row.text;return el}});
 async function getRecords(){
  if(records)return records;
  const res=await fetch('../inventory.json',{cache:'no-store'});
