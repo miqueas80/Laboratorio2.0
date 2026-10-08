@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; worker-src 'self'; style-src 'self'; object-src 'none'; base-uri 'self'">
+<title>NEXUS-X Edge · Laboratorio de pruebas</title>
+<link rel="stylesheet" href="./demo.css">
+</head>
+<body>
+<main>
+<h1>NEXUS-X · Edge Lab</h1>
+<p><strong>EXPERIMENTAL:</strong> esta página no modifica el inventario ni los documentos de la PWA de producción.</p>
+<section>
+<h2>Búsqueda local BM25 · Web Worker</h2>
+<button id="load">Cargar índice con inventario canónico</button>
+<button id="stress">Probar 100.001 registros sintéticos</button>
+<label>Consulta <input id="query" placeholder="ácido nítrico" autocomplete="off"></label>
+<button id="search">Buscar</button>
+<pre id="results" aria-live="polite">Sin índice.</pre>
+</section>
+<section>
+<h2>Integridad · solo lectura</h2>
+<button id="integrity">Comprobar migración (dry-run)</button>
+<button id="safety">Revisar metadatos SDS</button>
+<pre id="checks" aria-live="polite">No comprobado.</pre>
+</section>
+<p><a href="../index.html">Volver a NEXUS-X estable</a></p>
+</main>
+<script type="module" src="./demo.js"></script>
+</body>
+</html>
