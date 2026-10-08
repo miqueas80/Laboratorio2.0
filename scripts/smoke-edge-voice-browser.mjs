@@ -36,6 +36,7 @@ try{
  const outcome=await page.evaluate(async()=>{
   if(!globalThis.NexusOffline)throw Error('Motor Vosk existente no cargado');
   const {EdgeVoiceCoordinator}=await import('./voice-edge.js');
+  const {VoiceFrameEngine}=await import('./voice-frame-client.js');
   await globalThis.NexusOffline.prepare('voice');
   const events=[];
   const voice=new EdgeVoiceCoordinator({
