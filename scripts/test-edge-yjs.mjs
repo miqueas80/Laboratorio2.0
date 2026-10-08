@@ -89,3 +89,39 @@ test('Yjs diferencia fallos de red posteriores a COMMIT y permite reenvío',asyn
   assert.equal(x.b.getTask('pending').title,'Preparar etiquetas');
  }finally{x.close()}
 });
+
+
+test('Yjs cifra y envía snapshots grandes por varios paquetes verificables',async()=>{
+ const x=await boards();
+ try{
+  for(let i=0;i<42;i++){
+   const notes=Array.from({length:955},(_,j)=>String.fromCharCode(33+((i*997+j*13+j*j)%90))).join('');
+   await x.a.updateTask('large-'+i,{title:'Experimento '+i,notes},{broadcast:false});
+  }
+  let packets=0;
+  x.a.transport={confirmed:true,send:async payload=>{
+   if(JSON.stringify(payload).length>46000)throw Error('Paquete supera presupuesto AES');
+   packets++;await x.b.receive(payload);
+  }};
+  const info=await x.a.sendSnapshot();
+  assert.ok(info.packets>=2);
+  assert.equal(packets,info.packets);
+  assert.deepEqual(x.a.getTask('large-41'),x.b.getTask('large-41'));
+  const restored=new YjsLabBoard({Y,db:x.db2,room:'lab-course-4'});
+  await restored.load();
+  assert.deepEqual(restored.getTask('large-41'),x.a.getTask('large-41'));
+  restored.close();
+ }finally{x.close()}
+});
+test('Yjs no persiste transferencias incompletas ni fragmentos alterados',async()=>{
+ const x=await boards();
+ try{
+  const partial={type:'yjs-chunk',room:'lab-course-4',transferId:'chunk-000001',
+   index:0,total:2,data:'YWJj'};
+  assert.equal((await x.b.receive(partial)).partial,true);
+  assert.equal((await readEdgeStore(x.db2,'meta')).length,0);
+  await assert.rejects(x.b.receive({...partial,data:'ZGVm'}),/inconsistente/);
+  assert.equal((await readEdgeStore(x.db2,'meta')).length,0);
+  await assert.rejects(x.b.receive({...partial,index:9}),/Fragmento Yjs inválido/);
+ }finally{x.close()}
+});
