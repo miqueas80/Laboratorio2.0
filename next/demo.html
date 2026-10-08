@@ -21,6 +21,15 @@
 <div id="virtual" class="virtual" aria-label="Inventario virtualizado"></div>
 </section>
 <section>
+<h2>Fabric documental · RAG local con evidencia</h2>
+<p>Lee únicamente los documentos ya indexados en este navegador; si el modelo multilingüe no está instalado, consulta con BM25. No modifica los archivos originales.</p>
+<label><input type="checkbox" id="semanticMode"> Intentar embeddings locales (solo si el modelo está preparado)</label>
+<button id="fabricLoad">Indexar mis documentos en el Worker</button>
+<label>Pregunta sobre documentos <input id="fabricQuery" placeholder="¿Qué documentos explican la formación de óxidos?"></label>
+<button id="fabricAsk">Buscar evidencia</button>
+<pre id="fabricResults" aria-live="polite">Sin índice documental.</pre>
+</section>
+<section>
 <h2>Integridad · solo lectura</h2>
 <button id="integrity">Comprobar migración (dry-run)</button>
 <button id="safety">Revisar metadatos SDS</button>
