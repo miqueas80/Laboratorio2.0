@@ -55,7 +55,7 @@ export function setupDeviceAcceptance({
   let inventory=[],documents=null,shell=null,voice=null,vision=null;
   try{inventory=await readInventory()}catch{}
   try{documents=await readEdgeAvailableDocuments()}catch{}
-  try{shell=await offlineShellStatus({includeInventory:true,includeVendor:false})}catch{}
+  try{shell=await offlineShellStatus({includeInventory:true,includeVendor:false,includeDocuments:true})}catch{}
   const engine=windowObject.NexusOffline;
   try{voice=await engine?.cacheStatus?.('voice')}catch{}
   try{vision=await engine?.cacheStatus?.('vision')}catch{}
