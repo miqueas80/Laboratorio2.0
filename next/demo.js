@@ -7,7 +7,25 @@ import {openEdgeDB,readEdgeStore} from './storage.js';
 import {ManualWebRTCPeer} from './manual-webrtc.js';
 import {EdgeSyncController} from './sync-controller.js';
 const $=id=>document.getElementById(id);
-let client=null,records=null;
+let client=null,records=null,peer=null,replica=null,edgeDB=null;
+const actorKey='nexus_edge_demo_actor_v1';
+const actor=localStorage.getItem(actorKey)||'edge-'+crypto.randomUUID().replaceAll('-','');
+localStorage.setItem(actorKey,actor);
+async function experimentalDB(){
+ if(edgeDB)return edgeDB;
+ edgeDB=await openEdgeDB();
+ replica=new EdgeSyncController({db:edgeDB,actor});
+ await replica.load();
+ return edgeDB;
+}
+function makePeer(){
+ peer?.close();
+ peer=new ManualWebRTCPeer({
+  onPayload:async payload=>{await experimentalDB();output('syncResult',await replica.receive(payload))},
+  onStatus:status=>output('pairStatus',{...status,code:peer.getPairCode()||'Todavía no calculado'})
+ });
+ return peer;
+}
 const virtual=createVirtualList($('virtual'),{rowHeight:44,renderRow:(row)=>{const el=document.createElement('div');el.className='virtual-row';el.textContent=row.id+' · '+row.text;return el}});
 async function getRecords(){
  if(records)return records;
