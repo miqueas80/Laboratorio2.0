@@ -19,5 +19,6 @@ export function harness({stored,fetcher,online=true,idb=new IDBFactory(),source,
   const injected=app.replace(/\nboot\(\);\s*\n\}\)\(\);\s*$/,`\nglobalThis.__test={toggleFavorite,checkStorageCapacity,csvCell,restoreInventoryBackup,showModal,hideModal,openDocumentViewer,closeDocumentViewer,collectDiagnostics,resolveIntent,ActionRegistry,${apiNames.join(',')}};\n})();`);
   if(injected===app)throw new Error('No se encontró el arranque para aislar la prueba');
   vm.runInContext(injected,dom.getInternalVMContext(),{filename:'app.js'});
+  vm.runInContext(fs.readFileSync(new URL('offline/knowledge.js',root),'utf8'),dom.getInternalVMContext(),{filename:'offline/knowledge.js'});
   return {window:w,document:w.document,api:w.__test,calls,errors,loadVendor:(file)=>vm.runInContext(fs.readFileSync(new URL(file,root),'utf8'),dom.getInternalVMContext()),close:()=>w.close()};
 }
