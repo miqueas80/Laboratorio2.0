@@ -229,7 +229,9 @@ $('fabricLoad').onclick=()=>task(async()=>{
  documentFabric?.close();documentFabric=new SemanticEvidenceFabric();
  const result=await documentFabric.prepare(source.documents,{semantic:$('semanticMode').checked,
   onProgress:progress=>output('fabricResults',{state:'Generando embeddings locales',...progress})});
- output('fabricResults',result);
+ output('fabricResults',{...result,source:source.source,canonicalDocuments:source.documents.length,
+  extractedWithText:source.documents.filter(x=>(x.text||'').length>32).length,
+  warning:source.note||'Los resultados contienen fragmentos con procedencia, no opiniones inventadas.'});
 },'fabricResults');
 $('fabricAsk').onclick=()=>task(async()=>{
  if(!documentFabric)throw Error('Indexá primero los documentos');
