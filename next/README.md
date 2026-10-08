@@ -35,8 +35,11 @@ servidor que sirva ESTA rama, no desde la URL de producción actual.
 - **P2P opcional**: `sync-core.js`, `sync-controller.js`,
   `p2p-crypto.js`, `manual-webrtc.js`: CRDT tipo registro LWW,
   diario durable, señalización manual sin servidor, canal cifrado
-  y código de verificación comparado entre operadores. **No es Yjs
-  ni Automerge; aún falta resolver colecciones colaborativas complejas.**
+  y código de verificación comparado entre operadores. Para tareas
+  colaborativas existe además `yjs-lab.js`, con Yjs 13.6.32 real,
+  ediciones concurrentes por campo y fragmentación de estados grandes.
+  **Todo permanece restringido a la base de prueba; el inventario remoto
+  está denegado por defecto y requiere autorización explícita.**
 - **Visión y voz**: `lens-preprocess-worker.js` y `voice-guard.js`
   son módulos optativos; la detección por energía NO es un wake-word
   entrenado y no sustituye Vosk.
@@ -86,8 +89,8 @@ directamente en un commit normal.
 
 ## Pendientes que no se deben confundir con funciones ya validadas
 
-1. Publicar la distribución del runtime local Transformers.js y probar
-   **embeddings efectivos** es-AR + consultas sobre los seis documentos.
+1. Probar en Android el runtime local que ya superó inferencia real en Chromium
+   y comprobar recuperación sobre **los seis documentos canónicos reales**.
 2. Calibración científica de rankings, evaluación de precisión de HNSW
    y benchmark real de 100k, objetivo 60 FPS / menos de 80 MB.
 3. Migración productiva con Dexie + backups, manejo de cuotas y política OPFS.
@@ -95,8 +98,9 @@ directamente en un commit normal.
    SDS legítimas y aprobación del responsable de seguridad.
 5. Integración transaccional del DAG en el Action Registry real, sin
    convertir herramientas externas en falsas operaciones atómicas.
-6. Motor Yjs/Automerge de colaboración por campo/colección y políticas de
-   autenticación de laboratorios; actualmente solo LWW verificado.
+6. Completar autorización de roles y colaboración Yjs en el Action Registry
+   productivo. El prototipo Yjs/WebRTC está probado en Chromium con pares
+   dentro de la misma máquina, NO en dos Android físicos.
 7. Keyword spotter entrenado, barge-in de TTS con control de eco y mejoras
    de precisión de Lens sin QR.
 8. Revisión profesional de seguridad del Cloudflare Gateway, cuyo despliegue
@@ -163,3 +167,32 @@ el snapshot cacheado. Los documentos permanecen en IndexedDB de origen.
 **El prototipo completo sigue pendiente de validación física Android y
 de sincronización P2P real entre dos teléfonos; los ensayos anteriores
 solo verifican Chromium de escritorio.**
+
+## Versión de prueba aislada, lista para instalar desde un entorno de pruebas
+
+El flujo `Build NEXUS Edge isolated Android preview` ensambló con éxito
+los bundles locales de Transformers.js, ONNX y Yjs y creó un ZIP/artifact
+separado con `next/demo.html` y una **copia de solo lectura** de los 111
+registros. No se subió a GitHub Pages de producción ni se fusionó la PR:
+
+https://github.com/miqueas80/Laboratorio2.0/actions/runs/37841091097
+
+El artefacto `nexus-edge-isolated-android-preview` tiene retención de 5 días.
+Para examinarlo hay que abrir la ejecución, descargar el artefacto con
+permiso del repositorio, extraerlo, servir la carpeta estáticamente en HTTPS
+(o en localhost) y abrir `/next/demo.html`. Los archivos del modelo
+semántico de 118 MB se preparan después mediante una acción explícita.
+
+**Validaciones añadidas:**
+
+- 199/199 tests de regresión en la rama experimental, más 7/7 test Yjs.
+- Yjs real sobre WebRTC cifrado en Chromium; edición y recuperación en ambos
+  sentidos: https://github.com/miqueas80/Laboratorio2.0/actions/runs/37840196186
+- 100.001 registros sintéticos en Chromium y hasta 24 nodos de lista visibles
+  después del desplazamiento: https://github.com/miqueas80/Laboratorio2.0/actions/runs/37840611987
+- El test de navegador midió **54,5 FPS, por debajo de la meta de 60 FPS**.
+  No hay medición Android. La memoria del proceso Node tampoco cumple el
+  objetivo de menos de 80 MiB. No se declara finalizado.
+
+Ver también `docs/EDGE_RELEASE_GATES.md` para la matriz de aceptación
+y las pruebas presenciales pendientes antes de tocar `main`.
