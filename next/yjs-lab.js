@@ -10,6 +10,7 @@
  */
 import {atomicEdgeWrites,readEdgeStore} from './storage.js';
 const allowed=new Set(['title','notes','status','owner']);
+const PIECE=16000,MAX_PARTS=24;
 const key=id=>'yjs:room:'+id;
 function base64(bytes){
  let text='';
@@ -41,7 +42,7 @@ export class YjsLabBoard{
   if(!Y?.Doc||!Y?.Map||!Y?.applyUpdate||!Y?.encodeStateAsUpdate||!db)throw Error('Dependencia Yjs local o base experimental ausente');
   validateRoom(room);
   this.Y=Y;this.db=db;this.room=room;this.transport=transport;
-  this.doc=new Y.Doc();this.queue=Promise.resolve();
+  this.doc=new Y.Doc();this.queue=Promise.resolve();this.parts=new Map();
  }
  #serial(callback){
   const result=this.queue.then(callback);
@@ -65,7 +66,7 @@ export class YjsLabBoard{
     if(row.encoding!=='base64-yjs-v1')throw Error('Versión de snapshot no soportada');
     this.Y.applyUpdate(next,unbase64(row.value));
    }
-   this.doc.destroy();this.doc=next;
+   this.doc.destroy();this.doc=next;this.parts.clear();
    return {room:this.room,records:this.doc.getMap('tasks').size,restored:Boolean(row)};
   });
  }
@@ -82,7 +83,7 @@ export class YjsLabBoard{
    this.doc.destroy();this.doc=next;
    let delivered=false,deliveryError='';
    if(broadcast&&this.transport?.confirmed){
-    try{await this.transport.send(this.exportPacket());delivered=true}
+    try{await this.#sendState();delivered=true}
     catch(e){deliveryError=String(e?.message||e)}
    }
    return {id,fields:{...patch},committed:true,delivered,pending:!delivered,deliveryError};
@@ -91,8 +92,11 @@ export class YjsLabBoard{
  async receive(payload){
   return this.#serial(async()=>{
    if(!this.transport?.confirmed)throw Error('Sin emparejamiento verificado');
-   if(payload?.type!=='yjs-state'||payload.room!==this.room)throw Error('Actualización de sala Yjs no permitida');
-   const update=unbase64(payload.data);
+   if(!payload||payload.room!==this.room||!['yjs-state','yjs-chunk'].includes(payload.type))
+    throw Error('Actualización de sala Yjs no permitida');
+   const assembled=payload.type==='yjs-chunk'?this.#acceptPart(payload):payload.data;
+   if(assembled===null)return {received:false,partial:true};
+   const update=unbase64(assembled);
    const next=this.#clone();
    this.Y.applyUpdate(next,update);
    const tasks=next.getMap('tasks');
@@ -112,8 +116,8 @@ export class YjsLabBoard{
  async sendSnapshot(){
   return this.#serial(async()=>{
    if(!this.transport?.confirmed)throw Error('Sin canal Yjs emparejado');
-   await this.transport.send(this.exportPacket());
-   return {sent:true,room:this.room};
+   const parts=await this.#sendState();
+   return {sent:true,room:this.room,packets:parts};
   });
  }
  getTask(id){
@@ -123,5 +127,45 @@ export class YjsLabBoard{
  listTasks(){
   return [...this.doc.getMap('tasks')].map(([id,fields])=>({id,...fields.toJSON()}));
  }
- close(){this.doc.destroy()}
+ /**
+  * Split Yjs snapshots below the AES-GCM WebRTC JSON packet limit. The
+  * receiver applies and commits only after all chunks have been assembled.
+  */
+ async #sendState(){
+  const message=this.exportPacket(),data=message.data;
+  if(data.length<=PIECE){
+   await this.transport.send(message);return 1;
+  }
+  const total=Math.ceil(data.length/PIECE);
+  if(total>MAX_PARTS)throw Error('Snapshot colaborativo excede límite de transferencia');
+  const transferId=globalThis.crypto?.randomUUID?.()||'transfer-'+Date.now()+'-'+Math.floor(Math.random()*1e9);
+  for(let index=0;index<total;index++)
+   await this.transport.send({type:'yjs-chunk',room:this.room,transferId,index,total,
+    data:data.slice(index*PIECE,(index+1)*PIECE)});
+  return total;
+ }
+ #acceptPart(part){
+  if(typeof part.transferId!=='string'||!/^[A-Za-z0-9-]{8,80}$/.test(part.transferId)||
+   !Number.isInteger(part.index)||!Number.isInteger(part.total)||
+   part.total<2||part.total>MAX_PARTS||part.index<0||part.index>=part.total||
+   typeof part.data!=='string'||part.data.length<1||part.data.length>PIECE||
+   !/^[A-Za-z0-9+/=]+$/.test(part.data))
+   throw Error('Fragmento Yjs inválido');
+  const now=Date.now();
+  for(const [id,item] of this.parts)if(now-item.created>120000)this.parts.delete(id);
+  let item=this.parts.get(part.transferId);
+  if(!item){
+   if(this.parts.size>=4)throw Error('Demasiadas transferencias parciales');
+   item={created:now,total:part.total,chunks:Array(part.total).fill(null)};
+   this.parts.set(part.transferId,item);
+  }
+  if(item.total!==part.total||
+    (item.chunks[part.index]!==null&&item.chunks[part.index]!==part.data))
+   throw Error('Fragmento de transferencia inconsistente');
+  item.chunks[part.index]=part.data;
+  if(item.chunks.some(chunk=>chunk===null))return null;
+  this.parts.delete(part.transferId);
+  return item.chunks.join('');
+ }
+ close(){this.parts.clear();this.doc.destroy()}
 }
