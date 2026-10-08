@@ -50,6 +50,12 @@ try{
    has55k:target.textContent.includes('SYN-055555'),heap:performance.memory?.usedJSHeapSize||null};
  });
  if(after.visible>40||!after.has55k)throw Error('Rango DOM tras scroll incorrecto: '+JSON.stringify(after));
+ const activeScroll=await page.evaluate(async()=>{
+  const {benchmarkVirtualScroll}=await import('./benchmarks.js');
+  return benchmarkVirtualScroll(document.getElementById('virtual'),{durationMs:1100,stepPx:3300});
+ });
+ if(activeScroll.mode!=='active-virtual-scroll'||activeScroll.steps<10)
+  throw Error('No se midió el desplazamiento activo');
  await page.locator('#agentText').fill('Nexus, abrí inventario y buscá ácido nítrico');
  await page.locator('#agentAsk').click();
  await page.waitForFunction(()=>{
@@ -68,7 +74,7 @@ try{
   initialVisibleNodes:before.visible,scrolledVisibleNodes:after.visible,
   deepScrollPassed:after.has55k,heapBeforeMiB:before.heap?+(before.heap/1048576).toFixed(2):null,
   heapAfterMiB:after.heap?+(after.heap/1048576).toFixed(2):null,
-  fps:performance,agent:{id:agent.inventory[0].id,view:agent.viewRequest,
+  fps:performance,activeScroll,agent:{id:agent.inventory[0].id,view:agent.viewRequest,
    didNotMutate:agent.safeToExecute===false},
   externalRequestsBlocked:true,environment:'Chromium desktop CI, not Android'},null,2));
 }finally{await browser?.close().catch(()=>{});server.kill('SIGTERM')}
