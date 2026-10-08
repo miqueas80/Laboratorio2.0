@@ -52,10 +52,11 @@ function operationsFor(parsed,winner){
  return ops;
 }
 export class EdgeSyncController {
- constructor({db,actor,transport=null,onConflict=()=>{},maxBatchBytes=30000}={}){
+ constructor({db,actor,transport=null,onConflict=()=>{},maxBatchBytes=30000,allowRemoteInventory=false}={}){
   if(!db||!ACTOR.test(actor))throw Error('Configuración de réplica inválida');
   this.db=db;this.replica=createReplica(actor);this.transport=transport;
   this.onConflict=onConflict;this.maxBatchBytes=maxBatchBytes;
+  this.allowRemoteInventory=allowRemoteInventory===true;
   this.versions=new Map();this.queue=Promise.resolve();
  }
  #serial(action){
@@ -104,6 +105,8 @@ export class EdgeSyncController {
    const ops=[],conflictEvents=[];let changed=0,conflicts=0,replayed=0;
    for(const raw of message.events){
     const parsed=parseEvent(raw),id=version(parsed.event),existing=seen.get(id);
+    if(parsed.store==='inventory'&&!this.allowRemoteInventory)
+     throw Error('La escritura remota de inventario requiere autorización explícita');
     if(existing!==undefined){
      if(existing!==parsed.signature)throw Error('Versión CRDT alterada o inconsistente');
      replayed++;continue;
