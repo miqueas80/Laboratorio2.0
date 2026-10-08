@@ -2,7 +2,7 @@ import {EdgeSearchClient} from './search-client.js';
 import {NexusEdgeAgent} from './agent-runtime.js';
 import {createVirtualList} from './virtual-list.js';
 import {inspectMigration} from './storage.js';
-import {evaluateStorage} from './chemical-engine.js';
+import {ChemicalSafetyClient} from './chemical-client.js';
 import {inspectAndSchedule} from './inspection-dag.js';
 import {openEdgeDB,readEdgeStore} from './storage.js';
 import {ManualWebRTCPeer} from './manual-webrtc.js';
