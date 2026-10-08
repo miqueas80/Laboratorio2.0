@@ -25,7 +25,7 @@ const hex=array=>Array.from(new Uint8Array(array),b=>b.toString(16).padStart(2,'
  * audited SHA-256. Never accept cross-origin resources or error HTML as assets.
  */
 export async function prepareOfflineShell({
- scope=new URL('./',import.meta.url),includeVendor=true,fetcher=globalThis.fetch,
+ scope=new URL('./',import.meta.url),includeVendor=true,includeInventory=false,fetcher=globalThis.fetch,
  cacheStorage=globalThis.caches,cryptoObject=globalThis.crypto,onProgress=()=>{},signal
 }={}){
  if(!fetcher||!cacheStorage||!cryptoObject?.subtle)throw Error('CacheStorage, HTTPS y WebCrypto requeridos');
@@ -50,13 +50,33 @@ export async function prepareOfflineShell({
   }else await cache.put(url.href,response.clone());
   onProgress({done:++done,total:assets.length,file:asset.path});
  }
- return {ready:true,cached:done,hasRuntime:includeVendor};
+ if(includeInventory){
+  if(signal?.aborted)throw Error('Preparación offline cancelada');
+  const source=new URL('../inventory.json',root);
+  const response=await fetcher(source.href,{cache:'reload',signal});
+  if(!response?.ok||response.type==='opaque')throw Error('Inventario fuente no disponible');
+  const text=await response.text();
+  if(text.length>2*1024*1024)throw Error('Snapshot de inventario demasiado grande');
+  let document;try{document=JSON.parse(text)}catch{throw Error('Inventario JSON inválido')}
+  const rows=document?.records,ids=new Set();
+  if(!Array.isArray(rows)||rows.length!==111||rows.some(record=>{
+   const id=String(record?.id||'');
+   if(!/^NEXUS-X-\\d{4}$/.test(id)||ids.has(id))return true;
+   ids.add(id);return false;
+  }))throw Error('Inventario canónico inesperado; no se creará la copia offline');
+  const target=new URL('snapshot/inventory.json',root);
+  await cache.put(target.href,new Response(text,{headers:{'Content-Type':'application/json'}}));
+  onProgress({done:++done,total:assets.length+1,file:'snapshot/inventory.json'});
+ }
+ return {ready:true,cached:done,hasRuntime:includeVendor,hasInventory:includeInventory};
 }
-export async function offlineShellStatus({scope=new URL('./',import.meta.url),cacheStorage=globalThis.caches,includeVendor=true}={}){
+export async function offlineShellStatus({scope=new URL('./',import.meta.url),cacheStorage=globalThis.caches,includeVendor=true,includeInventory=false}={}){
  if(!cacheStorage)return {ready:false,cached:0};
  const root=new URL(scope,import.meta.url),cache=await cacheStorage.open(MODEL_CACHE);
  const files=[...EDGE_SHELL_FILES,...(includeVendor?EDGE_VENDOR_FILES.map(x=>x.path):[])];
  let present=0;
  for(const name of files)if(await cache.match(new URL(name,root).href))present++;
- return {ready:present===files.length,cached:present,total:files.length,hasRuntime:includeVendor};
+  const inventoryCached=Boolean(await cache.match(new URL('snapshot/inventory.json',root).href));
+ return {ready:present===files.length&&(!includeInventory||inventoryCached),cached:present,total:files.length,
+  hasRuntime:includeVendor,inventoryCached};
 }
