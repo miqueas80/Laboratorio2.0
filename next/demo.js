@@ -141,7 +141,7 @@ async function analyzeEdgeFrame(skipQR){
   }else if(videoStream&&$('edgeLensVideo').videoWidth)image=$('edgeLensVideo');
   else throw Error('Elegí una foto local o activá la cámara.');
   output('edgeLensResult','Analizando con MobileCLIP-S0 local…');
-  const result=await lensBridge.analyze(image,{skipQR});
+  const result=await lensBridge.analyze(image,{skipQR,readLabel:$('lensReadLabel').checked});
   output('edgeLensResult',result);
  }finally{if(image&&image!==$('edgeLensVideo'))image.close?.()}
 }
