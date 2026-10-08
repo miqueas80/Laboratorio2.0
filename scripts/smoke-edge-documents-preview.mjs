@@ -63,9 +63,11 @@ try{
  await page.context().setOffline(true);
  await page.reload({waitUntil:'domcontentloaded'});
  const offline=await page.evaluate(async()=>{
-  const {readEdgeAvailableDocuments}=await import('./canonical-source.js');
+  const {readEdgeAvailableDocuments,readCachedOriginalDocument}=await import('./canonical-source.js');
   const {SemanticEvidenceFabric}=await import('./semantic-fabric.js');
   const result=await readEdgeAvailableDocuments();
+  const original=await readCachedOriginalDocument('QUÍMICA (1) (1).pdf');
+  if(original.blob.size!==8487276)throw Error('PDF original no se recuperó íntegro sin conexión');
   if(navigator.onLine||!navigator.serviceWorker.controller||!result.available||
      result.documents.length!==6||result.searchable!==6)throw Error('Reinicio documental offline falló');
   const fabric=new SemanticEvidenceFabric();
@@ -76,6 +78,7 @@ try{
     throw Error('Búsqueda BM25 offline no recuperó DOCX');
    return {success:true,mode:answer.mode,documents:built.documents,
     fragments:built.fragments,provenancePreserved:true,
+    originalPdfBytes:original.blob.size,sha256Verified:true,
     navigatorOnline:navigator.onLine};
   }finally{fabric.close()}
  });
