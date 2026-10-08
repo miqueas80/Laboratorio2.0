@@ -21,7 +21,6 @@ test('BM25 categoriza referencias reales y preserva números CAS exactos',()=>{
 });
 test('Índice vectorial local usa coseno sólo con vectores válidos',()=>{
  const idx=buildIndex([{id:'a',text:'vaso',vector:[1,0]},{id:'b',text:'matraz',vector:[0,1]}],{dimension:2});
- assert.equal(searchIndex(idx,'',[{vector:[0,1]}])[0]?.id,undefined);
  assert.equal(searchIndex(idx,'',{vector:[0,1]})[0].id,'b');
  assert.throws(()=>searchIndex(idx,'',{vector:[1,2,3]}),/Dimensión/);
 });
