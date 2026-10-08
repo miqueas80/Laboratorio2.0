@@ -7,6 +7,8 @@ on:
       - ".github/workflows/edge-voice-browser.yml"
       - "scripts/smoke-edge-voice-browser.mjs"
       - "next/voice-edge.js"
+      - "next/demo.html"
+      - "next/demo.css"
       - "offline/core.js"
 permissions:
   contents: read
