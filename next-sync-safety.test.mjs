@@ -91,3 +91,22 @@ test('CRDT: serializes simultaneous local writes and tracks versions on restart'
   assert.equal(next.clock,10);
  }finally{h.close()}
 });
+
+
+test('CRDT bloquea por defecto ediciones de inventario desde otros equipos',async()=>{
+ const h=await harness();
+ try{
+  const chemical=event('inventory:NEXUS-X-0001','actor-REMOTE-15',1,{
+   id:'NEXUS-X-0001',name:'Cambio externo no autorizado'
+  });
+  await assert.rejects(h.sync.receive(packet(chemical)),/autorización explícita/);
+  assert.equal((await readEdgeStore(h.db,'inventory')).length,0);
+  assert.equal((await readEdgeStore(h.db,'mutation_log')).length,0);
+  const authorized=new EdgeSyncController({
+   db:h.db,actor:'actor-local-001',transport:h.transport,allowRemoteInventory:true
+  });
+  await authorized.load();
+  assert.equal((await authorized.receive(packet(chemical))).changed,1);
+  assert.equal(authorized.read('inventory','NEXUS-X-0001').name,'Cambio externo no autorizado');
+ }finally{h.close()}
+});
