@@ -11,6 +11,7 @@ on:
       - "inventory.json"
       - "offline/**"
       - "docs/EDGE_RELEASE_GATES.md"
+      - "docs/EDGE_ANDROID_RELEASE_RUNBOOK.md"
       - "documents-manifest.json"
       - "scripts/build-edge-documents.py"
       - "scripts/smoke-edge-documents-preview.mjs"
@@ -47,6 +48,8 @@ jobs:
           command -v pdftoppm
           tesseract --list-langs 2>&1 | grep -x spa
       - run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Entire legacy and Edge Node regression suite
+        run: npm test
       - name: Install pinned browser runtimes without postinstall scripts
         run: npm install --no-save --ignore-scripts --no-audit --no-fund @huggingface/transformers@3.8.1 yjs@13.6.32 esbuild@0.25.9 playwright-core@1.56.1
       - name: Build local ONNX/WASM and Yjs ESM libraries
@@ -71,6 +74,7 @@ jobs:
           cp jsQR.js LICENSE-jsqr.txt icon-192.png icon-512.png dist/nexus-edge/
           mkdir -p dist/nexus-edge/docs
           cp docs/EDGE_RELEASE_GATES.md dist/nexus-edge/docs/EDGE_RELEASE_GATES.md
+          cp docs/EDGE_ANDROID_RELEASE_RUNBOOK.md dist/nexus-edge/docs/EDGE_ANDROID_RELEASE_RUNBOOK.md
           python3 scripts/build-edge-documents.py --out dist/nexus-edge/next/snapshot/canonical-documents.json --copy-originals dist/nexus-edge
           cat > dist/nexus-edge/index.html <<'HTML'
           <!doctype html>
