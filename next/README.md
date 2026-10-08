@@ -167,7 +167,9 @@ para que el inventario experimental no dependa del SW de producción.
 La copia se valida contra 111 IDs únicos y no sustituye al inventario
 original. El laboratorio experimental intenta primero leer el
 inventario original al estar online y, si no está disponible, usa
-el snapshot cacheado. Los documentos permanecen en IndexedDB de origen.
+el snapshot cacheado. Los documentos productivos permanecen en IndexedDB de
+origen; la distribución Edge aislada tiene además seis copias originales
+verificadas y su propio índice documental de solo lectura.
 
 **El prototipo completo sigue pendiente de validación física Android y
 de sincronización P2P real entre dos teléfonos; los ensayos anteriores
@@ -190,7 +192,8 @@ semántico de 118 MB se preparan después mediante una acción explícita.
 
 **Validaciones añadidas:**
 
-- 214/214 tests de regresión en la rama experimental, más 7/7 test Yjs.
+- 239/239 tests de regresión en la rama experimental, más 7/7 test Yjs
+  en la etapa de aceptación documental. El HEAD final debe volver a pasar CI.
 - Yjs real sobre WebRTC cifrado en Chromium; edición y recuperación en ambos
   sentidos: https://github.com/miqueas80/Laboratorio2.0/actions/runs/37840196186
 - 100.001 registros sintéticos en Chromium y hasta 24 nodos de lista visibles
@@ -242,3 +245,38 @@ existe evaluación de precisión por clases reales en Android, KWS neuronal
 entrenado, evaluación química certificada ni integración final en la
 PWA estable. El desarrollo permanece en PR borrador y no debe fusionarse
 antes de las pruebas físicas.
+
+## Cierre candidato · seis documentos reales y aceptación Android
+
+El paquete experimental incluye **los 111 registros canónicos originales
+en copia de lectura y los seis archivos PDF/DOCX/XLSX originales** (con
+revisiones Git y SHA-256 cotejados). El compilador genera además
+`next/snapshot/canonical-documents.json` de solo lectura, indexable
+por BM25 y por el motor semántico opcional.
+
+`QUÍMICA (1) (1).pdf` requiere OCR porque solo devuelve 29 caracteres
+al extraer texto normalmente. En CI se usa Tesseract español
+**exclusivamente durante la compilación**, no en el navegador ni en Lens:
+se recuperaron 15.591 caracteres de las 13 páginas. La exactitud de fórmulas
+y subíndices debe revisarse por un humano. El conjunto tiene 96.516
+caracteres de texto y genera 134 fragmentos indexables.
+
+Prueba real de Chromium desde el ZIP aislado: cargó los seis
+documentos, recuperó el DOCX de formación de óxidos, guardó la interfaz
+y los seis originales en CacheStorage con verificación SHA-256, cortó
+Internet, recargó, volvió a indexar los seis y descargó el PDF
+original de 8.487.276 bytes totalmente offline:
+
+https://github.com/miqueas80/Laboratorio2.0/actions/runs/37850694639
+
+La lectura QR exacta mediante jsQR sobre el fixture real también está
+probada: https://github.com/miqueas80/Laboratorio2.0/actions/runs/37849417617
+
+`next/demo.html` expone un panel de 14 condiciones de salida y exporta
+un JSON de auditoría sin contenidos privados. Si faltan pruebas
+en Android real, dos teléfonos LAN, 80 MiB de RAM total, 60 FPS
+estrictos o revisión SDS profesional, devuelve `NOT_READY`.
+El uso de `npm test` y los checks verdes no permite cambiar esa
+decisión. Véase `docs/EDGE_ANDROID_RELEASE_RUNBOOK.md`.
+
+**PR #4 sigue como borrador sin fusionarse a `main`.**
