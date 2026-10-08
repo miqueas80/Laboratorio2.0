@@ -12,7 +12,7 @@ import {openEdgeDB,readEdgeStore} from './storage.js';
 import {ManualWebRTCPeer} from './manual-webrtc.js';
 import {EdgeSyncController} from './sync-controller.js';
 import {YjsLabBoard} from './yjs-lab.js';
-import {readPublishedDocumentCache} from './document-source.js';
+import {readEdgeAvailableDocuments} from './canonical-source.js';
 import {SemanticEvidenceFabric} from './semantic-fabric.js';
 import {prepareSemanticAssets,semanticCacheStatus} from './model-provisioner.js';
 import {prepareOfflineShell,offlineShellStatus} from './offline-shell.js';
