@@ -1,41 +1,63 @@
 /**
- * Runtime smoke test: real multilingual MiniLM ONNX inference, completely
- * local after external assets have been downloaded and SHA256-verified by CI.
- * This does not prove WebGPU, Android speed, 60 FPS or production integration.
+ * Real Chromium browser smoke: multilingual ONNX q8 inference from a local HTTP
+ * server using a Web Worker. External host requests are BLOCKED. Requires
+ * the GitHub Action to vendor the runtime and download verified model weights.
+ * Does not establish performance on Android/WebGPU.
  */
-import {pipeline,env} from '../next/vendor/transformers/transformers.min.js';
-import path from 'node:path';
+import {chromium} from 'playwright-core';
+import {spawn} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
-
+import path from 'node:path';
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
-const model='Xenova/paraphrase-multilingual-MiniLM-L12-v2';
-env.allowRemoteModels=false;
-env.allowLocalModels=true;
-env.localModelPath=path.join(root,'next','models')+path.sep;
-env.useFS=true;
-env.useFSCache=false;
-env.useBrowserCache=false;
-env.backends.onnx.wasm.wasmPaths=path.join(root,'next','vendor','onnx')+path.sep;
-env.backends.onnx.wasm.numThreads=1;
-
-const started=performance.now();
-const encoder=await pipeline('feature-extraction',model,{dtype:'q8',device:'wasm'});
-const sentences=[
- '¿Qué es un matraz Erlenmeyer?',
- 'El matraz Erlenmeyer es un recipiente de vidrio utilizado en el laboratorio.',
- 'El equipo de fútbol ganó su último partido.'
-];
-const out=await encoder(sentences,{pooling:'mean',normalize:true});
-const dims=Array.from(out.dims||[]);
-if(dims[0]!==3||dims.at(-1)!==384)throw Error('Dimensiones de embeddings no válidas: '+dims);
-const vector=i=>Array.from(out.data.slice(i*384,(i+1)*384));
-const a=vector(0),b=vector(1),c=vector(2);
-const cosine=(x,y)=>x.reduce((acc,v,i)=>acc+v*y[i],0);
-const related=cosine(a,b),unrelated=cosine(a,c);
-if(!Number.isFinite(related)||!Number.isFinite(unrelated)||related<=unrelated)
- throw Error('La prueba semántica no separó el texto científico del irrelevante: '+JSON.stringify({related,unrelated}));
-console.log(JSON.stringify({model,dtype:'q8',device:'wasm',vectors:3,dimension:384,
- related:Number(related.toFixed(4)),unrelated:Number(unrelated.toFixed(4)),
- inferenceMs:Math.round(performance.now()-started),remoteModels:false},null,2));
-out.dispose?.();
-await encoder.dispose?.();
+const port=17417,base='http://127.0.0.1:'+port;
+const server=spawn('python3',['-m','http.server',String(port),'--bind','127.0.0.1'],{cwd:root,stdio:'ignore'});
+let browser=null;
+try{
+ let ready=false;
+ for(let i=0;i<70;i++){
+  try{const response=await fetch(base+'/next/embedding-worker.js');if(response.ok){ready=true;break}}catch{}
+  await new Promise(resolve=>setTimeout(resolve,100));
+ }
+ if(!ready)throw Error('Servidor de prueba local no disponible');
+ browser=await chromium.launch({
+  headless:true,executablePath:process.env.CHROME_BIN||'/usr/bin/google-chrome',
+  args:['--no-sandbox','--disable-gpu','--disable-dev-shm-usage']
+ });
+ const page=await browser.newPage();
+ page.setDefaultTimeout(180000);
+ page.on('console',message=>{if(message.type()==='error')console.log('BROWSER CONSOLE:',message.text())});
+ page.on('pageerror',error=>console.log('BROWSER PAGE ERROR:',error.message));
+ await page.route('**/*',route=>{
+  const url=new URL(route.request().url());
+  if(url.origin!==base)route.abort('blockedbyclient');
+  else route.continue();
+ });
+ await page.goto(base+'/next/demo.html',{waitUntil:'domcontentloaded'});
+ const started=performance.now();
+ const data=await page.evaluate(async()=>{
+  const {LocalEmbeddingClient}=await import('./embedding-client.js');
+  const client=new LocalEmbeddingClient({timeoutMs:150000});
+  try{
+   const status=await client.status();
+   if(!status.installed)throw Error('Modelo local no preparado: '+JSON.stringify(status));
+   const state=await client.prepare();
+   const samples=[
+    '¿Qué es un matraz Erlenmeyer?',
+    'Un matraz Erlenmeyer es un recipiente de vidrio que se utiliza en el laboratorio.',
+    'El equipo de fútbol ganó la final en el estadio.'
+   ];
+   const vectors=await client.embed(samples,{batchSize:3});
+   if(vectors.length!==3||vectors.some(row=>row.length!==384||row.some(v=>!Number.isFinite(v))))
+    throw Error('Embedding inválido o dimensión inesperada');
+   const dot=(a,b)=>a.reduce((sum,x,i)=>sum+x*b[i],0);
+   const related=dot(vectors[0],vectors[1]),unrelated=dot(vectors[0],vectors[2]);
+   if(related<=unrelated)throw Error('Sin recuperación semántica pertinente: '+JSON.stringify({related,unrelated}));
+   return {model:state.model,backend:state.backend,dimension:384,vectors:3,related,unrelated};
+  }finally{client.close()}
+ });
+ console.log(JSON.stringify({...data,elapsedMs:Math.round(performance.now()-started),
+  externalRequestsBlocked:true,environment:'headless Chromium / WASM, not Android'},null,2));
+}finally{
+ await browser?.close().catch(()=>{});
+ server.kill('SIGTERM');
+}
