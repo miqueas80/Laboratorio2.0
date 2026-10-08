@@ -185,14 +185,21 @@ semántico de 118 MB se preparan después mediante una acción explícita.
 
 **Validaciones añadidas:**
 
-- 199/199 tests de regresión en la rama experimental, más 7/7 test Yjs.
+- 214/214 tests de regresión en la rama experimental, más 7/7 test Yjs.
 - Yjs real sobre WebRTC cifrado en Chromium; edición y recuperación en ambos
   sentidos: https://github.com/miqueas80/Laboratorio2.0/actions/runs/37840196186
 - 100.001 registros sintéticos en Chromium y hasta 24 nodos de lista visibles
   después del desplazamiento: https://github.com/miqueas80/Laboratorio2.0/actions/runs/37840611987
-- El test de navegador midió **54,5 FPS, por debajo de la meta de 60 FPS**.
-  No hay medición Android. La memoria del proceso Node tampoco cumple el
-  objetivo de menos de 80 MiB. No se declara finalizado.
+- Una medición posterior con desplazamiento activo de 100.001 registros
+  mostró **60 FPS promedio, p95 16,7 ms y criterio estricto `metTarget:false`**.
+  No hay medición Android. La memoria total de Node tampoco cumple 80 MiB.
+  Ver: https://github.com/miqueas80/Laboratorio2.0/actions/runs/37842461900.
+- El análisis de incompatibilidades ahora usa un Worker local dedicado y
+  reporta evidencias ausentes y alertas truncadas, no declaraciones de seguridad.
+  CI probó 100.001 registros con SDS ausente y mantuvo el resultado «revisión
+  requerida»; el cálculo Worker tardó 17 ms sin contar el paso de datos.
+  Regresiones: https://github.com/miqueas80/Laboratorio2.0/actions/runs/37842470156.
+  Estos resultados no certifican sustancias químicas ni completan el producto.
 
 Ver también `docs/EDGE_RELEASE_GATES.md` para la matriz de aceptación
 y las pruebas presenciales pendientes antes de tocar `main`.
