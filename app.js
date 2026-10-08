@@ -2264,7 +2264,7 @@ function resolveIntent(text){
  }
  const split=q.match(/^(.+?)\s+y\s+(.+)$/i);
  if(external&&split&&state.web&&navigator.onLine){const local=fastAgentPlan(split[1].replace(/\b(nuestro|nuestra|nuestros|nuestras)\s+/gi,''));if(local?.action)return {kind:'HÍBRIDO',local,externalQuery:split[2]}}
- if(nexusHelpQuestion(q))return {kind:'LOCAL',local:null};
+ if(nexusHelpQuestion(q)||/\b(?:muchas gracias|gracias)\b/.test(n))return {kind:'LOCAL',local:null};
  // El conocimiento propio nunca se reemplaza por xKiro sólo porque volvió Internet.
  if(!external&&localEvidenceLookup(q))return {kind:'LOCAL',local:null};
  if(external)return state.web&&navigator.onLine?{kind:'EXTERNO',externalQuery:q}:{kind:'LOCAL',local:null};
