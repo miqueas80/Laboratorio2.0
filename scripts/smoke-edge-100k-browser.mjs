@@ -56,6 +56,19 @@ try{
  });
  if(activeScroll.mode!=='active-virtual-scroll'||activeScroll.steps<10)
   throw Error('No se midió el desplazamiento activo');
+ const safety=await page.evaluate(async()=>{
+  const {ChemicalSafetyClient}=await import('./chemical-client.js');
+  const client=new ChemicalSafetyClient({timeoutMs:30000});
+  try{
+   const rows=Array.from({length:100001},(_,i)=>({id:'SYN-'+i,location:'Armario A'}));
+   const result=await client.evaluate(rows);
+   if(result.analyzedRecords!==100001||result.unresolvedCount!==100001||
+      result.status!=='INCOMPLETE_EVIDENCE'||result.engine!=='local-web-worker')
+    throw Error('El worker químico no reconoció la evidencia faltante: '+JSON.stringify(result));
+   return {analyzed:result.analyzedRecords,unresolved:result.unresolvedCount,
+    engine:result.engine,computationMs:result.durationMs,reviewRequired:result.reviewRequired};
+  }finally{client.close()}
+ });
  await page.locator('#agentText').fill('Nexus, abrí inventario y buscá ácido nítrico');
  await page.locator('#agentAsk').click();
  await page.waitForFunction(()=>{
@@ -74,7 +87,7 @@ try{
   initialVisibleNodes:before.visible,scrolledVisibleNodes:after.visible,
   deepScrollPassed:after.has55k,heapBeforeMiB:before.heap?+(before.heap/1048576).toFixed(2):null,
   heapAfterMiB:after.heap?+(after.heap/1048576).toFixed(2):null,
-  fps:performance,activeScroll,agent:{id:agent.inventory[0].id,view:agent.viewRequest,
+  fps:performance,activeScroll,safetyWorker:safety,agent:{id:agent.inventory[0].id,view:agent.viewRequest,
    didNotMutate:agent.safeToExecute===false},
   externalRequestsBlocked:true,environment:'Chromium desktop CI, not Android'},null,2));
 }finally{await browser?.close().catch(()=>{});server.kill('SIGTERM')}
