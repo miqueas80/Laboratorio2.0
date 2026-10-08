@@ -2,8 +2,8 @@
  * @file NEXUS Edge Search — BM25 compact postings + optional real vectors.
  * Fully offline. Designed for a dedicated Web Worker.
  *
- * Posting lists use numeric document ordinals and flat [ordinal,tf] arrays,
- * rather than one Map object per posting. Results expose original record IDs.
+ * One Uint32Array holds every [ordinal,term-frequency] posting. The term map
+ * stores only slice metadata, avoiding thousands of independent JS arrays.
  */
 const fold=value=>String(value??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
 export function tokenize(text){
@@ -28,22 +28,35 @@ export function buildIndex(rows,{dimension=384,maxRows=150000}={}){
  if(!Array.isArray(rows)||rows.length>maxRows)throw Error('Límite de índice excedido');
  if(!Number.isInteger(dimension)||dimension<1||dimension>4096)throw Error('Dimensión inválida');
  const docs=new Map(),order=[],postings=new Map();
- let lengthSum=0;
+ let lengthSum=0,postingCount=0;
+ // Pass 1: compute exactly how much typed posting storage is needed.
  for(const row of rows){
   const id=String(row?.id||'').trim();
   if(!id||id.length>180||docs.has(id))throw Error('ID ausente o duplicado');
-  const text=String(row.text||'').slice(0,30000),tokens=tokenize(text);
-  const counts=new Map();
-  for(const word of tokens)counts.set(word,(counts.get(word)||0)+1);
-  const ordinal=order.length,doc={id,ordinal,length:tokens.length,vector:vectorize(row.vector,dimension)};
+  const tokens=tokenize(String(row.text||'').slice(0,30000)),ordinal=order.length;
+  const doc={id,ordinal,length:tokens.length,vector:vectorize(row.vector,dimension)};
   docs.set(id,doc);order.push(doc);lengthSum+=tokens.length;
+  for(const word of new Set(tokens)){
+   let info=postings.get(word);
+   if(!info){info={offset:0,df:0,cursor:0};postings.set(word,info)}
+   info.df++;postingCount++;
+  }
+  if(postingCount>8000000)throw Error('Presupuesto de índice excedido');
+ }
+ let offset=0;
+ for(const info of postings.values()){info.offset=offset;offset+=info.df}
+ const postingData=new Uint32Array(postingCount*2);
+ // Pass 2: fill one compact buffer without per-word posting allocations.
+ for(let ordinal=0;ordinal<rows.length;ordinal++){
+  const counts=new Map();
+  for(const word of tokenize(String(rows[ordinal].text||'').slice(0,30000)))
+   counts.set(word,(counts.get(word)||0)+1);
   for(const [word,tf] of counts){
-   let posting=postings.get(word);
-   if(!posting){posting=[];postings.set(word,posting)}
-   posting.push(ordinal,tf);
+   const info=postings.get(word),position=(info.offset+info.cursor++)*2;
+   postingData[position]=ordinal;postingData[position+1]=tf;
   }
  }
- return {docs,order,postings,averageLength:lengthSum/Math.max(1,order.length),dimension};
+ return {docs,order,postings,postingData,averageLength:lengthSum/Math.max(1,order.length),dimension};
 }
 /**
  * BM25 normalized by the maximum lexical score in this query, optionally
@@ -53,16 +66,16 @@ export function buildIndex(rows,{dimension=384,maxRows=150000}={}){
 export function searchIndex(index,query,{
  vector=null,limit=20,lexicalWeight=.7,semanticWeight=.3,candidateIds=null
 }={}){
- if(!index?.docs||!index?.postings||!Array.isArray(index.order))throw Error('Índice no inicializado');
+ if(!index?.docs||!index?.postings||!index?.postingData||!Array.isArray(index.order))throw Error('Índice no inicializado');
  const terms=[...new Set(tokenize(query))].slice(0,24);
  const qVector=vectorize(vector,index.dimension);
  const scores=new Map(),n=index.docs.size,avg=index.averageLength||1,k1=1.5,b=.75;
  for(const term of terms){
   const posting=index.postings.get(term);
   if(!posting)continue;
-  const df=posting.length/2,idf=Math.log(1+(n-df+.5)/(df+.5));
-  for(let p=0;p<posting.length;p+=2){
-   const ordinal=posting[p],tf=posting[p+1],doc=index.order[ordinal];
+  const df=posting.df,idf=Math.log(1+(n-df+.5)/(df+.5));
+  for(let p=posting.offset;p<posting.offset+df;p++){
+   const ordinal=index.postingData[p*2],tf=index.postingData[p*2+1],doc=index.order[ordinal];
    const numerator=tf*(k1+1),denominator=tf+k1*(1-b+b*doc.length/avg);
    scores.set(ordinal,(scores.get(ordinal)||0)+idf*numerator/denominator);
   }
