@@ -9,6 +9,8 @@ on:
       - "scripts/vendor-edge-transformers.mjs"
       - "scripts/vendor-edge-yjs.mjs"
       - "inventory.json"
+      - "offline/**"
+      - "docs/EDGE_RELEASE_GATES.md"
 permissions:
   contents: read
 jobs:
@@ -44,6 +46,8 @@ jobs:
           mkdir -p dist/nexus-edge/offline
           cp -a offline/. dist/nexus-edge/offline/
           cp jsQR.js LICENSE-jsqr.txt dist/nexus-edge/
+          mkdir -p dist/nexus-edge/docs
+          cp docs/EDGE_RELEASE_GATES.md dist/nexus-edge/docs/EDGE_RELEASE_GATES.md
           cat > dist/nexus-edge/index.html <<'HTML'
           <!doctype html>
           <html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="refresh" content="0;url=next/demo.html"><title>NEXUS Edge · Pruebas</title></head>
