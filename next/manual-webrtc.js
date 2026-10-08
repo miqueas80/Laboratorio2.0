@@ -27,7 +27,7 @@ export class ManualWebRTCPeer{
   if(!RTCPeerConnectionConstructor)throw Error('WebRTC no disponible');
   this.peer=new RTCPeerConnectionConstructor({iceServers:[]});
   this.identity=null;this.sessionId='';this.pairing=null;this.confirmed=false;this.channel=null;this.replay=new Set();
-  this.onPayload=onPayload;this.onStatus=onStatus;
+  this.onPayload=onPayload;this.onStatus=onStatus;this.inflight=new Set();
   this.peer.onconnectionstatechange=()=>onStatus({state:this.peer.connectionState,confirmed:this.confirmed});
   this.peer.ondatachannel=event=>this.#bindChannel(event.channel);
  }
@@ -39,10 +39,14 @@ export class ManualWebRTCPeer{
    try{
     if(!this.confirmed||!this.pairing||typeof data!=='string'||data.length>MAX_PACKET)return;
     const packet=JSON.parse(data);
-    if(this.replay.has(packet.iv))return;
+    if(this.replay.has(packet.iv)||this.inflight.has(packet.iv))return;
     const content=await decryptPacket(this.pairing.key,packet);
-    this.replay.add(packet.iv);if(this.replay.size>1000)this.replay.delete(this.replay.values().next().value);
-    await this.onPayload(content);
+    this.inflight.add(packet.iv);
+    try{
+     await this.onPayload(content);
+     // A packet is considered consumed only AFTER durable receiver success.
+     this.replay.add(packet.iv);if(this.replay.size>1000)this.replay.delete(this.replay.values().next().value);
+    }finally{this.inflight.delete(packet.iv)}
    }catch(error){this.onStatus({state:'packet-rejected',reason:String(error.message||error)})}
   };
  }
@@ -80,5 +84,5 @@ export class ManualWebRTCPeer{
   if(encoded.length>MAX_PACKET)throw Error('Mensaje excede límite');
   this.channel.send(encoded);
  }
- close(){this.confirmed=false;this.channel?.close();this.peer.close();this.replay.clear();this.pairing=null}
+ close(){this.confirmed=false;this.channel?.close();this.peer.close();this.replay.clear();this.inflight.clear();this.pairing=null}
 }
