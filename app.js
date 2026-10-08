@@ -1823,7 +1823,7 @@ function rememberNexusAction(action,result){
  }
 }
 function nexusFollowupKind(question){
- const n=norm(question).replace(/^(?:nexus(?:[- ]?x)?)[,;:\s]+/,'').replace(/[¿?¡!.,;:]+/g,' ').replace(/^y\s+/,'').replace(/\s+/g,' ').trim();
+ const n=norm(question).replace(/^(?:nexus(?:[- ]?x)?)[,;:\s]+/,'').replace(/[¿?¡!.,;:]+/g,' ').replace(/\s+/g,' ').trim().replace(/^y\s+/,'');
  if(/^(?:(?:cual|que)\s+es\s+)?(?:su|la)\s+formula(?:\s+quimica)?$/.test(n)||/^que formula tiene$/.test(n))return 'formula';
  if(/^(?:(?:donde\s+(?:esta|se encuentra|lo guardamos|la guardamos))|(?:en que (?:armario|ubicacion) (?:esta|se encuentra))|(?:su|la) ubicacion)$/.test(n))return 'location';
  if(/^(?:(?:y\s+)?(?:como\s+se\s+llama|cual\s+es\s+su\s+nombre)|(?:su|el) nombre)$/.test(n))return 'name';
