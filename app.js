@@ -24,7 +24,7 @@ const LENS_EXTERNAL_CACHE_LIMIT=20;
 const VOICE_WAKE=/\bnexus(?:[- ]?x)?\b/i;
 let voiceRecognition=null;let voiceListening=false;let voiceMonitoring=false;let voiceSpeaking=false;let voiceAwaitingCommand=false;let voiceWakeTimer=null;let voiceRestartTimer=null;let voicePendingIntent=null;let voicePendingTimer=null;let voiceCommandQueue=Promise.resolve();
 // El motor ASR es intercambiable; intenciones y Action Registry siguen siendo únicos.
-let voiceEngineMode='none',voiceSessionEpoch=0,voiceSwitchTimer=null,voiceCommandBusy=false,voiceLastInputAt=0,voiceLastCommand='',voiceLastCommandAt=0;
+let voiceEngineMode='none',voiceSessionEpoch=0,voiceSwitchTimer=null,voiceCommandBusy=false,voiceLastInputAt=0,voiceLastCommand='',voiceLastCommandAt=0,voiceASRConfidence=null;
 const lensExternalCache=new Map(),lensExternalPending=new Map();
 const WEB_TIMEOUT=6500;
 function storageFailure(error){
@@ -2203,8 +2203,8 @@ function resolveIntent(text){
   return {kind:'LOCAL',local:planned};
  }
  const split=q.match(/^(.+?)\s+y\s+(.+)$/i);
- if(external&&split){const local=fastAgentPlan(split[1].replace(/\b(nuestro|nuestra|nuestros|nuestras)\s+/gi,''));if(local)return {kind:'HÍBRIDO',local,externalQuery:split[2]}}
- if(external)return {kind:'EXTERNO',externalQuery:q};
+ if(external&&split&&state.web&&navigator.onLine){const local=fastAgentPlan(split[1].replace(/\b(nuestro|nuestra|nuestros|nuestras)\s+/gi,''));if(local?.action)return {kind:'HÍBRIDO',local,externalQuery:split[2]}}
+ if(external)return state.web&&navigator.onLine?{kind:'EXTERNO',externalQuery:q}:{kind:'LOCAL',local:null};
  if(/(?:que es|explica|explicame|como funciona|informacion externa)/.test(n))return state.web&&navigator.onLine?{kind:'EXTERNO',externalQuery:q}:{kind:'LOCAL',local:null};
  if(state.web&&navigator.onLine)return {kind:'EXTERNO',externalQuery:q};
  return {kind:'LOCAL',local:null};
@@ -2314,7 +2314,7 @@ async function executeVoiceCommand(q){
  const out=await nexusAgentTurn(raw,{speak:true});return Boolean(out);
 }
 function stopVoiceRecognition({manual=true}={}){
-  ++voiceSessionEpoch;clearTimeout(voiceSwitchTimer);voiceSwitchTimer=null;voiceEngineMode='none';
+  ++voiceSessionEpoch;clearTimeout(voiceSwitchTimer);voiceSwitchTimer=null;voiceEngineMode='none';voiceASRConfidence=null;
   voiceMonitoring=false;voiceListening=false;voiceAwaitingCommand=false;voiceSpeaking=false;
   clearTimeout(voiceWakeTimer);clearTimeout(voiceRestartTimer);clearTimeout(voicePendingTimer);voicePendingTimer=null;voicePendingIntent=null;
   if(manual)removeStorage('nexus_voice_wake_enabled_v2');
@@ -2425,12 +2425,13 @@ function chooseVoiceTranscript(result){
  }
  if(!candidates.length)return '';
  const measured=candidates.filter(x=>x.hasConfidence);
- if(!measured.length)return candidates[0].text;
+ if(!measured.length){voiceASRConfidence=null;return candidates[0].text;}
  measured.sort((a,b)=>b.confidence-a.confidence||a.index-b.index);
+ voiceASRConfidence=measured[0].confidence;
  return measured[0].text;
 }
 function desiredVoiceEngine(){return state.web&&navigator.onLine!==false&&(globalThis.SpeechRecognition||globalThis.webkitSpeechRecognition)?'online':'offline';}
-function voiceRuntimeStatus(){return {active:voiceMonitoring,engine:voiceEngineMode,preferred:desiredVoiceEngine(),busy:voiceCommandBusy,lastTranscriptAt:voiceLastInputAt};}
+function voiceRuntimeStatus(){return {active:voiceMonitoring,engine:voiceEngineMode,preferred:desiredVoiceEngine(),busy:voiceCommandBusy,confidence:voiceASRConfidence,lastTranscriptAt:voiceLastInputAt};}
 function scheduleVoiceEngineAlignment(){
  if(!voiceMonitoring||desiredVoiceEngine()===voiceEngineMode)return;
  clearTimeout(voiceSwitchTimer);
