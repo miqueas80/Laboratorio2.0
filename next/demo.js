@@ -84,6 +84,67 @@ $('agentAsk').onclick=()=>task(async()=>{
  }
 },'agentOutput');
 $('agentText').addEventListener('keydown',event=>{if(event.key==='Enter')$('agentAsk').click()});
+$('lensPrepare').onclick=()=>task(async()=>{
+ lensBridge||=new EdgeLens({inventory:await getRecords()});
+ output('edgeLensResult','Preparando MobileCLIP y PP-OCR localmente, sin enviar fotos a Internet…');
+ const state=await lensBridge.prepare({onProgress:p=>output('edgeLensResult',p)});
+ output('edgeLensResult',{prepared:true,engine:state});
+},'edgeLensResult');
+async function localEdgeAgent(){
+ if(!edgeAgent)edgeAgent=new NexusEdgeAgent({inventory:await getRecords(),fabric:documentFabric});
+ else edgeAgent.fabric=documentFabric;
+ return edgeAgent;
+}
+function edgeVoice(){
+ voiceBridge||=new EdgeVoiceCoordinator({
+  agent:{turn:async prompt=>{
+   const agent=await localEdgeAgent();
+   return agent.turn(prompt);
+  }},
+  onResult:out=>{
+   output('agentOutput',out);
+   if(out.viewRequest==='inventory')$('inventorySection').scrollIntoView({behavior:'smooth'});
+   else if(out.viewRequest==='documents')$('documentsSection').scrollIntoView({behavior:'smooth'});
+  },
+  onStatus:state=>output('edgeVoiceStatus',state)
+ });
+ return voiceBridge;
+}
+$('voicePrepare').onclick=()=>task(async()=>{
+ output('edgeVoiceStatus','Preparando Vosk local por decisión del operador…');
+ output('edgeVoiceStatus',await edgeVoice().prepare(p=>output('edgeVoiceStatus',p)));
+},'edgeVoiceStatus');
+$('voiceStart').onclick=()=>task(async()=>output('edgeVoiceStatus',await edgeVoice().start()),'edgeVoiceStatus');
+$('voiceStop').onclick=()=>{voiceBridge?.stop();output('edgeVoiceStatus','Escucha detenida')};
+$('edgeCameraStart').onclick=()=>task(async()=>{
+ if(videoStream)for(const track of videoStream.getTracks())track.stop();
+ if(!navigator.mediaDevices?.getUserMedia)throw Error('Se requiere cámara en HTTPS y permiso del dispositivo');
+ videoStream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:'environment'}}});
+ $('edgeLensVideo').srcObject=videoStream;
+ await $('edgeLensVideo').play();
+ output('edgeLensResult','Cámara lista. Analizá una captura cuando el objeto esté enfocado.');
+},'edgeLensResult');
+$('edgeCameraStop').onclick=()=>{
+ videoStream?.getTracks().forEach(track=>track.stop());videoStream=null;
+ $('edgeLensVideo').srcObject=null;output('edgeLensResult','Cámara detenida.');
+};
+async function analyzeEdgeFrame(skipQR){
+ lensBridge||=new EdgeLens({inventory:await getRecords()});
+ const file=$('lensFile').files?.[0];
+ let image=null;
+ try{
+  if(file){
+   if(file.size>15*1024*1024||!file.type.startsWith('image/'))throw Error('Archivo no admitido o demasiado grande');
+   image=await createImageBitmap(file);
+  }else if(videoStream&&$('edgeLensVideo').videoWidth)image=$('edgeLensVideo');
+  else throw Error('Elegí una foto local o activá la cámara.');
+  output('edgeLensResult','Analizando con MobileCLIP-S0 local…');
+  const result=await lensBridge.analyze(image,{skipQR});
+  output('edgeLensResult',result);
+ }finally{if(image&&image!==$('edgeLensVideo'))image.close?.()}
+}
+$('edgeLensAnalyze').onclick=()=>task(()=>analyzeEdgeFrame(true),'edgeLensResult');
+$('edgeLensAnalyzeQr').onclick=()=>task(()=>analyzeEdgeFrame(false),'edgeLensResult');
 $('load').onclick=()=>task(async()=>build(makeRows(await getRecords())),'results');
 $('stress').onclick=()=>task(async()=>{
  const rows=Array.from({length:100001},(_,i)=>({id:'SYN-'+String(i).padStart(6,'0'),text:'reactivo sintético de demostración codigo '+i}));
