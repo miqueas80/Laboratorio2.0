@@ -7,6 +7,9 @@ on:
       - ".github/workflows/edge-real-embedding.yml"
       - "scripts/smoke-edge-embeddings.mjs"
       - "next/embedding-worker.js"
+      - "next/offline-shell.js"
+      - "next/semantic-sw.js"
+      - "next/demo.js"
 permissions:
   contents: read
 jobs:
