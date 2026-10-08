@@ -51,8 +51,12 @@ try{
    const started=await voice.start();
    if(!started.active||started.recognizer!=='Vosk WASM')throw Error('Vosk real no inició');
    await new Promise(resolve=>setTimeout(resolve,2500));
+   // The recorded WAV may itself already have said "Nexus", arming the
+   // listener. Wake rejection without prior audio is covered by unit tests.
+   const recognizedEarlier=voice.armedUntil>Date.now();
    const ignored=await voice.feedTranscript('abrí inventario');
-   if(ignored.ignored!=='wake-required')throw Error('Wake word no exigida');
+   if(!recognizedEarlier&&ignored.ignored!=='wake-required')
+    throw Error('Orden no autenticada por palabra de activación');
    const executed=await voice.feedTranscript('Nexus, abrí inventario');
    if(executed.query!=='abri inventario')throw Error('La orden Vosk no llegó al agente local');
    return {engine:started.recognizer,realMicPipeline:true,wakeGate:true,
