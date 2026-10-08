@@ -10,7 +10,7 @@ export const EDGE_SHELL_FILES=Object.freeze([
  'embedding-client.js','embedding-worker.js','search-core.js','search-worker.js',
  'search-client.js','hnsw.js','document-source.js','document-fabric.js',
  'storage.js','dexie-adapter.js','virtual-list.js','benchmarks.js',
- 'chemical-engine.js','agent-dag.js','inspection-dag.js',
+ 'chemical-engine.js','chemical-worker.js','chemical-client.js','agent-dag.js','inspection-dag.js',
  'manual-webrtc.js','p2p-crypto.js','sync-controller.js','sync-core.js',
  'lens-preprocess-worker.js','voice-guard.js','telemetry.js','yjs-lab.js'
 ]);
