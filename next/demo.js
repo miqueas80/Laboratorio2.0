@@ -98,6 +98,7 @@ async function localEdgeAgent(){
 }
 function edgeVoice(){
  voiceBridge||=new EdgeVoiceCoordinator({
+  engine:(voiceFrame||=new VoiceFrameEngine()),
   agent:{turn:async prompt=>{
    const agent=await localEdgeAgent();
    return agent.turn(prompt);
