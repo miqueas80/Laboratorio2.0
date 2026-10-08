@@ -1,4 +1,5 @@
 import {EdgeSearchClient} from './search-client.js';
+import {createVirtualList} from './virtual-list.js';
 import {inspectMigration} from './storage.js';
 import {evaluateStorage} from './chemical-engine.js';
 const $=id=>document.getElementById(id);
