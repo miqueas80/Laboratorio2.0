@@ -1,6 +1,6 @@
-/* Optional experimental model-only Service Worker.
- * Scope must remain /next/. This cache is distinct from production SW.
- * A verified receipt is required before serving ANY model asset.
+/* Experimental /next/-only PWA and model cache. Independent of stable NEXUS SW.
+ * Models NEVER trigger a network fallback. The shell is network-first while
+ * online and cache-fallback in airplane mode, after explicit preparation.
  */
 'use strict';
 const CACHE='nexus-edge-semantic-model-v2';
@@ -13,17 +13,30 @@ self.addEventListener('fetch',event=>{
  const request=event.request;
  if(!['GET','HEAD'].includes(request.method))return;
  const url=new URL(request.url);
- if(url.origin!==ROOT.origin||!url.pathname.startsWith(PREFIX))return;
+ if(url.origin!==ROOT.origin||!url.pathname.startsWith(ROOT.pathname))return;
+ const canonical=new URL(url);canonical.search='';canonical.hash='';
  event.respondWith((async()=>{
   const cache=await caches.open(CACHE);
-  const receipt=await cache.match(RECEIPT);
-  if(!receipt?.ok)return new Response('Modelo no validado. Completá la instalación explícita.',{status:503});
-  const hit=await cache.match(url.href);
-  if(!hit)return new Response('Modelo no preparado. Usá el instalador explícito.',{status:503});
-  if(request.method==='HEAD')return new Response(null,{status:200,headers:{
-   'Content-Type':hit.headers.get('Content-Type')||'application/octet-stream',
-   'Content-Length':hit.headers.get('Content-Length')||''
+  const asHead=response=>new Response(null,{status:200,headers:{
+   'Content-Type':response.headers.get('Content-Type')||'application/octet-stream',
+   'Content-Length':response.headers.get('Content-Length')||''
   }});
-  return hit;
+  if(url.pathname.startsWith(PREFIX)){
+   const receipt=await cache.match(RECEIPT);
+   if(!receipt?.ok)return new Response('Modelo sin validar. Completá la instalación explícita.',{status:503});
+   const hit=await cache.match(canonical.href);
+   if(!hit)return new Response('Modelo no preparado. Usá el instalador explícito.',{status:503});
+   return request.method==='HEAD'?asHead(hit):hit;
+  }
+  // Never cache automatically here: prep happens only through offline-shell.js.
+  try{
+   const live=await fetch(request);
+   if(live.ok)return live;
+   const cached=await cache.match(canonical.href);
+   return cached?(request.method==='HEAD'?asHead(cached):cached):live;
+  }catch{
+   const cached=await cache.match(canonical.href);
+   return cached?(request.method==='HEAD'?asHead(cached):cached):new Response('Recurso Edge no preparado para modo avión.',{status:503});
+  }
  })());
 });
