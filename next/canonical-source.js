@@ -36,7 +36,9 @@ export function validateCanonicalSnapshot(snapshot){
  }
  const searchable=documents.filter(x=>x.text.trim().length>32).length;
  return {available:true,documents,total:6,limited:false,
-  searchable,unreadable:6-searchable,source:'six-canonical-docs-isolated-preview',
+  searchable,unreadable:6-searchable,
+  fullTextCoverage:documents.every(x=>x.text.trim().length>32&&x.extractionStatus!=='ocr-partial'),
+  source:'six-canonical-docs-isolated-preview',
   note:searchable===6?'Seis documentos extraídos, verificar cobertura de páginas.':
   'Una o más fuentes contienen poco o ningún texto; podrían requerir OCR dirigido.'};
 }
