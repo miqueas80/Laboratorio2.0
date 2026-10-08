@@ -1,0 +1,26 @@
+name: NEXUS Edge Yjs collaboration
+on:
+  workflow_dispatch:
+  push:
+    branches: [feature/nexus-x-edge-architecture-v1]
+    paths:
+      - ".github/workflows/edge-yjs.yml"
+      - "next/yjs-lab.js"
+      - "scripts/test-edge-yjs.mjs"
+permissions:
+  contents: read
+jobs:
+  yjs-offline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Install fixed Yjs release for separate experimental validation
+        run: npm install --no-save --ignore-scripts --no-audit --no-fund yjs@13.6.32
+      - name: Test concurrent field edits, offline convergence and persisted Yjs snapshots
+        run: node --test scripts/test-edge-yjs.mjs
