@@ -67,21 +67,21 @@ export class EdgeLens {
  constructor({engine=globalThis.NexusOffline,inventory=[],decode=decodeExactQr}={}){
   this.engine=engine;this.inventory=inventory;this.decode=decode;
  }
- async prepare({onProgress=()=>{}}={}){
+ async prepare({onProgress=()=>{},forceWasm=false}={}){
   if(!this.engine?.prepareVision||!this.engine?.prepare)
    throw Error('NEXUS Lens local no preparado. Se requiere offline/core.js.');
   const ready=await this.engine.cacheStatus('vision');
   if(!ready.ready)await this.engine.prepare('vision',onProgress);
-  return this.engine.prepareVision({forceWasm:false});
+  return this.engine.prepareVision({forceWasm});
  }
- async analyze(source,{skipQR=false}={}){
+ async analyze(source,{skipQR=false,forceWasm=false}={}){
   if(!this.engine?.analyze)throw Error('Motor visual NEXUS local ausente');
   const canvas=captureLensCanvas(source);
   try{
    const code=skipQR?null:await this.decode(canvas);
    if(code&&this.inventory.some(r=>r.id===code))
     return lensDecision({code,inventory:this.inventory});
-   const vision=await this.engine.analyze(canvas);
+   const vision=await this.engine.analyze(canvas,{forceWasm});
    return lensDecision({code,inventory:this.inventory,vision});
   }finally{canvas.width=canvas.height=1}
  }
