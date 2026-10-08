@@ -34,8 +34,14 @@ function makePeer(){
 const virtual=createVirtualList($('virtual'),{rowHeight:44,renderRow:(row)=>{const el=document.createElement('div');el.className='virtual-row';el.textContent=row.id+' · '+row.text;return el}});
 async function getRecords(){
  if(records)return records;
- const res=await fetch('../inventory.json',{cache:'no-store'});
- if(!res.ok)throw Error('No se pudo cargar inventario canónico: HTTP '+res.status);
+ let res;
+ try{
+  res=await fetch('../inventory.json',{cache:'no-store'});
+  if(!res.ok)throw Error('Inventario original HTTP '+res.status);
+ }catch{
+  res=await fetch('./snapshot/inventory.json');
+  if(!res.ok)throw Error('Inventario fuera de línea no preparado: HTTP '+res.status);
+ }
  const parsed=await res.json();
  if(!Array.isArray(parsed.records))throw Error('Inventario inválido');
  records=parsed.records;return records;
@@ -65,11 +71,11 @@ $('measureFPS').onclick=()=>task(async()=>{
 $('integrity').onclick=()=>task(async()=>output('checks',inspectMigration(await getRecords())),'checks');
 $('safety').onclick=()=>task(async()=>output('checks',evaluateStorage(await getRecords())),'checks');
 $('fabricStatus').onclick=()=>task(async()=>output('fabricResults',{
- model:await semanticCacheStatus(),shell:await offlineShellStatus()
+ model:await semanticCacheStatus(),shell:await offlineShellStatus({includeInventory:true})
 }),'fabricResults');
 $('offlineShell').onclick=()=>task(async()=>{
  if(!confirm('¿Autorizar la preparación offline de Edge Lab? Se guardarán la interfaz y los motores locales, aproximadamente 23 MB adicionales, en el navegador.'))return;
- const result=await prepareOfflineShell({onProgress:p=>output('fabricResults',p)});
+ const result=await prepareOfflineShell({includeInventory:true,onProgress:p=>output('fabricResults',p)});
  if(!navigator.serviceWorker)throw Error('Service Worker no disponible');
  await navigator.serviceWorker.register('./semantic-sw.js',{scope:'./'});
  await navigator.serviceWorker.ready;
@@ -87,7 +93,7 @@ $('fabricInstall').onclick=()=>task(async()=>{
  if(!registration.active)throw Error('Activá el Service Worker del laboratorio Edge y reintentá');
  output('fabricResults','Descargando y verificando archivos…');
  const result=await prepareSemanticAssets({onProgress:p=>output('fabricResults',p)});
- const shell=await prepareOfflineShell({onProgress:p=>output('fabricResults',{preparando:'interfaz offline',...p})});
+ const shell=await prepareOfflineShell({includeInventory:true,onProgress:p=>output('fabricResults',{preparando:'interfaz offline',...p})});
  output('fabricResults',{...result,shell,note:'Modelo y runtime local preparados. Recargá esta pestaña y probá el modo avión antes de usarlo.'});
 },'fabricResults');
 $('fabricLoad').onclick=()=>task(async()=>{
