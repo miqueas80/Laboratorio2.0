@@ -39,6 +39,11 @@ jobs:
           mkdir -p dist/nexus-edge/next
           cp -a next/. dist/nexus-edge/next/
           cp inventory.json dist/nexus-edge/inventory.json
+          # Reuse the verified production local engines in the ISOLATED preview.
+          # No CDN, but the mobile assets add roughly 120 MiB uncompressed.
+          mkdir -p dist/nexus-edge/offline
+          cp -a offline/. dist/nexus-edge/offline/
+          cp jsQR.js LICENSE-jsqr.txt dist/nexus-edge/
           cat > dist/nexus-edge/index.html <<'HTML'
           <!doctype html>
           <html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="refresh" content="0;url=next/demo.html"><title>NEXUS Edge · Pruebas</title></head>
