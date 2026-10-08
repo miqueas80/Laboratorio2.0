@@ -18,6 +18,24 @@
 <button id="agentAsk">Ejecutar consulta local</button>
 <pre id="agentOutput" aria-live="polite">NEXUS IA Edge lista para consultas locales.</pre>
 </section>
+<section id="edgeSensors">
+<h2>NEXUS Lens · reconocimiento local y voz Vosk</h2>
+<p>Usa los motores offline que ya existen en NEXUS: MobileCLIP-S0 con 49 categorías y Vosk español. Se preparan solamente cuando lo solicitás y nunca suben imágenes o voz a Internet.</p>
+<row></row>
+<button id="lensPrepare">Preparar visión local</button>
+<button id="voicePrepare">Preparar voz Vosk</button>
+<button id="voiceStart">Activar escucha «Nexus»</button>
+<button id="voiceStop">Detener escucha</button>
+<p><strong>Visión sin QR:</strong> indicá una imagen o iniciá la cámara. Una categoría visual NO confirma sustancias.</p>
+<label>Foto de material (archivo local) <input id="lensFile" type="file" accept="image/*" capture="environment"></label>
+<video id="edgeLensVideo" playsinline muted autoplay style="max-width:100%;width:340px;max-height:230px;background:#111"></video>
+<button id="edgeCameraStart">Activar cámara</button>
+<button id="edgeCameraStop">Detener cámara</button>
+<button id="edgeLensAnalyze">Analizar objeto sin QR</button>
+<button id="edgeLensAnalyzeQr">Analizar y comprobar QR</button>
+<pre id="edgeLensResult" aria-live="polite">Lens sin iniciar. Prepará el modelo cuando estés conectado.</pre>
+<pre id="edgeVoiceStatus" aria-live="polite">Vosk sin iniciar. Activá la escucha por decisión propia.</pre>
+</section>
 <section id="inventorySection">
 <h2>Búsqueda local BM25 · Web Worker</h2>
 <button id="load">Cargar índice con inventario canónico</button>
