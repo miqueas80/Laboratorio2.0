@@ -63,6 +63,34 @@ export function captureLensCanvas(source,{maxSide=960,documentObject=globalThis.
  context.drawImage(source,0,0,w,h,0,0,canvas.width,canvas.height);
  return canvas;
 }
+/**
+ * The operator selects a rectangle of the captured image to read.
+ * This prevents PP-OCR from automatically scanning a complete frame.
+ * Text is recorded as observation only, never as verified chemical identity.
+ */
+export async function readLabelRegion(canvas,engine,{x=.15,y=.2,width=.7,height=.6}={}){
+ if(!engine?.recognizeText)throw Error('OCR local PP-OCRv6 no disponible');
+ const coords=[x,y,width,height];
+ if(coords.some(n=>!Number.isFinite(n))||x<0||y<0||width<=0||height<=0||
+    x+width>1.000001||y+height>1.000001)throw Error('Región OCR fuera de la captura');
+ const region=canvas.ownerDocument.createElement('canvas');
+ region.width=Math.max(1,Math.round(canvas.width*width));
+ region.height=Math.max(1,Math.round(canvas.height*height));
+ try{
+  const ctx=region.getContext('2d',{willReadFrequently:true});
+  if(!ctx)throw Error('Canvas OCR no disponible');
+  ctx.drawImage(canvas,Math.round(canvas.width*x),Math.round(canvas.height*y),
+   region.width,region.height,0,0,region.width,region.height);
+  const result=await engine.recognizeText(region);
+  const lines=(Array.isArray(result?.lines)?result.lines:[]).slice(0,12).map(line=>({
+   text:String(line.text||'').slice(0,120),
+   confidence:Number.isFinite(line.confidence)?Number(line.confidence.toFixed(3)):null
+  }));
+  return {source:'pp-ocrv6-tiny-local',region:{x,y,width,height},
+   lines,verifiedChemicalIdentity:false,
+   limitation:'Solo texto observado en la región indicada. No demuestra sustancia ni concentración.'};
+ }finally{region.width=region.height=1}
+}
 export class EdgeLens {
  constructor({engine=globalThis.NexusOffline,inventory=[],decode=decodeExactQr,documentObject=globalThis.document}={}){
   this.engine=engine;this.inventory=inventory;this.decode=decode;this.documentObject=documentObject;
@@ -74,7 +102,7 @@ export class EdgeLens {
   if(!ready.ready)await this.engine.prepare('vision',onProgress);
   return this.engine.prepareVision({forceWasm});
  }
- async analyze(source,{skipQR=false,forceWasm=false}={}){
+ async analyze(source,{skipQR=false,forceWasm=false,readLabel=false,labelRegion}={}){
   if(!this.engine?.analyze)throw Error('Motor visual NEXUS local ausente');
   const canvas=captureLensCanvas(source,{documentObject:this.documentObject});
   try{
@@ -82,7 +110,13 @@ export class EdgeLens {
    if(code&&this.inventory.some(r=>r.id===code))
     return lensDecision({code,inventory:this.inventory});
    const vision=await this.engine.analyze(canvas,{forceWasm});
-   return lensDecision({code,inventory:this.inventory,vision});
+   const result=lensDecision({code,inventory:this.inventory,vision});
+   if(readLabel){
+    try{result.textObservation=await readLabelRegion(canvas,this.engine,labelRegion)}
+    catch(error){result.textObservation={source:'pp-ocrv6-tiny-local',error:String(error.message||error),
+     verifiedChemicalIdentity:false}}
+   }
+   return result;
   }finally{canvas.width=canvas.height=1}
  }
  close(){this.engine?.releaseVision?.()}
