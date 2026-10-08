@@ -7,8 +7,8 @@ function engine(h,{native=false,cached=true}={}){
  h.window.navigator.mediaDevices={getUserMedia:async()=>({getTracks:()=>[{stop(){}}]})};
  return {get callbacks(){return callbacks},get starts(){return starts},get stops(){return stops}};
 }
-test('voz: estados nativo, WASM preparado y modelo ausente sin recurrir a servicio de red',async()=>{
- const h=harness();try{engine(h,{native:true});assert.equal(await h.api.refreshLocalVoiceStatus(),'available');engine(h);assert.equal(await h.api.refreshLocalVoiceStatus(),'wasm-ready');engine(h,{cached:false});assert.equal(await h.api.refreshLocalVoiceStatus(),'unavailable');assert.match(h.document.querySelector('#localVoiceStatus').textContent,/Modelo no disponible/);assert.equal(h.calls.length,0);}finally{h.close();}
+test('voz: Vosk WASM es único motor aun si existe otro ASR local, y detecta modelo ausente',async()=>{
+ const h=harness();try{engine(h,{native:true});assert.equal(await h.api.refreshLocalVoiceStatus(),'wasm-ready');engine(h);assert.equal(await h.api.refreshLocalVoiceStatus(),'wasm-ready');engine(h,{cached:false});assert.equal(await h.api.refreshLocalVoiceStatus(),'unavailable');assert.match(h.document.querySelector('#localVoiceStatus').textContent,/Modelo Vosk no preparado/);assert.equal(h.calls.length,0);}finally{h.close();}
 });
 test('voz: wake word, transcript, agente, inventario, búsqueda, documentos, Lens y parada offline',async()=>{
  const h=harness({stored:master.records,online:false});try{

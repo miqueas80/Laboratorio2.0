@@ -64,7 +64,7 @@ test('1010 HTML y formato sanitizado del Worker detienen fallback',async()=>{
 test('voz convierte errores técnicos en un aviso corto, conserva resultado local y descarta eco final',async()=>{
  const h=harness({stored:master.records,online:false});let callbacks,last,count=0;
  try{await h.api.loadMaster();h.window.NexusOffline={diagnostics:{voice:{}},nativeVoice:async()=>null,cacheStatus:async()=>({ready:true}),createVoice:o=>{callbacks=o;return {start:async()=>{},stop(){}}}};h.window.navigator.mediaDevices={getUserMedia:async()=>({getTracks:()=>[{stop(){}}]})};
-  h.window.SpeechSynthesisUtterance=class{constructor(text){this.text=text}};h.window.speechSynthesis={getVoices:()=>[],cancel(){},speak:u=>{last=u;count++}};
+  h.window.SpeechSynthesisUtterance=class{constructor(text){this.text=text}};h.window.speechSynthesis={getVoices:()=>[{name:'ES local',lang:'es-AR',localService:true}],cancel(){},speak:u=>{last=u;count++}};
   await h.api.startVoiceRecognition();const spoken=h.api.speechTextForTTS('LOCAL · Abrí inventario.\n\nEXTERNA NO DISPONIBLE · HTTP 401 User not found. Ray ID abc');assert.match(spoken,/Abrí inventario/);assert.doesNotMatch(spoken,/HTTP|401|User not found|Ray ID/);
   h.api.speakText(spoken);last.onend();await callbacks.onTranscript(last.text);await callbacks.onTranscript(last.text);assert.equal(count,1);
   await callbacks.onTranscript('Nexus abrí inventario');assert.equal(h.api.state.view,'inventory');assert.equal(count,2);
