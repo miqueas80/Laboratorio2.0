@@ -10,6 +10,7 @@ function normalized(v,dimensions){
   if(!v||v.length!==dimensions)throw Error('Dimensión vectorial incompatible');
   let n=0;for(const value of v){if(!Number.isFinite(value))throw Error('Embedding inválido');n+=value*value;}
   n=Math.sqrt(n);if(n<1e-8)throw Error('Vector nulo');
+  if(v instanceof Float32Array&&Math.abs(n-1)<1e-5)return v;
   return Float32Array.from(v,x=>x/n);
 }
 function levelFor(id,m){
