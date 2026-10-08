@@ -45,7 +45,7 @@ jobs:
           # No CDN, but the mobile assets add roughly 120 MiB uncompressed.
           mkdir -p dist/nexus-edge/offline
           cp -a offline/. dist/nexus-edge/offline/
-          cp jsQR.js LICENSE-jsqr.txt dist/nexus-edge/
+          cp jsQR.js LICENSE-jsqr.txt icon-192.png icon-512.png dist/nexus-edge/
           mkdir -p dist/nexus-edge/docs
           cp docs/EDGE_RELEASE_GATES.md dist/nexus-edge/docs/EDGE_RELEASE_GATES.md
           cat > dist/nexus-edge/index.html <<'HTML'
