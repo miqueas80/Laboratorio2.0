@@ -58,6 +58,21 @@ async function build(rows){
  virtual.setRows(rows);
  output('results',{...info,ms:Math.round(performance.now()-started),note:'Tiempo solo orientativo: no es una prueba de 60 FPS ni de memoria RAM.'});
 }
+$('agentAsk').onclick=()=>task(async()=>{
+ if(!edgeAgent)edgeAgent=new NexusEdgeAgent({inventory:await getRecords(),fabric:documentFabric});
+ else edgeAgent.fabric=documentFabric;
+ const text=$('agentText').value.trim();
+ const out=await edgeAgent.turn(text);
+ output('agentOutput',out);
+ if(out.viewRequest==='inventory'){
+  await build(makeRows(await getRecords()));
+  $('inventorySection').scrollIntoView({behavior:'smooth'});
+ }else if(out.viewRequest==='documents'){
+  $('documentsSection').scrollIntoView({behavior:'smooth'});
+  $('fabricQuery').focus();
+ }
+},'agentOutput');
+$('agentText').addEventListener('keydown',event=>{if(event.key==='Enter')$('agentAsk').click()});
 $('load').onclick=()=>task(async()=>build(makeRows(await getRecords())),'results');
 $('stress').onclick=()=>task(async()=>{
  const rows=Array.from({length:100001},(_,i)=>({id:'SYN-'+String(i).padStart(6,'0'),text:'reactivo sintético de demostración codigo '+i}));
