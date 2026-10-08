@@ -2,6 +2,7 @@ import {EdgeSearchClient} from './search-client.js';
 import {NexusEdgeAgent} from './agent-runtime.js';
 import {EdgeLens} from './lens-edge.js';
 import {EdgeVoiceCoordinator} from './voice-edge.js';
+import {VoiceFrameEngine} from './voice-frame-client.js';
 import {createVirtualList} from './virtual-list.js';
 import {inspectMigration} from './storage.js';
 import {ChemicalSafetyClient} from './chemical-client.js';
