@@ -1,0 +1,30 @@
+name: NEXUS Edge 100k browser acceptance
+on:
+  workflow_dispatch:
+  push:
+    branches: [feature/nexus-x-edge-architecture-v1]
+    paths:
+      - ".github/workflows/edge-100k-browser.yml"
+      - "scripts/smoke-edge-100k-browser.mjs"
+      - "next/search-core.js"
+      - "next/search-worker.js"
+      - "next/virtual-list.js"
+      - "next/agent-runtime.js"
+permissions:
+  contents: read
+jobs:
+  check-real-browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npm install --no-save --ignore-scripts --no-audit --no-fund playwright-core@1.56.1
+      - name: Real 100001-record virtual scrolling and Spanish DAG command in Chromium
+        run: |
+          command -v google-chrome
+          node scripts/smoke-edge-100k-browser.mjs
