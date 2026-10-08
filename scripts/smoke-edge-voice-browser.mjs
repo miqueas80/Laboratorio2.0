@@ -57,7 +57,7 @@ try{
    if(executed.query!=='abri inventario')throw Error('La orden Vosk no llegó al agente local');
    return {engine:started.recognizer,realMicPipeline:true,wakeGate:true,
     executedLocalCommand:executed.query,results:events.filter(x=>x.query).length};
-  }finally{voice.stop()}
+  }finally{voice.stop();adapter.close()}
  });
  console.log(JSON.stringify({...outcome,elapsedMs:Math.round(performance.now()-started),
   externalRequestsBlocked:true,environment:'Chromium fake WAV microphone / real Vosk engine, not Android'},null,2));
