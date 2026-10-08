@@ -54,4 +54,41 @@ $('stress').onclick=()=>task(async()=>{
 $('search').onclick=()=>task(async()=>{if(!client)throw Error('Primero prepará un índice');output('results',await client.query($('query').value,{limit:10}))},'results');
 $('integrity').onclick=()=>task(async()=>output('checks',inspectMigration(await getRecords())),'checks');
 $('safety').onclick=()=>task(async()=>output('checks',evaluateStorage(await getRecords())),'checks');
+$('inspect').onclick=()=>task(async()=>{
+ const db=await experimentalDB(),out=await inspectAndSchedule({
+  db,inventory:await getRecords(),observation:{code:$('inspectCode').value.trim()},
+  approved:$('approveTask').checked
+ });
+ output('agentResult',out);
+},'agentResult');
+$('offer').onclick=()=>task(async()=>{
+ await experimentalDB();const p=makePeer();
+ $('outgoing').value=await p.createInvite();output('pairStatus',{state:'Esperando respuesta del equipo B'});
+ replica.transport=p;
+},'pairStatus');
+$('answer').onclick=()=>task(async()=>{
+ await experimentalDB();const p=makePeer();
+ $('outgoing').value=await p.acceptInvite($('received').value);
+ replica.transport=p;output('pairStatus',{state:'Comprobá código en equipo A y B',code:p.getPairCode()});
+},'pairStatus');
+$('finish').onclick=()=>task(async()=>{
+ if(!peer)throw Error('Primero creá una oferta');
+ await peer.acceptAnswer($('received').value);
+ output('pairStatus',{state:'Comprobá código en equipo A y B',code:peer.getPairCode()});
+},'pairStatus');
+$('confirmPair').onclick=()=>task(async()=>{
+ if(!peer)throw Error('No hay sesión');
+ peer.confirmSameCode($('pairConfirm').value.trim());
+ output('pairStatus',{state:'Código confirmado: habilitá intercambio cuando WebRTC conecte',code:peer.getPairCode()});
+},'pairStatus');
+$('addTask').onclick=()=>task(async()=>{
+ await experimentalDB();const text=$('taskText').value.trim();
+ if(!text)throw Error('Tarea vacía');
+ const id='task-'+crypto.randomUUID().replaceAll('-','').slice(0,18);
+ const event=await replica.mutate('calendar',id,{id,text,date:new Date().toISOString().slice(0,10)},{broadcast:Boolean(peer?.confirmed)});
+ output('syncResult',{created:event.key,localExperimentalEvents:(await readEdgeStore(edgeDB,'calendar')).length});
+},'syncResult');
+$('syncNow').onclick=()=>task(async()=>{
+ await experimentalDB();output('syncResult',await replica.sendSnapshot());
+},'syncResult');
 window.addEventListener('pagehide',()=>client?.close(),{once:true});
