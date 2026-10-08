@@ -52,10 +52,13 @@ try{
     throw Error('No se ejecutó MobileCLIP local en WASM: '+JSON.stringify(result));
    if(JSON.stringify(result).includes('image_embeds')||JSON.stringify(result).includes('data:image'))
     throw Error('El resultado visual filtró datos privados de imagen');
+   if(ready.ocr?.runtime!=='PP-OCRv6 Tiny'||ready.ocr?.backend!=='WASM')
+    throw Error('OCR local no está listo: '+JSON.stringify(ready.ocr));
    return {backend:result.backend,model:result.model,
     actualInference:true,category:result.visualClass?.label||'rechazada/no comprobada',
     accepted:result.status==='visual-class',identityConfirmed:false,
-    source:result.source,visionFiles:visionFiles.length,ocrReady:Boolean(ready.ocr?.ready)};
+    source:result.source,visionFiles:visionFiles.length,
+    ocrReady:true,ocrBackend:ready.ocr.backend,dictionarySize:ready.ocr.dictionarySize};
   }finally{lens.close()}
  });
  console.log(JSON.stringify({...info,elapsedMs:Math.round(performance.now()-start),
