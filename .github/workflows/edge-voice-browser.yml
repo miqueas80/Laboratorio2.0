@@ -9,6 +9,10 @@ on:
       - "next/voice-edge.js"
       - "next/demo.html"
       - "next/demo.css"
+      - "next/voice-frame.html"
+      - "next/voice-frame.js"
+      - "next/voice-frame-client.js"
+      - "next/demo.js"
       - "offline/core.js"
 permissions:
   contents: read
