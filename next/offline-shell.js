@@ -4,7 +4,7 @@
  * The three locally-vendored ONNX runtime binaries are pinned by SHA-256.
  */
 import {MODEL_CACHE} from './model-provisioner.js';
-import {validateCanonicalSnapshot} from './canonical-source.js';
+import {validateCanonicalSnapshot,CANONICAL_DOCS} from './canonical-source.js';
 export const EDGE_SHELL_FILES=Object.freeze([
  'demo.html','demo.js','demo.css','manifest.webmanifest','semantic-sw.js',
  '../icon-192.png','../icon-512.png',
@@ -87,9 +87,28 @@ export async function prepareOfflineShell({
   let parsed;
   try{parsed=JSON.parse(new TextDecoder().decode(buffer))}
   catch{throw Error('Snapshot documental inválido')}
-  validateCanonicalSnapshot(parsed);
+  const source=validateCanonicalSnapshot(parsed);
   await cache.put(url.href,new Response(buffer,{headers:{'Content-Type':'application/json'}}));
-  onProgress({done:++done,total:assets.length+(includeInventory?2:1),file:'snapshot/canonical-documents.json'});
+  onProgress({done:++done,total:assets.length+(includeInventory?1:0)+7,file:'snapshot/canonical-documents.json'});
+  // Preserve downloadable original files, verified against the snapshot's
+  // SHA-256 and exact length, without modifying or indexing their binaries.
+  const meta=new Map(parsed.documents.map(d=>[d.path,d]));
+  for(const document of source.documents){
+   if(signal?.aborted)throw Error('Preparación documental cancelada');
+   const file=meta.get(document.path),location=new URL('../'+document.path,root);
+   const response=await fetcher(location.href,{cache:'reload',signal});
+   if(!response?.ok||response.type==='opaque')throw Error('Documento original no disponible: '+document.name);
+   const bytes=await response.arrayBuffer();
+   if(bytes.byteLength!==file.originalBytes||bytes.byteLength>16*1024*1024)
+    throw Error('Tamaño del documento original inesperado: '+document.name);
+   const digest=hex(await cryptoObject.subtle.digest('SHA-256',bytes));
+   if(digest!==file.sha256)throw Error('SHA-256 documental no coincide: '+document.name);
+   const mime=document.type==='pdf'?'application/pdf':document.type==='docx'?
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document':
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+   await cache.put(location.href,new Response(bytes,{headers:{'Content-Type':mime}}));
+   onProgress({done:++done,total:assets.length+(includeInventory?1:0)+7,file:document.name});
+  }
  }
  return {ready:true,cached:done,hasRuntime:includeVendor,hasInventory:includeInventory,
   hasYjs:includeYjs,hasDocuments:includeDocuments};
@@ -97,7 +116,8 @@ export async function prepareOfflineShell({
 export async function offlineShellStatus({scope=new URL('./',import.meta.url),cacheStorage=globalThis.caches,includeVendor=true,includeInventory=false,includeYjs=false,includeDocuments=false}={}){
  if(!cacheStorage)return {ready:false,cached:0};
  const root=new URL(scope,import.meta.url),cache=await cacheStorage.open(MODEL_CACHE);
- const files=[...EDGE_SHELL_FILES,...(includeVendor?EDGE_VENDOR_FILES.map(x=>x.path):[]),...(includeYjs?[EDGE_YJS_VENDOR.path]:[]),...(includeDocuments?['snapshot/canonical-documents.json']:[])];
+ const files=[...EDGE_SHELL_FILES,...(includeVendor?EDGE_VENDOR_FILES.map(x=>x.path):[]),...(includeYjs?[EDGE_YJS_VENDOR.path]:[]),...(includeDocuments?['snapshot/canonical-documents.json',
+  ...CANONICAL_DOCS.map(d=>'../'+d.path)]:[])];
  let present=0;
  for(const name of files)if(await cache.match(new URL(name,root).href))present++;
   const inventoryCached=Boolean(await cache.match(new URL('snapshot/inventory.json',root).href));
