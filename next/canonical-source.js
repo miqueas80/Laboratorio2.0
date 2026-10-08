@@ -29,6 +29,8 @@ export function validateCanonicalSnapshot(snapshot){
   documents.push({
    path:ref.path,name:ref.path.split('/').at(-1),type:ref.path.split('.').at(-1),
    text:doc.text,extractionStatus:doc.extractionStatus,
+   pdfPages:Number.isInteger(doc.pdfPages)?doc.pdfPages:null,
+   ocrPages:Number.isInteger(doc.ocrPages)?doc.ocrPages:null,
    sourceKind:'git-verified-read-only'
   });
  }
