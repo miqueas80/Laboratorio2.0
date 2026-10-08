@@ -8,7 +8,7 @@ export const EDGE_SHELL_FILES=Object.freeze([
  'demo.html','demo.js','demo.css','manifest.webmanifest','semantic-sw.js',
  '../icon-192.png','../icon-512.png',
  '../offline/assets.js','../offline/core.js','../offline/edge-sw.js','../jsQR.js',
- 'offline-shell.js','acceptance.js','device-acceptance.js','model-provisioner.js','semantic-fabric.js','fabric-client.js','agent-runtime.js',
+ 'offline-shell.js','acceptance.js','device-acceptance.js','canonical-source.js','model-provisioner.js','semantic-fabric.js','fabric-client.js','agent-runtime.js',
  'embedding-client.js','embedding-worker.js','search-core.js','search-worker.js',
  'search-client.js','hnsw.js','document-source.js','document-fabric.js',
  'storage.js','dexie-adapter.js','virtual-list.js','benchmarks.js',
