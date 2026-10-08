@@ -226,6 +226,24 @@ $('fabricInstall').onclick=()=>task(async()=>{
 $('fabricLoad').onclick=()=>task(async()=>{
  const source=await readEdgeAvailableDocuments();
  if(!source.available||!source.documents.length)throw Error(source.reason||'Primero indexá los documentos en NEXUS estable');
+ const links=$('canonicalDocumentLinks');links.replaceChildren();
+ if(source.source==='six-canonical-docs-isolated-preview'){
+  const heading=document.createElement('p');
+  heading.textContent='Archivos originales canónicos: prepará los documentos para modo avión y descargalos con SHA-256 verificado.';
+  links.append(heading);
+  for(const doc of source.documents){
+   const button=document.createElement('button');button.type='button';
+   button.textContent='Descargar '+doc.name+' (caché offline)';
+   button.addEventListener('click',()=>task(async()=>{
+    const original=await readCachedOriginalDocument(doc.path);
+    const url=URL.createObjectURL(original.blob),a=document.createElement('a');
+    a.href=url;a.download=original.name;document.body.append(a);a.click();a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url),2000);
+    output('fabricResults',{document:original.name,verifiedSha256:original.sha256,source:'offline'});
+   },'fabricResults'));
+   links.append(button);
+  }
+ }
  documentFabric?.close();documentFabric=new SemanticEvidenceFabric();
  const result=await documentFabric.prepare(source.documents,{semantic:$('semanticMode').checked,
   onProgress:progress=>output('fabricResults',{state:'Generando embeddings locales',...progress})});
