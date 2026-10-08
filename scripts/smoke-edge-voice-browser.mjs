@@ -63,6 +63,40 @@ try{
     executedLocalCommand:executed.query,results:events.filter(x=>x.query).length};
   }finally{voice.stop();adapter.close()}
  });
+ const cache=await page.evaluate(async()=>{
+  const {prepareOfflineShell}=await import('./offline-shell.js');
+  await prepareOfflineShell({includeVendor:false,includeInventory:true});
+  const appSW=await navigator.serviceWorker.register('./semantic-sw.js',{scope:'./'});
+  const voiceSW=await navigator.serviceWorker.register('../offline/edge-sw.js',{scope:'../offline/'});
+  await navigator.serviceWorker.ready;
+  for(let i=0;i<150&&(!appSW.active||!voiceSW.active||!navigator.serviceWorker.controller);i++)
+   await new Promise(resolve=>setTimeout(resolve,100));
+  if(!appSW.active||!voiceSW.active||!navigator.serviceWorker.controller)
+   throw Error('Workers de voz/offline no activaron');
+  return {appSW:true,voiceSW:true};
+ });
+ await page.context().setOffline(true);
+ await page.reload({waitUntil:'domcontentloaded'});
+ const offline=await page.evaluate(async()=>{
+  const {EdgeVoiceCoordinator}=await import('./voice-edge.js');
+  const {VoiceFrameEngine}=await import('./voice-frame-client.js');
+  const adapter=new VoiceFrameEngine();
+  const controller=new EdgeVoiceCoordinator({
+   engine:adapter,agent:{turn:async cmd=>({ok:true,reply:'Resultado local',cmd})},
+   speechSynthesis:null,Utterance:null
+  });
+  try{
+   const ready=await adapter.cacheStatus('voice');
+   if(!ready.ready)throw Error('El modelo Vosk no persistió en caché offline');
+   const started=await controller.start();
+   if(!started.active)throw Error('Vosk no arrancó tras recargar sin Internet');
+   const command=await controller.feedTranscript('Nexus abrí inventario');
+   if(command.cmd!=='abri inventario')throw Error('No ejecutó comando offline tras reinicio');
+   return {success:true,modelCached:true,navigatorOnline:navigator.onLine,
+    controller:!!navigator.serviceWorker.controller,recognizer:started.recognizer};
+  }finally{controller.stop();adapter.close()}
+ });
  console.log(JSON.stringify({...outcome,elapsedMs:Math.round(performance.now()-started),
-  externalRequestsBlocked:true,environment:'Chromium fake WAV microphone / real Vosk engine, not Android'},null,2));
+  cache,browserOffline:offline,externalRequestsBlocked:true,
+  environment:'Chromium fake WAV microphone / real Vosk engine, not Android'},null,2));
 }finally{await browser?.close().catch(()=>{});server.kill('SIGTERM')}
