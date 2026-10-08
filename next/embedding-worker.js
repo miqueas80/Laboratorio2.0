@@ -39,7 +39,13 @@ async function prepare(){
   env.allowRemoteModels=false;env.allowLocalModels=true;env.localModelPath=modelBase;
   env.useBrowserCache=false;env.useFS=false;
   env.backends.onnx.wasm.wasmPaths=wasmBase;
-  const target=self.navigator?.gpu?'webgpu':'wasm';
+  // navigator.gpu may exist in Chrome even when no usable adapter is present.
+  // Request an adapter before selecting WebGPU to avoid poisoning ORT fallback.
+  let target='wasm';
+  if(self.navigator?.gpu?.requestAdapter){
+   try{const adapter=await self.navigator.gpu.requestAdapter({powerPreference:'low-power'});if(adapter)target='webgpu'}
+   catch{target='wasm'}
+  }
   try{
    extractor=await pipeline('feature-extraction',MODEL,{dtype:'q8',device:target});
    backend=target;
