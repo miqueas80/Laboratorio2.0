@@ -5,7 +5,7 @@
  */
 import {MODEL_CACHE} from './model-provisioner.js';
 export const EDGE_SHELL_FILES=Object.freeze([
- 'demo.html','demo.js','demo.css',
+ 'demo.html','demo.js','demo.css','semantic-sw.js',
  'offline-shell.js','model-provisioner.js','semantic-fabric.js','fabric-client.js',
  'embedding-client.js','embedding-worker.js','search-core.js','search-worker.js',
  'search-client.js','hnsw.js','document-source.js','document-fabric.js',
