@@ -8,7 +8,7 @@ const CACHE=PREFIX+VERSION;
 const CORE=['./','./index.html','./app.js','./manifest.webmanifest','./icon.svg',
  './icon-192.png','./icon-512.png','./inventory.json','./catalogo_maestro.json','./documents-manifest.json','./document-worker.js',
  './jszip.min.js','./xlsx.full.min.js','./jsQR.js',
- './pdf.mjs','./pdf.worker.mjs','./offline/assets.js','./offline/core.js',
+ './pdf.mjs','./pdf.worker.mjs','./offline/assets.js','./offline/core.js','./offline/knowledge.js',
  './offline/vision-worker.js','./offline/ocr-worker.js','./offline/audio-worklet.js'];
 const URLS=new Set(CORE.map(path=>new URL(path,SCOPE).href));
 // Large engines are explicitly prepared, independently of the atomic application shell.
