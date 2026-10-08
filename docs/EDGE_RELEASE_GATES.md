@@ -20,8 +20,8 @@ químico certificado ni garantiza 60 FPS en todos los teléfonos.
 | WebRTC cifrado | ECDH, AES-GCM, dos bases IndexedDB y reproducción del estado | https://github.com/miqueas80/Laboratorio2.0/actions/runs/37839498129 | Chromium loopback OK |
 | Yjs concurrente | Distintos campos editados offline, reconciliación, persistencia, WebRTC cifrado | https://github.com/miqueas80/Laboratorio2.0/actions/runs/37840196186 | Chromium loopback OK |
 | Seguridad química | CAS checksum, GHS y unas pocas incompatibilidades basadas en SDS declaradas como verificadas | Pruebas unitarias de PR #4 | **Solo asesoramiento; validación profesional pendiente** |
-| Lens visual sin QR | Preprocesamiento Worker; sin precisión validada para todos los objetos | — | **PENDIENTE** |
-| Voz ambiental | Vosk productivo y prototipo de barge-in por energía; wake-word KWS no entrenado | — | **PENDIENTE** |
+| Lens visual sin QR | Modelo MobileCLIP-S0 y OCR PP-OCRv6 Tiny cargaron en Chromium, inferencia visual y recarga sin red verificadas; precisión física no medida | https://github.com/miqueas80/Laboratorio2.0/actions/runs/37845072935 | **Motor verificado / precisión Android pendiente** |
+| Voz ambiental | Vosk WASM iniciado realmente en Chromium con WAV/micrófono virtual, wake de transcript y orden local; detector KWS entrenado y Android pendientes | https://github.com/miqueas80/Laboratorio2.0/actions/runs/37844591928 | **Motor verificado / wake neural y Android pendientes** |
 | Gateway xKiro | Servicio externo opcional; errores de terceros no equivalen a fallo local | — | **Pruebas actuales/secretos y resiliencia pendientes** |
 
 ## Pruebas obligatorias en dos teléfonos Android (PENDIENTES)
@@ -99,3 +99,45 @@ modificaciones accidentales de la versión estable.
 
 Los tests automáticos no reemplazan una inspección por responsables del
 laboratorio. Ningún estado químico se considera certificado por NEXUS.
+
+## Etapa Lens/Vosk Edge — 8 de octubre de 2026
+
+La rama experimental reutiliza los **motores locales YA EXISTENTES**
+de NEXUS-X: MobileCLIP-S0 (45,5 MB), 49 prototipos visuales entre
+categorías de laboratorio y clases negativas; PP-OCRv6 Tiny;
+Vosk WASM y su modelo español. **No se entrena ni reempaqueta un
+reconocedor ficticio**, y ningún resultado visual por sí solo confirma
+una sustancia, composición, concentración ni peligrosidad.
+
+- `next/lens-edge.js` ofrece cámara, archivos de imagen, QR exacto,
+  clasificación visual con dos vistas y observación PP-OCR recortada por
+  decisión del operador. Las hipótesis visuales siguen siendo hipótesis.
+- `next/voice-edge.js` añade órdenes mediante el Vosk local, activación
+  «Nexus», control de TTS y supresión de ecos. **No constituye un detector
+  neural de wake-word permanente validado con ruido real**.
+- El Vosk original necesita `new Function` internamente. Edge lo
+  ejecuta en `next/voice-frame.html`, una página dedicada con CSP menos
+  restrictiva, sin habilitar `unsafe-eval` en `next/demo.html`.
+  La página dedicada **comparte origen**, por lo que NO es una barrera
+  de seguridad equivalente a un origen separado.
+- `offline/edge-sw.js`, con alcance `/offline/`, sirve las entradas
+  de modelo previamente preparadas y verificadas mediante el mecanismo
+  `NexusOffline.prepare` sin borrar cachés de producción.
+- Prueba real MobileCLIP + OCR en Chromium WASM (muestras sintéticas):
+  https://github.com/miqueas80/Laboratorio2.0/actions/runs/37844651892
+- Prueba de Lens tras **recarga con Internet totalmente desactivado**:
+  https://github.com/miqueas80/Laboratorio2.0/actions/runs/37845072935
+- Prueba de Vosk con micrófono simulado reproduciendo WAV local, sin
+  solicitudes a servidores externos, y con control del agente local:
+  https://github.com/miqueas80/Laboratorio2.0/actions/runs/37844591928
+- Pruebas automatizadas nuevas de evidencia visual y wake/voz:
+  **227/227 sin fallos**, GitHub Actions
+  https://github.com/miqueas80/Laboratorio2.0/actions/runs/37845081085
+
+**Sigue prohibido publicar el producto como 100% listo.** Falta ensayar
+imágenes y objetos físicos desconocidos, falsos positivos (por ejemplo,
+cosméticos y envases de medicamentos), voz en ambientes ruidosos,
+persistencia real Android, permisos de audio/cámara, carga de memoria,
+un medidor de confianza calibrado con dataset independiente, y validación
+de seguridad química basada en SDS auténticas. Los seis documentos no
+están precargados en la demo aislada; deben provenir de IndexedDB legítimo.
