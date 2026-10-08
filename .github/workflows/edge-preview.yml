@@ -1,0 +1,59 @@
+name: Build NEXUS Edge isolated Android preview
+on:
+  workflow_dispatch:
+  push:
+    branches: [feature/nexus-x-edge-architecture-v1]
+    paths:
+      - ".github/workflows/edge-preview.yml"
+permissions:
+  contents: read
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Install pinned browser runtimes without postinstall scripts
+        run: npm install --no-save --ignore-scripts --no-audit --no-fund @huggingface/transformers@3.8.1 yjs@13.6.32 esbuild@0.25.9
+      - name: Build local ONNX/WASM and Yjs ESM libraries
+        run: |
+          node scripts/vendor-edge-transformers.mjs
+          node scripts/vendor-edge-yjs.mjs
+          test -s next/vendor/transformers/transformers.min.js
+          test -s next/vendor/onnx/ort-wasm-simd-threaded.jsep.wasm
+          test -s next/vendor/yjs/yjs.bundle.mjs
+          node --check next/vendor/yjs/yjs.bundle.mjs
+      - name: Assemble self-contained experimental static preview, NO production code or auto-model weights
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist/nexus-edge/next
+          cp -a next/. dist/nexus-edge/next/
+          cp inventory.json dist/nexus-edge/inventory.json
+          cat > dist/nexus-edge/index.html <<'HTML'
+          <!doctype html>
+          <html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="refresh" content="0;url=next/demo.html"><title>NEXUS Edge · Pruebas</title></head>
+          <body><p>Versión experimental. <a href="next/demo.html">Abrir laboratorio Edge</a>.</p></body></html>
+          HTML
+          cat > dist/nexus-edge/COMO_PROBAR.txt <<'TXT'
+          NEXUS-X Edge — LABORATORIO EXPERIMENTAL, NO ES PRODUCCIÓN.
+          Requiere origen HTTPS o localhost para Service Worker, OPFS y micrófono.
+          Sirve la carpeta nexus-edge y abre /next/demo.html. La descarga del
+          modelo semántico es opcional y requiere consentimiento.
+          El inventario de 111 registros es una COPIA ESTÁTICA de solo lectura.
+          Los seis documentos no están embebidos: dependen de IndexedDB
+          del navegador bajo el mismo origen o de futuras herramientas de importación.
+          No sustituye el código estable ni hace push a main.
+          TXT
+          du -sh dist/nexus-edge
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nexus-edge-isolated-android-preview
+          path: dist/nexus-edge/
+          if-no-files-found: error
+          retention-days: 5
