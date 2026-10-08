@@ -38,7 +38,7 @@ self.addEventListener('fetch',event=>{
    const cached=await cache.match(canonical.href)||(sensorAsset?await caches.match(canonical.href):null);
    return cached?(request.method==='HEAD'?asHead(cached):cached):live;
   }catch{
-   const cached=await cache.match(canonical.href);
+   const cached=await cache.match(canonical.href)||(sensorAsset?await caches.match(canonical.href):null);
    return cached?(request.method==='HEAD'?asHead(cached):cached):new Response('Recurso Edge no preparado para modo avión.',{status:503});
   }
  })());
