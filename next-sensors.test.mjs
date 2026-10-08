@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {EdgeLens,lensDecision,decodeExactQr,captureLensCanvas} from './next/lens-edge.js';
+import {EdgeLens,lensDecision,decodeExactQr,captureLensCanvas,readLabelRegion} from './next/lens-edge.js';
 import {EdgeVoiceCoordinator,parseWakeWord} from './next/voice-edge.js';
 import {JSDOM} from 'jsdom';
 
@@ -127,4 +127,22 @@ test('Speech output only selects a local Spanish voice, never a cloud TTS',async
  assert.equal(h.voice.speak('Test'),false);
  assert.equal(h.spoken.length,0);
  h.voice.stop();
+});
+
+test('OCR dirigido observa solo región seleccionada, nunca certifica identidad química',async()=>{
+ let seen=null;
+ const image={width:600,height:400,ownerDocument:{createElement:()=>{
+  const cropped={width:0,height:0,getContext:()=>({drawImage(){}})};
+  return cropped;
+ }}};
+ const engine={recognizeText:async target=>{
+  seen={width:target.width,height:target.height};
+  return {lines:[{text:'ÁCIDO NÍTRICO',confidence:.92},{text:'HNO3',confidence:.8}]};
+ }};
+ const result=await readLabelRegion(image,engine,{x:.25,y:.25,width:.5,height:.5});
+ assert.deepEqual(seen,{width:300,height:200});
+ assert.equal(result.verifiedChemicalIdentity,false);
+ assert.equal(result.lines[0].text,'ÁCIDO NÍTRICO');
+ assert.match(result.limitation,/No demuestra sustancia/i);
+ await assert.rejects(readLabelRegion(image,engine,{x:.9,y:.9,width:.5,height:.5}),/fuera de la captura/);
 });
