@@ -16,7 +16,7 @@ const REPO_OWNER='miqueas80';
 const REPO_NAME='';
 const REPO_BRANCH='';
 const DOC_MAX_BYTES=16*1024*1024;
-const APP_VERSION='2026.10.08-nexus-voice-v2-dev';
+const APP_VERSION='2026.10.08-nexus-voice-v2-knowledge-dev';
 const INVENTORY_RECOVERY_KEY='nexus_x_inventory_recovery_v1';
 const health={storage:'sin comprobar',documents:'sin comprobar',errors:[],boot:'BOOT'};
 const LENS_EXTERNAL_CACHE_TTL=30*60*1000;
@@ -1803,23 +1803,56 @@ if(lensVisionQuery(analysis))context=fuseLensVisualContext(context,{...result,an
 }
 async function analyzeCurrentLensCamera(options={}){const v=$('#lensVideo');if(!v||!state.lensStream||v.readyState<2){toast('Primero concedé el permiso e iniciá la cámara NEXUS LENS.');return {ok:false,error:'Cámara NEXUS LENS no iniciada'}}return runNexusLensPipeline(v,'cámara',options);}
 async function analyzeLensImageFile(file,options={}){if(!file)return {ok:false,error:'No se recibió una imagen.'};const url=URL.createObjectURL(file);try{const image=await new Promise((resolve,reject)=>{const img=new Image();img.onload=()=>resolve(img);img.onerror=()=>reject(new Error('No se pudo abrir la imagen.'));img.src=url;});return await runNexusLensPipeline(image,file.name,options)}finally{URL.revokeObjectURL(url)}}
+const NEXUS_CONTEXT_TTL=5*60*1000;
+let nexusLocalContext={entityId:'',documentPath:'',at:0};
+function rememberNexusLocalContext({entityId='',documentPath=''}={}){
+ nexusLocalContext={entityId:String(entityId||''),documentPath:String(documentPath||''),at:Date.now()};
+}
+function rememberNexusAction(action,result){
+ if(!result?.ok)return;
+ const type=action?.action;
+ if(type==='open_item'&&result.data?.id)rememberNexusLocalContext({entityId:result.data.id});
+ if(type==='open_document'&&result.data?.path)rememberNexusLocalContext({documentPath:result.data.path});
+ if(type==='search_inventory'){
+  const rows=result.data?.results||[],first=rows[0],second=rows[1];
+  if(first?.id&&(!second||first.score>=second.score+15))rememberNexusLocalContext({entityId:first.id});
+ }
+ if(type==='search_documents'){
+  const rows=result.data?.results||[],first=rows[0],second=rows[1];
+  if(first?.path&&(!second||first.score>=second.score+15))rememberNexusLocalContext({documentPath:first.path});
+ }
+}
+function nexusFollowupKind(question){
+ const n=norm(question).replace(/^(?:nexus(?:[- ]?x)?)[,;:\s]+/,'').replace(/[?.!,;:]+/g,' ').replace(/^y\s+/,'').replace(/\s+/g,' ').trim();
+ if(/^(?:(?:cual|que)\s+es\s+)?(?:su|la)\s+formula(?:\s+quimica)?$/.test(n)||/^que formula tiene$/.test(n))return 'formula';
+ if(/^(?:(?:donde\s+(?:esta|se encuentra|lo guardamos|la guardamos))|(?:en que (?:armario|ubicacion) (?:esta|se encuentra))|(?:su|la) ubicacion)$/.test(n))return 'location';
+ if(/^(?:(?:y\s+)?(?:como\s+se\s+llama|cual\s+es\s+su\s+nombre)|(?:su|el) nombre)$/.test(n))return 'name';
+ return '';
+}
+function answerNexusFollowup(kind){
+ const c=nexusLocalContext;
+ if(!c.entityId||Date.now()-c.at>=NEXUS_CONTEXT_TTL||Date.now()-c.at<0)return '¿De qué sustancia estás hablando? Decime su nombre para buscarla en el inventario.';
+ const r=state.inventory.find(x=>x.id===c.entityId);
+ if(!r)return 'Ya no encuentro ese registro en el inventario. Indicame la sustancia nuevamente.';
+ if(kind==='formula')return r.formula?'La fórmula registrada de '+r.name+' es '+r.formula+'.':'El registro de '+r.name+' no tiene una fórmula cargada.';
+ if(kind==='location')return r.location?'La ubicación registrada de '+r.name+' es '+r.location+'.':'El registro de '+r.name+' no tiene ubicación cargada.';
+ if(kind==='name')return 'El registro es '+r.name+', código '+r.id+'.';
+ return 'No tengo información suficiente para continuar.';
+}
 function localEvidenceAnswer(question){
- // Respuesta local basada en evidencia. No inventar síntesis científica si no hay evidencia.
+ // Recuperación local verificable. No inventar síntesis científica ni ejecutar órdenes.
  const normalized=norm(question).replace(/^(?:nexus(?:[- ]?x)?)[,:\s]+/,'').trim();
  if(!/^(?:que|cual|para que|como|explica|explicame|decime|dime|informacion|donde|tenemos|hay)\b/.test(normalized))return '';
- const terms=searchTerms(normalized).filter(t=>!['explica','explicam','informacion','sirve','saber','decim','dime','cual','como','donde','hac','pas'].includes(t));
- if(!terms.length)return '';
- const query=terms.slice(0,5).join(' ');
- const inventory=searchLocal(query).slice(0,2),docs=documentSearch(query).slice(0,2);
- if(docs.length){
-  const h=docs[0],snippet=String(h.chunk||'').replace(/\s+/g,' ').trim().slice(0,260);
-  if(snippet)return 'Según el documento local «'+h.d.name+'»: '+snippet+(snippet.length===260?'…':'')+'. Puedo abrir el documento para comprobar el contexto.';
+ const k=globalThis.NexusKnowledge;
+ if(!k?.find)return '';
+ const result=k.find(normalized,{inventory:state.inventory,documents:state.docs});
+ if(!result.supported)return '';
+ if(result.type==='document'){
+  rememberNexusLocalContext({documentPath:result.source});
+  return 'En el documento local «'+result.title+'» encontré este fragmento: «'+result.excerpt+'». Es una cita de evidencia, no una conclusión independiente.';
  }
- if(inventory.length){
-  const r=inventory[0].r;
-  return 'En el inventario local encontré '+r.name+(r.formula?', fórmula '+r.formula:'')+(r.location?', ubicación registrada: '+r.location:'')+'. Esto es un dato del inventario, no una explicación científica verificada.';
- }
- return '';
+ const r=result.record;rememberNexusLocalContext({entityId:r.id});
+ return 'En el inventario local encontré '+r.name+', código '+r.id+(r.formula?', fórmula '+r.formula:'')+(r.location?', ubicación registrada: '+r.location:'')+'. Es un dato del registro, no una explicación científica verificada.';
 }
 function localAssistantResponse(q){
  const n=norm(q);
@@ -2185,14 +2218,16 @@ async function executeRegisteredAction(action,{speak=true}={}){
   if(type==='export_report'){exportReport();if(speak)speakText('Informe exportado.');return agentActionResult(action,{ok:true},startedAt);}
   if(type==='toggle_web'){await setInternetMode(Boolean(action.enabled),{source:'agent',runLastQuery:false});if(speak)speakText(state.web?'Internet activado.':'Internet desactivado.');return agentActionResult(action,{ok:true,result:state.web},startedAt);}
   if(type==='web_search'){if(!state.web)return agentActionResult(action,{ok:false,error:'Internet desactivado'},startedAt);return agentActionResult(action,{ok:true,data:await searchWebSources(q)},startedAt);}
-  if(type==='clear_chat'){state.agentHistory=[];$('#aiChat').innerHTML='<div class="msg bot">Conversación reiniciada.</div>';if(speak)speakText('Conversación reiniciada.');return agentActionResult(action,{ok:true},startedAt);}
+  if(type==='clear_chat'){state.agentHistory=[];nexusLocalContext={entityId:'',documentPath:'',at:0};$('#aiChat').innerHTML='<div class="msg bot">Conversación reiniciada.</div>';if(speak)speakText('Conversación reiniciada.');return agentActionResult(action,{ok:true},startedAt);}
   if(type==='start_voice'){const ok=await startVoiceRecognition();if(speak)speakText(ok?'Vigilancia activada.':'No pude activar la vigilancia.');return agentActionResult(action,{ok:Boolean(ok)},startedAt);}
   if(type==='stop_voice'){stopVoiceRecognition();if(speak)speakText('Vigilancia detenida.');return agentActionResult(action,{ok:true},startedAt);}
   return agentActionResult(action,{ok:false,error:'No implementado'},startedAt);
 }
 
 function resolveIntent(text){
- const q=String(text||'').trim(),n=norm(q),planned=fastAgentPlan(q);
+ const q=String(text||'').trim(),n=norm(q),followup=nexusFollowupKind(q);
+ if(followup)return {kind:'LOCAL',local:null,followup};
+ const planned=fastAgentPlan(q);
  if(planned?.clarification)return {kind:'LOCAL',local:null,clarification:planned.clarification};
  const external=/\b(internet|web|actuales|actualizada?s?|actualidad|recientes?|noticias|hoy)\b/.test(n);
  const augmentable=new Set(['research','search_inventory','search_documents']);
@@ -2213,9 +2248,11 @@ async function nexusAgentTurn(userText,{speak=false}={}){
  const q=String(userText||'').trim();if(!q)return {answer:'',actions:[],fast:true};
  const t0=performance.now(),route=resolveIntent(q),actions=[];let answer='',localResult;
  const emergency=emergencyLabResponse(q);if(emergency){answer='LOCAL · '+emergency;state.agentHistory.push({role:'user',text:q},{role:'assistant',text:answer});state.agentHistory=state.agentHistory.slice(-12);if(speak)speakText(answer);return {answer,actions,fast:true,route:'SEGURIDAD_LOCAL'};}
- if(route.local){localResult=await executeAssistantAction(route.local,{speak:false});actions.push({name:route.local.action,args:route.local,result:localResult});answer='LOCAL · '+fastAgentAnswer(route.local,localResult)}
- if(route.kind==='LOCAL'&&!route.local)answer='LOCAL · '+(route.clarification||localAssistantResponse(q));
+ if(route.local){localResult=await executeAssistantAction(route.local,{speak:false});actions.push({name:route.local.action,args:route.local,result:localResult});rememberNexusAction(route.local,localResult);answer='LOCAL · '+fastAgentAnswer(route.local,localResult)}
+ if(route.followup)answer='LOCAL · '+answerNexusFollowup(route.followup);
+ if(route.kind==='LOCAL'&&!route.local&&!route.followup)answer='LOCAL · '+(route.clarification||localAssistantResponse(q));
  if(route.kind!=='LOCAL'){
+  nexusLocalContext={entityId:'',documentPath:'',at:0};
   if(!state.web)answer+=(answer?'\n\n':'')+'EXTERNA · Activá Internet para consultar xKiro. Los resultados locales ya están disponibles.';
   else{
    try{
