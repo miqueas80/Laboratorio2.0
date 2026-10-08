@@ -52,7 +52,7 @@ export function setupDeviceAcceptance({
  async function inspect(){
   let inventory=[],documents=null,shell=null,voice=null,vision=null;
   try{inventory=await readInventory()}catch{}
-  try{documents=await readPublishedDocumentCache()}catch{}
+  try{documents=await readEdgeAvailableDocuments()}catch{}
   try{shell=await offlineShellStatus({includeInventory:true,includeVendor:false})}catch{}
   const engine=windowObject.NexusOffline;
   try{voice=await engine?.cacheStatus?.('voice')}catch{}
