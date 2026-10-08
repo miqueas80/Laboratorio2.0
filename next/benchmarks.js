@@ -41,3 +41,36 @@ export async function memoryEstimate(){
  }
  return {bytes:null,supported:false,reason:'El navegador no expone una medición precisa de memoria'};
 }
+
+
+/**
+ * Measure frames while ACTUALLY scrolling a virtualized element, not just
+ * timing an idle page. Reports full rAF timings and travel distance.
+ * A 60 FPS result on one machine does NOT establish 60 FPS on Android.
+ */
+export async function benchmarkVirtualScroll(container,{
+ durationMs=1200,stepPx=620,requestFrame=globalThis.requestAnimationFrame,
+ now=()=>performance.now()
+}={}){
+ if(!container||typeof container.dispatchEvent!=='function'||typeof requestFrame!=='function'||
+    durationMs<200||durationMs>10000||!Number.isFinite(stepPx)||stepPx<=0)
+  throw Error('Parámetros de desplazamiento inválidos');
+ const max=Math.max(0,container.scrollHeight-container.clientHeight);
+ if(max<100)throw Error('Lista demasiado corta para medir desplazamiento');
+ const scrollEvent=new container.ownerDocument.defaultView.Event('scroll');
+ const stamps=[];let distance=0,steps=0;
+ const start=now();
+ await new Promise(resolve=>{
+  function tick(timestamp){
+   stamps.push(timestamp);
+   const next=(container.scrollTop+stepPx)%max;
+   distance+=Math.abs(next-container.scrollTop);container.scrollTop=next;
+   container.dispatchEvent(scrollEvent);steps++;
+   if(now()-start>=durationMs&&stamps.length>=2)resolve();
+   else requestFrame(tick);
+  }
+  requestFrame(tick);
+ });
+ return {...frameMetrics(stamps),steps,distancePixels:Math.round(distance),
+  mode:'active-virtual-scroll',disclaimer:'Medición de una prueba aislada; validar en el Android objetivo.'};
+}
