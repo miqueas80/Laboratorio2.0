@@ -24,7 +24,7 @@ const LENS_EXTERNAL_CACHE_LIMIT=20;
 const VOICE_WAKE=/\bnexus(?:[- ]?x)?\b/i;
 let voiceRecognition=null;let voiceListening=false;let voiceMonitoring=false;let voiceSpeaking=false;let voiceAwaitingCommand=false;let voiceWakeTimer=null;let voiceRestartTimer=null;let voicePendingIntent=null;let voicePendingTimer=null;let voiceCommandQueue=Promise.resolve();
 // El motor ASR es intercambiable; intenciones y Action Registry siguen siendo únicos.
-let voiceEngineMode='none',voiceSessionEpoch=0,voiceSwitchTimer=null,voiceCommandBusy=false,voiceLastInputAt=0;
+let voiceEngineMode='none',voiceSessionEpoch=0,voiceSwitchTimer=null,voiceCommandBusy=false,voiceLastInputAt=0,voiceLastCommand='',voiceLastCommandAt=0;
 const lensExternalCache=new Map(),lensExternalPending=new Map();
 const WEB_TIMEOUT=6500;
 function storageFailure(error){
@@ -1041,7 +1041,7 @@ let diagnosticSnapshot=null,diagnosticJob=null;
 async function collectDiagnostics(){
  if(diagnosticJob)return diagnosticJob;
  diagnosticJob=(async()=>{
-const checks={version:APP_VERSION,checkedAt:new Date().toISOString(),boot:health.boot,network:{onlineHint:navigator.onLine,meaning:'Estado informado por el navegador; no prueba acceso a Internet'},inventory:runIntegrity(),documents:{loaded:state.docs.length},nexus:{actions:ActionRegistry.size,local:true},xkiro:{gateway:XKIRO_API,status:health.xkiro?.status||'sin comprobar',model:health.xkiro?.model||null,freeModels:health.xkiro?.freeModels||null,visionModels:health.xkiro?.visionModels||null}};
+const checks={version:APP_VERSION,checkedAt:new Date().toISOString(),boot:health.boot,voice:voiceRuntimeStatus(),network:{onlineHint:navigator.onLine,meaning:'Estado informado por el navegador; no prueba acceso a Internet'},inventory:runIntegrity(),documents:{loaded:state.docs.length},nexus:{actions:ActionRegistry.size,local:true},xkiro:{gateway:XKIRO_API,status:health.xkiro?.status||'sin comprobar',model:health.xkiro?.model||null,freeModels:health.xkiro?.freeModels||null,visionModels:health.xkiro?.visionModels||null}};
   const probe='nexus_x_storage_probe_'+Date.now();
   try{localStorage.setItem(probe,'ok');checks.storage={writable:localStorage.getItem(probe)==='ok'};localStorage.removeItem(probe)}catch(e){checks.storage={writable:false,error:e.name}}
   try{if(navigator.storage?.estimate)checks.storage.estimate=await navigator.storage.estimate();if(navigator.storage?.persisted)checks.storage.persistent=await navigator.storage.persisted()}catch(e){checks.storage.estimateError=e.message}
@@ -1831,7 +1831,7 @@ function localAssistantResponse(q){
 }
 function emergencyLabResponse(q){
  const n=norm(q);
- if(!/\b(acido|corrosivo|reactivo|quimico|sustancia)\b/.test(n)||!/\b(derram|salpic|cayo|cae|caiga|toco|contacto|piel|mano|ojo|ojos|quemadura)\b/.test(n))return '';
+ if(!/\b(acido|corrosivo|reactivo|quimico|sustancia)\b/.test(n)||!/\b(?:derram\w*|salpic\w*|cay\w*|caig\w*|toc\w*|contacto|piel|mano|ojos?|quemadur\w*)\b/.test(n))return '';
  return 'Si una sustancia química te salpicó la piel, alejate de la fuente, quitá con cuidado la ropa contaminada y enjuagá la zona con abundante agua corriente al menos 20 minutos. Buscá asistencia médica urgente y consultá la ficha de seguridad del producto. No uses neutralizantes ni cremas. Si afectó los ojos, lavalos inmediatamente con agua abundante y buscá atención urgente. Algunas sustancias, como el ácido fluorhídrico, requieren tratamiento especializado inmediato.';
 }
 
@@ -2380,6 +2380,9 @@ function receiveVoiceTranscript(text){
   if(!command){voiceAwaitingCommand=true;voiceWakeTimer=setTimeout(()=>{voiceAwaitingCommand=false;if(voiceMonitoring)$('#voiceStatusText').textContent='Dormido · esperando “Nexus”'},12000);if(!voicePartialInterrupted)speakText('Te escucho.');voicePartialInterrupted=false;return;}
  }else if(voiceAwaitingCommand){command=transcript;voiceAwaitingCommand=false;clearTimeout(voiceWakeTimer);}
  voicePartialInterrupted=false;if(!command)return;
+ const normalizedCommand=norm(command),now=Date.now();
+ if(normalizedCommand===voiceLastCommand&&now-voiceLastCommandAt<2500)return;
+ voiceLastCommand=normalizedCommand;voiceLastCommandAt=now;
  $('#voiceStatusText').textContent='Nexus activo · ejecutando orden…';
  voiceCommandQueue=voiceCommandQueue.then(async()=>{if(!voiceMonitoring)return;voiceCommandBusy=true;try{await executeVoiceCommand(command)}finally{voiceCommandBusy=false;if(voiceMonitoring&&!voiceSpeaking)$('#voiceStatusText').textContent='Dormido · esperando “Nexus”';scheduleVoiceEngineAlignment();}}).catch(error=>{$('#voiceStatusText').textContent='No pude completar la orden.';console.warn('Voice command failed',error?.name||'error');});
  return voiceCommandQueue;
@@ -2427,6 +2430,7 @@ function chooseVoiceTranscript(result){
  return measured[0].text;
 }
 function desiredVoiceEngine(){return state.web&&navigator.onLine!==false&&(globalThis.SpeechRecognition||globalThis.webkitSpeechRecognition)?'online':'offline';}
+function voiceRuntimeStatus(){return {active:voiceMonitoring,engine:voiceEngineMode,preferred:desiredVoiceEngine(),busy:voiceCommandBusy,lastTranscriptAt:voiceLastInputAt};}
 function scheduleVoiceEngineAlignment(){
  if(!voiceMonitoring||desiredVoiceEngine()===voiceEngineMode)return;
  clearTimeout(voiceSwitchTimer);
