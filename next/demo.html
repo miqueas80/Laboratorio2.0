@@ -26,6 +26,30 @@
 <button id="safety">Revisar metadatos SDS</button>
 <pre id="checks" aria-live="polite">No comprobado.</pre>
 </section>
+<section>
+<h2>Agente DAG · verificación física y recordatorios</h2>
+<p>El QR exacto permite consultar un registro; una foto o etiqueta sin verificación no confirma identidad química.</p>
+<label>Código NEXUS <input id="inspectCode" placeholder="NEXUS-X-0001"></label>
+<label><input type="checkbox" id="approveTask"> Autorizo guardar un recordatorio <strong>solo en la base experimental</strong></label>
+<button id="inspect">Ejecutar flujo DAG</button>
+<pre id="agentResult" aria-live="polite">Sin ejecución.</pre>
+</section>
+<section>
+<h2>Sincronización P2P por red local</h2>
+<p>Dos dispositivos en la misma Wi-Fi. Intercambiá oferta y respuesta manualmente, compará el código de seis dígitos en ambas pantallas y recién entonces autorizá la sincronización. No se comparten datos de producción.</p>
+<button id="offer">Equipo A: crear oferta</button>
+<button id="answer">Equipo B: aceptar oferta y crear respuesta</button>
+<button id="finish">Equipo A: aceptar respuesta</button>
+<label>Oferta/respuesta para importar<textarea id="received" rows="5" placeholder="Pegá aquí el texto que envió el otro dispositivo"></textarea></label>
+<label>Texto para compartir<textarea id="outgoing" rows="5" readonly></textarea></label>
+<pre id="pairStatus" aria-live="polite">Sin conexión.</pre>
+<label>Código de seis cifras leído en el otro equipo<input id="pairConfirm" inputmode="numeric" maxlength="6"></label>
+<button id="confirmPair">Confirmar código coincidente</button>
+<label>Evento experimental <input id="taskText" value="Preparar instrumentos para la expo"></label>
+<button id="addTask">Crear y enviar evento</button>
+<button id="syncNow">Intercambiar historial experimental</button>
+<pre id="syncResult" aria-live="polite">Sin sincronización.</pre>
+</section>
 <p><a href="../index.html">Volver a NEXUS-X estable</a></p>
 </main>
 <script type="module" src="./demo.js"></script>
