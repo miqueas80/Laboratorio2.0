@@ -78,6 +78,10 @@
   scored.sort((a,b)=>b.coverage-a.coverage||b.score-a.score||a.source.localeCompare(b.source));
   if(!scored.length)return {supported:false,reason:'no-strong-match',queryTerms:q};
   const best=scored[0];
+  // Una palabra como "ácido" puede describir varios frascos: nunca elegir el
+  // primero de la lista como si fuera una identificación inequívoca.
+  if(best.type==='inventory'&&scored.some(other=>other!==best&&other.type==='inventory'&&other.coverage===best.coverage&&other.score===best.score))
+   return {supported:false,reason:'ambiguous-inventory',queryTerms:q};
   if(best.type==='inventory')return {supported:true,type:'inventory',source:best.source,confidence:best.coverage,record:{id:best.record.id,name:best.record.name,formula:best.record.formula||'',location:best.record.location||''},queryTerms:q};
   return {supported:true,type:'document',source:best.source,confidence:best.coverage,title:best.document.name||best.document.path,index:best.index,excerpt:snippet(best.chunk,q),queryTerms:q};
  }
