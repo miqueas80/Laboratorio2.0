@@ -12,7 +12,7 @@ const libraryURL=new URL('./vendor/transformers/transformers.min.js',selfBase).h
 let extractor=null,loading=null,backend='',state='missing';
 function respond(id,result,error){self.postMessage(error?{id,error:String(error)}:{id,result})}
 async function localExists(url){
-  try{const response=await fetch(url,{cache:'no-store'});return response.ok}
+  try{const response=await fetch(url,{method:'HEAD',cache:'no-store'});return response.ok}
   catch{return false}
 }
 async function status(){
