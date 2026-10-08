@@ -16,7 +16,7 @@ import {prepareSemanticAssets,semanticCacheStatus} from './model-provisioner.js'
 import {prepareOfflineShell,offlineShellStatus} from './offline-shell.js';
 import {benchmarkAnimation,benchmarkVirtualScroll,memoryEstimate} from './benchmarks.js';
 const $=id=>document.getElementById(id);
-let client=null,records=null,peer=null,replica=null,edgeDB=null,documentFabric=null,edgeAgent=null,yjsBoard=null,safetyClient=null;
+let client=null,records=null,peer=null,replica=null,edgeDB=null,documentFabric=null,edgeAgent=null,yjsBoard=null,safetyClient=null,lensBridge=null,voiceBridge=null,videoStream=null;
 const actorKey='nexus_edge_demo_actor_v1';
 const actor=localStorage.getItem(actorKey)||'edge-'+crypto.randomUUID().replaceAll('-','');
 localStorage.setItem(actorKey,actor);
