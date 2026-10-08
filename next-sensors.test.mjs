@@ -59,7 +59,7 @@ test('Lens utiliza el motor MobileCLIP ya existente y libera pixeles al finaliza
   analyze:async()=>{analyzed++;return {accepted:true,candidates:[glass],model:'MobileCLIP-S0'}},
   releaseVision:()=>freed++
  };
- const lens=new EdgeLens({engine,inventory:records,decode:async()=>null});
+ const lens=new EdgeLens({engine,inventory:records,decode:async()=>null,documentObject:dom.window.document});
  try{
   const output=await lens.analyze({width:300,height:250},{skipQR:true});
   assert.equal(output.visualClass.id,'erlenmeyer');
