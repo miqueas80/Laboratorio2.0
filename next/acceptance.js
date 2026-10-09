@@ -23,18 +23,24 @@ const IDS=new Set(EDGE_RELEASE_CHECKS.map(x=>x.id));
 const sanitizeBoolean=v=>v===true;
 export function evaluateEdgeRelease({automatic={},manual={},performance=null}={}){
  const passed={},missing=[],notes=[];
+ // Do not trust an unchecked claim that FPS passed. A real, bounded
+ // active-scroll measurement is required even when a caller supplies
+ // fps100k:true. Manual Android checks remain separate.
+ const measuredFPS=performance?.mode==='active-virtual-scroll'&&
+  Number.isFinite(performance?.averageFPS)&&
+  Number.isFinite(performance?.p95FrameMs)&&
+  performance.averageFPS>=60&&performance.p95FrameMs<=1000/60&&
+  Number.isFinite(performance?.frames)&&performance.frames>=2;
  for(const check of EDGE_RELEASE_CHECKS){
-  let ok=false;
-  if(check.kind==='automatic')ok=sanitizeBoolean(automatic[check.id]);
-  else ok=sanitizeBoolean(manual[check.id]);
+  let ok=check.kind==='automatic'?sanitizeBoolean(automatic[check.id]):
+   sanitizeBoolean(manual[check.id]);
+  if(check.id==='fps100k')ok=ok&&measuredFPS;
   passed[check.id]=ok;
   if(!ok)missing.push({id:check.id,kind:check.kind,label:check.label});
  }
- if(performance&&Number.isFinite(performance.averageFPS)&&Number.isFinite(performance.p95FrameMs)){
-  if(performance.averageFPS<60||performance.p95FrameMs>1000/60)
-   notes.push('La fluidez promedio o p95 está por debajo del objetivo en este dispositivo.');
- }else notes.push('Rendimiento de Android sin medición válida: no se puede aprobar.');
- if(!sanitizeBoolean(automatic.memory80))
+ if(!measuredFPS)
+  notes.push('No se acreditó 60 FPS promedio con p95 <= 16,67 ms durante desplazamiento activo.');
+ if(!passed.memory80)
   notes.push('No se midió o no se alcanzó el límite de 80 MiB de RAM total.');
  return {total:EDGE_RELEASE_CHECKS.length,passedCount:EDGE_RELEASE_CHECKS.length-missing.length,
   ready:missing.length===0,missing,passed,notes,status:missing.length===0?'READY_FOR_HUMAN_RELEASE_REVIEW':'NOT_READY'};
