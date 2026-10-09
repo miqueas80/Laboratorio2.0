@@ -1,0 +1,22 @@
+name: NEXUS Edge 100k desktop benchmark
+on:
+  workflow_dispatch:
+  push:
+    branches: [feature/nexus-x-edge-architecture-v1]
+    paths:
+      - ".github/workflows/edge-benchmark.yml"
+      - "scripts/benchmark-edge.mjs"
+      - "next/search-core.js"
+      - "next/hnsw.js"
+permissions:
+  contents: read
+jobs:
+  baseline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node scripts/benchmark-edge.mjs

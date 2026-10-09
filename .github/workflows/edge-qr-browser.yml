@@ -1,0 +1,30 @@
+name: NEXUS Edge exact QR browser acceptance
+on:
+  workflow_dispatch:
+  push:
+    branches: [feature/nexus-x-edge-architecture-v1]
+    paths:
+      - ".github/workflows/edge-qr-browser.yml"
+      - "scripts/smoke-edge-qr-browser.mjs"
+      - "next/lens-edge.js"
+      - "next/demo.html"
+      - "jsQR.js"
+      - "tests/fixtures/nexus-qr.png"
+permissions:
+  contents: read
+jobs:
+  qr-browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npm install --no-save --ignore-scripts --no-audit --no-fund playwright-core@1.56.1
+      - name: Real jsQR code scan and exact inventory match in Chromium
+        run: |
+          command -v google-chrome
+          node scripts/smoke-edge-qr-browser.mjs

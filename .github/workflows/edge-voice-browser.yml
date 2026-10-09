@@ -1,0 +1,34 @@
+name: NEXUS Edge real Vosk offline voice
+on:
+  workflow_dispatch:
+  push:
+    branches: [feature/nexus-x-edge-architecture-v1]
+    paths:
+      - ".github/workflows/edge-voice-browser.yml"
+      - "scripts/smoke-edge-voice-browser.mjs"
+      - "next/voice-edge.js"
+      - "next/demo.html"
+      - "next/demo.css"
+      - "next/voice-frame.html"
+      - "next/voice-frame.js"
+      - "next/voice-frame-client.js"
+      - "next/demo.js"
+      - "offline/core.js"
+permissions:
+  contents: read
+jobs:
+  verify-local-voice:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npm install --no-save --ignore-scripts --no-audit --no-fund playwright-core@1.56.1
+      - name: Chromium local microphone and real Vosk WASM engine
+        run: |
+          command -v google-chrome
+          node scripts/smoke-edge-voice-browser.mjs

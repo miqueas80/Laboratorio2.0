@@ -1,0 +1,39 @@
+name: NEXUS Edge local embedding runtime
+on:
+  workflow_dispatch:
+  push:
+    branches: [feature/nexus-x-edge-architecture-v1]
+    paths:
+      - ".github/workflows/edge-runtime-bundle.yml"
+      - "scripts/vendor-edge-transformers.mjs"
+      - "next/embedding-worker.js"
+permissions:
+  contents: read
+jobs:
+  build-local-runtime:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Install exactly pinned optional model runtime
+        run: npm install --no-save --ignore-scripts --no-audit --no-fund @huggingface/transformers@3.8.1
+      - name: Stage self-hosted ESM and matching ONNX WASM
+        run: node scripts/vendor-edge-transformers.mjs
+      - name: Validate no-CDN self-hosted bundle imports correctly
+        run: |
+          node --check next/vendor/transformers/transformers.min.js
+          node --check next/vendor/onnx/ort-wasm-simd-threaded.jsep.mjs
+          node --input-type=module -e "import {env, pipeline} from './next/vendor/transformers/transformers.min.js'; if(!env || typeof pipeline !== 'function') process.exit(1); env.allowRemoteModels=false; console.log('Local Transformers.js ESM import PASS');"
+          test -s next/vendor/onnx/ort-wasm-simd-threaded.jsep.wasm
+          test -s next/vendor/transformers/transformers.min.js
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nexus-edge-local-runtime
+          path: next/vendor/
+          if-no-files-found: error
+          retention-days: 3

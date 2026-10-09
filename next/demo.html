@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; worker-src 'self'; style-src 'self'; object-src 'none'; base-uri 'self'">
+<title>NEXUS-X Edge · Laboratorio de pruebas</title>
+<link rel="stylesheet" href="./demo.css">
+<link rel="manifest" href="./manifest.webmanifest">
+<meta name="theme-color" content="#075d71">
+</head>
+<body>
+<main>
+<h1>NEXUS-X · Edge Lab</h1>
+<p><strong>EXPERIMENTAL:</strong> esta página no modifica el inventario ni los documentos de la PWA de producción.</p>
+<section id="agentConsole">
+<h2>NEXUS IA Edge · agente local experimental</h2>
+<p>Interpreta consultas en español, consulta el inventario y la evidencia documental y puede abrir las secciones de esta página. No modifica datos ni llama a xKiro.</p>
+<label>Pedile algo a NEXUS <input id="agentText" autocomplete="off" placeholder="Nexus, abrí inventario y buscá ácido nítrico"></label>
+<button id="agentAsk">Ejecutar consulta local</button>
+<pre id="agentOutput" aria-live="polite">NEXUS IA Edge lista para consultas locales.</pre>
+</section>
+<section id="edgeSensors">
+<h2>NEXUS Lens · reconocimiento local y voz Vosk</h2>
+<p>Usa los motores offline que ya existen en NEXUS: MobileCLIP-S0 con 49 categorías y Vosk español. Se preparan solamente cuando lo solicitás y nunca suben imágenes o voz a Internet.</p>
+<button id="lensPrepare">Preparar visión local</button>
+<button id="voicePrepare">Preparar voz Vosk</button>
+<button id="voiceStart">Activar escucha «Nexus»</button>
+<button id="voiceStop">Detener escucha</button>
+<button id="releaseRuntimes">Liberar RAM de IA (sin borrar modelos ni datos)</button>
+<p><strong>Visión sin QR:</strong> indicá una imagen o iniciá la cámara. Una categoría visual NO confirma sustancias.</p>
+<label>Foto de material (archivo local) <input id="lensFile" type="file" accept="image/*" capture="environment"></label>
+<video id="edgeLensVideo" class="edge-lens-video" playsinline muted autoplay></video>
+<button id="edgeCameraStart">Activar cámara</button>
+<button id="edgeCameraStop">Detener cámara</button>
+<label><input type="checkbox" id="lensReadLabel"> Leer texto solo de la región central de la etiqueta (OCR local, opcional)</label>
+<button id="edgeLensAnalyze">Analizar objeto sin QR</button>
+<button id="edgeLensAnalyzeQr">Analizar y comprobar QR</button>
+<pre id="edgeLensResult" aria-live="polite">Lens sin iniciar. Prepará el modelo cuando estés conectado.</pre>
+<pre id="edgeVoiceStatus" aria-live="polite">Vosk sin iniciar. Activá la escucha por decisión propia.</pre>
+</section>
+<section id="inventorySection">
+<h2>Búsqueda local BM25 · Web Worker</h2>
+<button id="load">Cargar índice con inventario canónico</button>
+<button id="stress">Probar 100.001 registros sintéticos</button>
+<button id="measureFPS">Medir FPS y memoria del navegador</button>
+<button id="measureScroll">Medir FPS desplazando inventario</button>
+<label>Consulta <input id="query" placeholder="ácido nítrico" autocomplete="off"></label>
+<button id="search">Buscar</button>
+<pre id="results" aria-live="polite">Sin índice.</pre>
+<pre id="performanceResult" aria-live="polite">FPS sin medir.</pre>
+<div id="virtual" class="virtual" aria-label="Inventario virtualizado"></div>
+</section>
+<section id="documentsSection">
+<h2>Fabric documental · RAG local con evidencia</h2>
+<p>Lee los documentos originales ya indexados en este navegador o, en la distribución aislada, una copia verificable de solo lectura de los seis archivos canónicos. Si el modelo multilingüe no está instalado, consulta con BM25. No modifica los originales.</p>
+<label><input type="checkbox" id="semanticMode"> Intentar embeddings locales (solo si el modelo está preparado)</label>
+<button id="fabricStatus">Comprobar recursos semánticos</button>
+<button id="offlineShell">Preparar Edge Lab para modo avión (sin modelo)</button>
+<button id="fabricInstall">Preparar modelo multilingüe (descarga opcional de unos 140 MB)</button>
+<button id="fabricLoad">Indexar mis documentos en el Worker</button>
+<label>Pregunta sobre documentos <input id="fabricQuery" placeholder="¿Qué documentos explican la formación de óxidos?"></label>
+<button id="fabricAsk">Buscar evidencia</button>
+<pre id="fabricResults" aria-live="polite">Sin índice documental.</pre>
+<div id="canonicalDocumentLinks" class="canonical-document-links" aria-label="Descargar originales canónicos desde la caché local"></div>
+</section>
+<section>
+<h2>Integridad · solo lectura</h2>
+<button id="integrity">Comprobar migración (dry-run)</button>
+<button id="safety">Revisar metadatos SDS</button>
+<pre id="checks" aria-live="polite">No comprobado.</pre>
+</section>
+<section>
+<h2>Agente DAG · verificación física y recordatorios</h2>
+<p>El QR exacto permite consultar un registro; una foto o etiqueta sin verificación no confirma identidad química.</p>
+<label>Código NEXUS <input id="inspectCode" placeholder="NEXUS-X-0001"></label>
+<label><input type="checkbox" id="approveTask"> Autorizo guardar un recordatorio <strong>solo en la base experimental</strong></label>
+<button id="inspect">Ejecutar flujo DAG</button>
+<pre id="agentResult" aria-live="polite">Sin ejecución.</pre>
+</section>
+<section>
+<h2>Sincronización P2P por red local</h2>
+<p>Dos dispositivos en la misma Wi-Fi. Intercambiá oferta y respuesta manualmente, compará el código de seis dígitos en ambas pantallas y recién entonces autorizá la sincronización. No se comparten datos de producción.</p>
+<button id="offer">Equipo A: crear oferta</button>
+<button id="answer">Equipo B: aceptar oferta y crear respuesta</button>
+<button id="finish">Equipo A: aceptar respuesta</button>
+<label>Oferta/respuesta para importar<textarea id="received" rows="5" placeholder="Pegá aquí el texto que envió el otro dispositivo"></textarea></label>
+<label>Texto para compartir<textarea id="outgoing" rows="5" readonly></textarea></label>
+<pre id="pairStatus" aria-live="polite">Sin conexión.</pre>
+<label>Código de seis cifras leído en el otro equipo<input id="pairConfirm" inputmode="numeric" maxlength="6"></label>
+<button id="confirmPair">Confirmar código coincidente</button>
+<label>Evento experimental <input id="taskText" value="Preparar instrumentos para la expo"></label>
+<button id="addTask">Crear y enviar evento</button>
+<button id="syncNow">Intercambiar historial experimental</button>
+<pre id="syncResult" aria-live="polite">Sin sincronización.</pre>
+</section>
+<section>
+<h2>Yjs · tareas colaborativas por campos</h2>
+<p>Requiere el runtime local Yjs (desde el artefacto de compilación). Se sincroniza con la conexión WebRTC cifrada y el código de emparejamiento anterior; jamás toca el calendario original.</p>
+<label>Sala de colaboración <input id="yjsRoom" value="lab-experimental"></label>
+<button id="yjsEnable">Activar Yjs local</button>
+<label>ID de tarea <input id="yjsTaskId" value="tarea-demo"></label>
+<label>Título <input id="yjsTitle" placeholder="Preparar etiquetas"></label>
+<label>Notas <input id="yjsNotes" placeholder="Revisadas por cuarto año"></label>
+<button id="yjsWrite">Guardar cambios en IndexedDB experimental</button>
+<button id="yjsSync">Sincronizar estado Yjs por WebRTC</button>
+<pre id="yjsStatus" aria-live="polite">Motor Yjs opcional no cargado.</pre>
+</section>
+<section id="androidAcceptance">
+<h2>Control de aceptación · Android antes de publicar</h2>
+<p>Este panel no certifica el producto: registra si las condiciones comprobables y las pruebas físicas realizadas por el operador fueron aprobadas. Todos los controles deben estar en verde para solicitar una revisión de publicación.</p>
+<p>Primero cargá los 111 registros o los 100.001 sintéticos según la prueba, medí el desplazamiento, prepará los motores locales, instalá la PWA experimental y verificá modo avión. No se recopilan imágenes, grabaciones ni textos de documentos.</p>
+<label>RAM total medida por un perfilador del sistema Android (MiB) <input id="gateMemory" type="number" min="1" max="2048" step="0.1" placeholder="No confundir con cuota de almacenamiento"></label>
+<label><input type="checkbox" id="gateMemoryAttest"> Verifiqué personalmente esa medición de RAM total del proceso/navegador</label>
+<div id="deviceGateChecks"></div>
+<button id="gateInspect">Evaluar condiciones reales</button>
+<button id="gateExport">Exportar informe sin datos sensibles (.json)</button>
+<pre id="deviceGateResult" aria-live="polite">Aún no evaluado. Sin evidencia física, la publicación permanece bloqueada.</pre>
+</section>
+<p><a href="https://miqueas80.github.io/Laboratorio2.0/" rel="noopener noreferrer">Abrir NEXUS-X estable (sitio separado, requiere Internet)</a></p>
+</main>
+<script src="../offline/assets.js"></script>
+<script src="../offline/core.js"></script>
+<script src="../jsQR.js"></script>
+<script type="module" src="./demo.js"></script>
+</body>
+</html>

@@ -1,0 +1,32 @@
+name: NEXUS Edge real local Lens MobileCLIP
+on:
+  workflow_dispatch:
+  push:
+    branches: [feature/nexus-x-edge-architecture-v1]
+    paths:
+      - ".github/workflows/edge-lens-browser.yml"
+      - "scripts/smoke-edge-lens-browser.mjs"
+      - "next/lens-edge.js"
+      - "offline/vision-worker.js"
+      - "offline/core.js"
+      - "offline/edge-sw.js"
+      - "next/offline-shell.js"
+      - "next/semantic-sw.js"
+permissions:
+  contents: read
+jobs:
+  lens-local-cpu:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npm install --no-save --ignore-scripts --no-audit --no-fund playwright-core@1.56.1
+      - name: Smoke real MobileCLIP and OCR models in Chromium WASM, network blocked
+        run: |
+          command -v google-chrome
+          node scripts/smoke-edge-lens-browser.mjs
