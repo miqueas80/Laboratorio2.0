@@ -142,6 +142,20 @@ $('voicePrepare').onclick=()=>task(async()=>{
 },'edgeVoiceStatus');
 $('voiceStart').onclick=()=>task(async()=>output('edgeVoiceStatus',await edgeVoice().start()),'edgeVoiceStatus');
 $('voiceStop').onclick=()=>{voiceBridge?.stop();output('edgeVoiceStatus','Escucha detenida')};
+$('releaseRuntimes').onclick=()=>{
+ // Release active WASM sessions, microphone and workers. Do not delete
+ // CacheStorage, IndexedDB or other operators' CRDT state.
+ voiceBridge?.stop();voiceBridge=null;
+ voiceFrame?.close();voiceFrame=null;
+ lensBridge?.close();lensBridge=null;
+ documentFabric?.close();documentFabric=null;
+ safetyClient?.close();safetyClient=null;
+ videoStream?.getTracks().forEach(track=>track.stop());
+ videoStream=null;$('edgeLensVideo').srcObject=null;
+ if(edgeAgent)edgeAgent.fabric=null;
+ output('edgeVoiceStatus','Sesiones de voz, visión y RAG liberadas. Cachés y datos intactos.');
+ output('edgeLensResult','Motores liberados de RAM; preparados para volver a cargar desde caché offline.');
+};
 $('edgeCameraStart').onclick=()=>task(async()=>{
  if(videoStream)for(const track of videoStream.getTracks())track.stop();
  if(!navigator.mediaDevices?.getUserMedia)throw Error('Se requiere cámara en HTTPS y permiso del dispositivo');
