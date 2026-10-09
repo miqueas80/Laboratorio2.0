@@ -15,6 +15,7 @@ on:
       - "documents-manifest.json"
       - "scripts/build-edge-documents.py"
       - "scripts/smoke-edge-documents-preview.mjs"
+      - "scripts/verify-edge-isolation.mjs"
       - "**/*.pdf"
       - "**/*.docx"
       - "**/*.xlsx"
@@ -29,6 +30,8 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
@@ -50,6 +53,8 @@ jobs:
       - run: npm ci --ignore-scripts --no-audit --no-fund
       - name: Entire legacy and Edge Node regression suite
         run: npm test
+      - name: Reject accidental changes to NEXUS stable production files
+        run: node scripts/verify-edge-isolation.mjs
       - name: Install pinned browser runtimes without postinstall scripts
         run: npm install --no-save --ignore-scripts --no-audit --no-fund @huggingface/transformers@3.8.1 yjs@13.6.32 esbuild@0.25.9 playwright-core@1.56.1
       - name: Build local ONNX/WASM and Yjs ESM libraries
