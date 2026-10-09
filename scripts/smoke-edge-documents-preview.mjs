@@ -82,7 +82,35 @@ try{
     navigatorOnline:navigator.onLine};
   }finally{fabric.close()}
  });
+ // Real integrated on-device acceptance panel must never approve a CI
+ // browser with no physical Android tests, even with all files cached.
+ await page.locator('#gateInspect').click();
+ await page.waitForFunction(()=>{
+  try{return JSON.parse(document.querySelector('#deviceGateResult')?.textContent||'{}').status==='NOT_READY'}
+  catch{return false}
+ },null,{timeout:15000});
+ const releaseGate=JSON.parse(await page.locator('#deviceGateResult').innerText());
+ if(releaseGate.total!==14||releaseGate.status!=='NOT_READY'||
+    !releaseGate.missing.some(s=>/Android real/.test(s))||
+    !releaseGate.missing.some(s=>/SDS/.test(s)))
+  throw Error('La aceptación declaró producción sin pruebas físicas: '+JSON.stringify(releaseGate));
+ const sourceCheck=await page.evaluate(async()=>{
+  const {deriveAutomaticEdgeChecks}=await import('./device-acceptance.js');
+  const {readEdgeAvailableDocuments}=await import('./canonical-source.js');
+  const {offlineShellStatus}=await import('./offline-shell.js');
+  const records=(await (await fetch('./snapshot/inventory.json')).json()).records;
+  const documents=await readEdgeAvailableDocuments();
+  const shell=await offlineShellStatus({includeVendor:false,includeInventory:true,includeDocuments:true});
+  return deriveAutomaticEdgeChecks({inventory:records,documents,shell,offline:!navigator.onLine,
+   controller:!!navigator.serviceWorker.controller});
+ });
+ if(!sourceCheck.inventory111||!sourceCheck.documents6||!sourceCheck.offline||
+    sourceCheck.fps100k||sourceCheck.memory80||sourceCheck.lensCached||sourceCheck.voiceCached)
+  throw Error('Las verificaciones documentales o de hardware fallaron: '+JSON.stringify(sourceCheck));
  console.log(JSON.stringify({initial,cache:{ready:cache.ready,inventoryCached:cache.inventoryCached},
-  browserOffline:offline,externalRequestsBlocked:true,
+  browserOffline:offline,releaseGate:{status:releaseGate.status,
+    passed:releaseGate.passed,total:releaseGate.total,
+    androidBlocked:true,chemicalReviewBlocked:true},
+  automaticChecks:sourceCheck,externalRequestsBlocked:true,
   environment:'Standalone static Chromium preview; physical Android/SDS approval still required'},null,2));
 }finally{await browser?.close().catch(()=>{});server.kill('SIGTERM')}
