@@ -40,3 +40,18 @@ test('Exported acceptance report contains only a fixed allowlist, never user con
  assert.ok(!Object.keys(report).some(key=>/image|audio|token|device|document|chemical/i.test(key)));
  assert.deepEqual(Object.keys(report.performance).sort(),['averageFPS','frames','mode','p95FrameMs']);
 });
+
+
+test('Claimed green FPS cannot bypass a missing or idle frame measurement',()=>{
+ const missing=evaluateEdgeRelease({automatic,manual,performance:null});
+ assert.equal(missing.ready,false);
+ assert.ok(missing.missing.some(x=>x.id==='fps100k'));
+ const idle=evaluateEdgeRelease({automatic,manual,performance:{
+  averageFPS:120,p95FrameMs:7,frames:144,mode:'idle-animation'}});
+ assert.equal(idle.ready,false);
+ assert.ok(idle.missing.some(x=>x.id==='fps100k'));
+ const slow=evaluateEdgeRelease({automatic,manual,performance:{
+  averageFPS:60,p95FrameMs:18,frames:72,mode:'active-virtual-scroll'}});
+ assert.equal(slow.ready,false);
+ assert.ok(slow.missing.some(x=>x.id==='fps100k'));
+});
