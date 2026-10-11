@@ -4,19 +4,27 @@ const DOM = globalThis.document;
 if (!DOM || typeof DOM.querySelector !== 'function') throw new Error('NEXUS-X requiere un entorno de navegador con DOM.');
 const $ = (s, r=DOM) => r.querySelector(s);
 const $$ = (s, r=DOM) => [...r.querySelectorAll(s)];
+const INSTALL_SCOPE=encodeURIComponent(new URL('./',location.href).pathname);
+const STORE_PREFIX='nexus-x-institutional:'+INSTALL_SCOPE+':';
+const installationStore={
+ getItem:key=>localStorage.getItem(STORE_PREFIX+key),
+ setItem:(key,value)=>localStorage.setItem(STORE_PREFIX+key,value),
+ removeItem:key=>localStorage.removeItem(STORE_PREFIX+key)
+};
 const DB_KEY='nexus_x_inventory_v1';
-const DOC_DB='NEXUS_X_DOCUMENTS_V2';
+const DOC_DB='NEXUS_X_INSTITUTIONAL_DOCUMENTS_V1_'+INSTALL_SCOPE;
 const DOC_STORE='documents';
 const DOC_CACHE_VERSION=3;
-const XKIRO_API='https://nexus-xkiro-gateway.proyectomj11.workers.dev';
+const XKIRO_API=String(globalThis.NEXUS_CONFIG?.xkiroGatewayUrl||'').trim().replace(/\/+$/,'');
+const XKIRO_GATEWAY_HOST=(()=>{try{return new URL(XKIRO_API).hostname}catch{return 'gateway-no-configurado'}})();
 // Eliminar credenciales heredadas; el secreto sólo pertenece al Worker.
-try{localStorage.removeItem('nexus_xkiro_api_key_v1')}catch{}
+try{installationStore.removeItem('nexus_xkiro_api_key_v1')}catch{}
 const XKIRO_MODEL_CACHE_MS=10*60*1000;
 const REPO_OWNER='miqueas80';
 const REPO_NAME='';
 const REPO_BRANCH='';
 const DOC_MAX_BYTES=16*1024*1024;
-const APP_VERSION='2026.10.08-nexus-sweep-reveal-v6';
+const APP_VERSION='2026.10.11-institucional-limpia-v1';
 const INVENTORY_RECOVERY_KEY='nexus_x_inventory_recovery_v1';
 const health={storage:'sin comprobar',documents:'sin comprobar',errors:[],boot:'BOOT'};
 const LENS_EXTERNAL_CACHE_TTL=30*60*1000;
@@ -33,9 +41,9 @@ function storageFailure(error){
  health.errors.push({domain:'Storage',message,at:new Date().toISOString()});health.errors=health.errors.slice(-20);
  return message;
 }
-function readStorage(key){try{return localStorage.getItem(key)}catch(e){storageFailure(e);return null}}
-function writeStorage(key,value){try{localStorage.setItem(key,value);health.storage='disponible'}catch(e){throw new Error(storageFailure(e),{cause:e})}}
-function removeStorage(key){try{localStorage.removeItem(key)}catch(e){throw new Error(storageFailure(e),{cause:e})}}
+function readStorage(key){try{return installationStore.getItem(key)}catch(e){storageFailure(e);return null}}
+function writeStorage(key,value){try{installationStore.setItem(key,value);health.storage='disponible'}catch(e){throw new Error(storageFailure(e),{cause:e})}}
+function removeStorage(key){try{installationStore.removeItem(key)}catch(e){throw new Error(storageFailure(e),{cause:e})}}
 function readJsonStorage(key,fallback){try{const raw=readStorage(key);return raw?JSON.parse(raw):fallback}catch{return fallback}}
 const state={agentTelemetry:{mode:'READY',ms:0,actions:0},agentAudit:[],agentHistory:[],inventory:[],catalog:[],view:'dashboard',web:false,stream:null,scanBusy:false,lensStream:null,lensBusy:false,lensLastContext:null,docs:[],lastQuery:'',activity:[],favorites:new Set(Array.isArray(readJsonStorage('nexus_x_favorites_v1',[]))?readJsonStorage('nexus_x_favorites_v1',[]):[]),docIndexReady:false,docSyncing:false};
 const MASTER_URL='inventory.json';
@@ -120,7 +128,7 @@ function chunkText(text,size=1100,overlap=140){const clean=String(text||'').repl
 function entityRelations(text,doc){const raw=String(text||'');const nt=norm(raw);const rel=[];const seen=new Set();for(const r of state.inventory){const candidates=[{value:r.id,weight:100,kind:'ID'},{value:r.formula,weight:85,kind:'fórmula'},{value:r.name,weight:70,kind:'nombre'}].filter(x=>x.value&&norm(x.value).length>=4).map(x=>({...x,norm:norm(x.value)}));const matched=candidates.filter(x=>x.norm&&nt.includes(x.norm));if(!matched.length||seen.has(r.id))continue;const strong=matched.some(x=>x.kind==='ID'||x.kind==='fórmula'||x.norm.length>=8);if(!strong)continue;const snippets=[];for(const term of matched.slice(0,2)){const pos=nt.indexOf(term.norm);if(pos>=0)snippets.push(raw.slice(Math.max(0,pos-180),Math.min(raw.length,pos+420)).replace(/\s+/g,' ').trim())}seen.add(r.id);rel.push({type:'document→entity',entityId:r.id,entityName:r.name,reason:'mención directa',terms:matched.map(x=>x.value),snippets,confidence:Math.min(100,Math.max(...matched.map(x=>x.weight)))})}return rel.sort((a,b)=>(b.confidence||0)-(a.confidence||0))}
 async function indexDocument({name,path,text,type,size=0,source='local',url='',blob=null,mime='',fingerprint='',revision='',createOnly=false}){const clean=String(text||'').trim();const chunks=chunkText(clean);const relations=entityRelations(clean,{name,path});const doc={name,path:path||name,type:type||docType(name),size:Number(size||0),source,text:clean,chunks,relations,indexedAt:new Date().toISOString(),url,blob,mime:mime||blob?.type||'',fingerprint,revision};checkDocumentCancellation();await putDoc(doc,{createOnly});const i=state.docs.findIndex(x=>x.path===doc.path);const meta={...doc,text:clean,chunks,relations};if(i>=0)state.docs[i]=meta;else state.docs.push(meta);state.docIndexReady=true;renderDocuments();renderDashboard();try{state.dataChannel?.postMessage({type:'documents-changed'})}catch(e){health.errors.push({domain:'Document notification',message:e.message})}return doc}
 function documentSummary(d){const lowText=d.type==='PDF'&&norm(d.text||'').replace(/pagina\s+\d+/g,'').trim().length<40;const relationCount=(d.relations||[]).length;return `<div class="result-card doc-card"><div style="display:flex;justify-content:space-between;gap:10px;align-items:center"><div><strong>📄 ${escapeHtml(d.name)}</strong><div class="muted">${escapeHtml(d.type)} · ${d.chunks?.length||0} fragmentos · ${relationCount} conexiones · ${escapeHtml(d.source||'local')}</div></div><button class="btn teal" data-open-doc="${escapeHtml(d.path)}">Abrir visor</button></div><div>${escapeHtml(d.path||d.name)}</div>${lowText?'<div class="notice warn">PDF con poco texto extraíble. El original se conserva; NEXUS LENS podrá usar una imagen como señal auxiliar en una fase posterior.</div>':''}${relationCount?`<div class="footer-note">Relacionado con: ${d.relations.slice(0,6).map(r=>escapeHtml(r.entityId+' · '+r.entityName)).join(' · ')}</div>`:''}</div>`}
-function renderDocuments(){const el=$('#documentList');if(!el)return;if(state.docSyncing)$('#repoStatus').textContent='Indexando documentos…';if(!state.docs.length){el.innerHTML='<div class="notice">Sin documentos indexados. Subí PDF, Word, Excel, CSV, TXT o Markdown al repositorio y sincronizá, o cargalos manualmente.</div>';return}el.innerHTML=`<div class="notice"><strong>${state.docs.length} documento(s) indexado(s).</strong> La búsqueda cruza documentos, materiales, fórmulas y protocolos. Abrí cualquier archivo dentro de NEXUS-X.</div>`+state.docs.map(documentSummary).join('');$$('[data-open-doc]').forEach(b=>b.onclick=()=>openDocumentViewer(b.dataset.openDoc))}
+function renderDocuments(){const el=$('#documentList');if(!el)return;if(state.docSyncing)$('#repoStatus').textContent='Indexando documentos…';if(!state.docs.length){el.innerHTML='<div class="notice">Instalación vacía: todavía no hay documentos. Cargá archivos de tu institución para construir su índice local.</div>';return}el.innerHTML=`<div class="notice"><strong>${state.docs.length} documento(s) indexado(s).</strong> La búsqueda cruza documentos, materiales, fórmulas y protocolos. Abrí cualquier archivo dentro de NEXUS-X.</div>`+state.docs.map(documentSummary).join('');$$('[data-open-doc]').forEach(b=>b.onclick=()=>openDocumentViewer(b.dataset.openDoc))}
 const searchMemo=new WeakMap();
 const SEARCH_STOP=new Set('de del la el los las un una unos unas en sobre para por con y que tenemos hay nuestro nuestra documento documentos archivo archivos material materiales sustancia sustancias muestra muestrame mostrame buscar busca buscame nexus'.split(' '));
 function searchTerms(q){return [...new Set((norm(q).match(/[\p{L}\p{N}]+/gu)||[]).filter(t=>!SEARCH_STOP.has(t)&&t.length>1).map(t=>t.length>4?t.replace(/(?:es|s)$/,''):t))]}
@@ -252,7 +260,7 @@ async function loadCachedDocumentIndex(){
  renderDocuments();
  renderDashboard();
 }
- function validateInventory(records, expected=111){
+ function validateInventory(records, expected=null){
  if(!Array.isArray(records))throw new Error('La base no contiene un arreglo de registros.');
  if(records.some(r=>!r||typeof r!=='object'||!String(r.name||'').trim()))throw new Error('Hay registros sin nombre válido.');
  const ids=records.map(x=>x.id); const dup=ids.filter((x,i)=>ids.indexOf(x)!==i); if(dup.length)throw new Error(`IDs duplicados: ${[...new Set(dup)].join(', ')}`);
@@ -273,7 +281,7 @@ async function loadMaster({restore=false}={}){
  try{
   const res=await fetchTimeout(MASTER_URL,{cache:'no-store'},8000);if(!res.ok)throw new Error(`HTTP ${res.status}`);
   const data=await res.json();if(!Array.isArray(data.records))throw new Error('Base maestra inválida');
-  const recs=data.records.map(normalizeRecord);validateInventory(recs,111);
+  const recs=data.records.map(normalizeRecord);validateInventory(recs,null);
   if(restore){state.inventoryReadOnly=false;if(!saveInventory(recs,{backup:true}))return false;saveActivity('Base maestra restaurada; copia anterior disponible');}
   else if(raw===null&&!state.inventoryReadOnly){if(!saveInventory(recs)){state.inventory=recs;state.inventoryReadOnly=true}saveActivity(state.inventoryReadOnly?'Base maestra en lectura: guardado no disponible':'Base maestra instalada por primera vez');}
   else{state.inventory=recs;saveActivity('Base maestra en lectura; datos locales preservados para recuperación');}
@@ -459,7 +467,7 @@ function rememberXKiroModel(id,mode){
  lastKnownGoodModel=id;xkiroAvailability.delete(id);
  if(xkiroGoodModels&&typeof xkiroGoodModels==='object'&&!Array.isArray(xkiroGoodModels)){
   xkiroGoodModels[mode]={id,at:Date.now()};
-  try{localStorage.setItem(XKIRO_GOOD_MODEL_KEY,JSON.stringify(xkiroGoodModels))}catch{}
+  try{installationStore.setItem(XKIRO_GOOD_MODEL_KEY,JSON.stringify(xkiroGoodModels))}catch{}
  }
 }
 function orderXKiroCandidates(models,mode='text'){
@@ -482,7 +490,7 @@ async function xkiroFailure(response,model){
   message:modelAuth?'User not found.':blocked?'Cloudflare Error 1010':kind==='authentication'?'Autenticación externa rechazada':kind==='rate_limit'?'Límite temporal de solicitudes':kind==='model_unavailable'?'Modelo temporalmente no disponible':'Proveedor externo no disponible',
   code:modelAuth?'authentication_error':blocked?'1010':kind,
   rayId:String(data.ray_id||upstream.rayId||response.headers.get('CF-Ray')||'').replace(/[^A-Za-z0-9-]/g,'').slice(0,80),
-  domain:blocked&&['api.xkiro.com','nexus-xkiro-gateway.proyectomj11.workers.dev'].includes(upstream.domain||data.zone)?(upstream.domain||data.zone):blocked?'nexus-xkiro-gateway.proyectomj11.workers.dev':'api.xkiro.com',at:new Date().toISOString()};
+  domain:blocked&&['api.xkiro.com',XKIRO_GATEWAY_HOST].includes(upstream.domain||data.zone)?(upstream.domain||data.zone):blocked?XKIRO_GATEWAY_HOST:'api.xkiro.com',at:new Date().toISOString()};
  health.xkiro={...(health.xkiro||{}),status:'degradado',lastError:diagnostic,failures:[...(health.xkiro?.failures||[]),diagnostic].slice(-12)};
  if(modelAuth||response.status===503)xkiroAvailability.set(model,Date.now()+12*60*1000);
  if(response.status===429)xkiroRetryAt=Date.now()+retryDelay(response.headers.get('Retry-After'));
@@ -556,7 +564,7 @@ async function loadScript(url,globalName){
  })().finally(()=>scriptPromises.delete(url));scriptPromises.set(url,promise);return promise;
 }
 async function importExcel(file){try{await validateDocumentFile(file);const parsed=await extractSpreadsheet(file);const rows=[];for(const sheet of parsed.sheets){const data=sheet.rows;if(!data.length)continue;const hi=data.slice(0,12).findIndex(row=>row.some(value=>/^(nombre|descripcion|sustancia|sustancia mezcla material|material)$/.test(norm(value).replace(/[^a-z0-9]+/g,' ').trim())));if(hi<0)continue;const headers=data[hi].map((x,i)=>String(x||`Campo ${i+1}`).trim());for(let i=hi+1;i<data.length;i++){const raw={};headers.forEach((h,j)=>raw[h]=data[i][j]??'');if(Object.values(raw).some(v=>String(v).trim()))rows.push(raw)}}if(!rows.length)throw new Error('No se encontraron filas.');const mapped=rows.map((r,i)=>{const keys=Object.keys(r);const pick=(...names)=>{const k=keys.find(k=>names.includes(norm(k).replace(/[^a-z0-9]+/g,' ').trim())||(names.includes('presentacion')&&norm(k).startsWith('presentacion ')));return k?r[k]:''};return normalizeRecord({id:pick('id nexus x','id_nexus_x','id','codigo nexus','codigo'),originalNumber:pick('nº original','n° original','numero original','nro original','n','no'),name:pick('sustancia mezcla material','sustancia','mezcla','material','nombre','descripcion'),formula:pick('formula','fórmula','formula quimica','fórmula química'),physicalState:pick('estado fisico','estado físico'),presentation:pick('presentacion','presentación'),originalPackage:pick('envase original'),expiry:pick('fecha envasado vencimiento','vencimiento','fecha vencimiento','fecha de envasado o vencimiento'),location:pick('ubicacion armario','ubicación armario','ubicacion','ubicación','estante','ubicacionen el armario','ubicacion en el armario'),notes:pick('observaciones','notas','comments')},i+1)});let generated=0;const used=new Set(mapped.filter(r=>validId(r.id)).map(r=>r.id));let next=1;mapped.forEach(r=>{if(!validId(r.id)){while(used.has(`NEXUS-X-${String(next).padStart(4,'0')}`))next++;r.id=`NEXUS-X-${String(next).padStart(4,'0')}`;used.add(r.id);next++;generated++}});validateInventory(mapped,null);if(!confirm(`¿Reemplazar el inventario por ${mapped.length} registros de Excel? Se guardará una copia anterior.`))return;await indexLocalFile(file,parsed.text);if(!saveInventory(mapped,{backup:true}))return;saveActivity(`Excel importado: ${mapped.length} filas · ${generated} IDs normalizados`);renderAll();toast(`Excel cargado: ${mapped.length} registros.`)}catch(e){console.error(e);toast('No se importó el Excel: '+e.message)}}
-async function importWord(file){try{await validateDocumentFile(file);const {text}=await JSZipReady(file);const blocks=text.split(/(?=REGISTRO\s+\d+)/).slice(1);const labels=['ID_NEXUS_X','Nº_Original','Sustancia_Mezcla_Material','Formula','Estado_Fisico','Presentacion','Envase_Original','Fecha_Envasado_Vencimiento','Ubicacion_Armario','Observaciones'];const re=new RegExp('('+labels.map(x=>x.replace(/[.*+?^${}()|[\\]\\]/g,'\\$&')).join('|')+')\\s*:\\s*([\\s\\S]*?)(?=\\s+(?:'+labels.join('|')+')\\s*:|$)','g');const records=[];for(const b of blocks){const mm=b.match(/^REGISTRO\s+(\d+)/);if(!mm)continue;const o={record:Number(mm[1])};let m;while((m=re.exec(b))){o[m[1]]=(m[2]||'').replace(/\s+/g,' ').trim()}re.lastIndex=0;records.push(normalizeRecord(o,records.length+1))}validateInventory(records,111);if(!confirm('¿Reemplazar el inventario por el Word maestro validado? Se guardará una copia anterior.'))return;await indexLocalFile(file,text);if(!saveInventory(records,{backup:true}))return;saveActivity('Word maestro validado; inventario guardado e índice persistido');renderAll();toast('Word maestro validado e indexado: 111 registros.')}catch(e){console.error(e);toast('Word rechazado; se conservó la base anterior. '+e.message)}}
+async function importWord(file){try{await validateDocumentFile(file);const {text}=await JSZipReady(file);const blocks=text.split(/(?=REGISTRO\s+\d+)/).slice(1);const labels=['ID_NEXUS_X','Nº_Original','Sustancia_Mezcla_Material','Formula','Estado_Fisico','Presentacion','Envase_Original','Fecha_Envasado_Vencimiento','Ubicacion_Armario','Observaciones'];const re=new RegExp('('+labels.map(x=>x.replace(/[.*+?^${}()|[\\]\\]/g,'\\$&')).join('|')+')\\s*:\\s*([\\s\\S]*?)(?=\\s+(?:'+labels.join('|')+')\\s*:|$)','g');const records=[];for(const b of blocks){const mm=b.match(/^REGISTRO\s+(\d+)/);if(!mm)continue;const o={record:Number(mm[1])};let m;while((m=re.exec(b))){o[m[1]]=(m[2]||'').replace(/\s+/g,' ').trim()}re.lastIndex=0;records.push(normalizeRecord(o,records.length+1))}validateInventory(records,null);if(!confirm('¿Reemplazar el inventario por el Word maestro validado? Se guardará una copia anterior.'))return;await indexLocalFile(file,text);if(!saveInventory(records,{backup:true}))return;saveActivity('Word maestro validado; inventario guardado e índice persistido');renderAll();toast('Word validado e indexado: '+records.length+' registros.')}catch(e){console.error(e);toast('Word rechazado; se conservó la base anterior. '+e.message)}}
 function qrExtractId(raw){const text=String(raw??'').trim();const m=text.match(/(?:NEXUS[-_:]?X|NX)[-_: ]*(\d{1,6})/i);return m?`NEXUS-X-${String(Number(m[1])).padStart(4,'0')}`:canonicalId(text.replace(/[?#].*$/,'').replace(/\/+$/,''));}
 async function loadQrFallback(){await loadScript('./jsQR.js','jsQR');}
 async function decodeQrImage(file){try{const bitmap=await createImageBitmap(file);if('BarcodeDetector' in window){try{const detector=new BarcodeDetector({formats:['qr_code']});const codes=await detector.detect(bitmap);if(codes[0]?.rawValue){bitmap.close();processQr(codes[0].rawValue);return}}catch(e){console.warn('BarcodeDetector imagen; se usa jsQR',e)}}await loadQrFallback();const canvas=DOM.createElement('canvas');const scale=Math.min(1,1600/Math.max(bitmap.width,bitmap.height));canvas.width=Math.max(1,Math.round(bitmap.width*scale));canvas.height=Math.max(1,Math.round(bitmap.height*scale));const ctx=canvas.getContext('2d',{willReadFrequently:true});ctx.drawImage(bitmap,0,0,canvas.width,canvas.height);bitmap.close();const img=ctx.getImageData(0,0,canvas.width,canvas.height);const code=window.jsQR(img.data,img.width,img.height,{inversionAttempts:'attemptBoth'});if(!code?.data)throw new Error('No se detectó un QR en la imagen.');processQr(code.data)}catch(e){console.error(e);toast('No se pudo leer el QR: '+e.message)}}
@@ -631,6 +639,7 @@ function safeExternalUrl(value){
  }
 }
 async function loadXKiroModels({force=false}={}){
+ if(!XKIRO_API)throw new Error('Gateway externo no configurado para esta institución.');
  if(!force&&xkiroModelCache?.expiresAt>Date.now())return xkiroModelCache;
 
  const res=await fetchTimeout(
@@ -900,6 +909,7 @@ function setXKiroHealth(status,extra={}){
 }
 
 async function probeXKiroGateway({force=false,epoch=internetActivationEpoch}={}){
+ if(!XKIRO_API){if(epoch===internetActivationEpoch&&state.web)setXKiroHealth('desactivado',{message:'Gateway externo opcional no configurado'});return {ok:false,message:'Gateway externo no configurado'};}
  if(!navigator.onLine){
   if(epoch===internetActivationEpoch&&state.web)setXKiroHealth('offline',{message:'Dispositivo sin conexión'});
   return {ok:false,offline:true,message:'Dispositivo sin conexión'};
@@ -1043,7 +1053,7 @@ async function collectDiagnostics(){
  diagnosticJob=(async()=>{
 const checks={version:APP_VERSION,checkedAt:new Date().toISOString(),boot:health.boot,voice:voiceRuntimeStatus(),network:{onlineHint:navigator.onLine,meaning:'Estado informado por el navegador; no prueba acceso a Internet'},inventory:runIntegrity(),documents:{loaded:state.docs.length},nexus:{actions:ActionRegistry.size,local:true},xkiro:{gateway:XKIRO_API,status:health.xkiro?.status||'sin comprobar',model:health.xkiro?.model||null,freeModels:health.xkiro?.freeModels||null,visionModels:health.xkiro?.visionModels||null}};
   const probe='nexus_x_storage_probe_'+Date.now();
-  try{localStorage.setItem(probe,'ok');checks.storage={writable:localStorage.getItem(probe)==='ok'};localStorage.removeItem(probe)}catch(e){checks.storage={writable:false,error:e.name}}
+  try{installationStore.setItem(probe,'ok');checks.storage={writable:installationStore.getItem(probe)==='ok'};installationStore.removeItem(probe)}catch(e){checks.storage={writable:false,error:e.name}}
   try{if(navigator.storage?.estimate)checks.storage.estimate=await navigator.storage.estimate();if(navigator.storage?.persisted)checks.storage.persistent=await navigator.storage.persisted()}catch(e){checks.storage.estimateError=e.message}
   try{const db=await openDocDB();try{checks.indexedDB={status:'disponible',database:DOC_DB,version:db.version,count:await new Promise((resolve,reject)=>{const tx=db.transaction(DOC_STORE,'readonly'),req=tx.objectStore(DOC_STORE).count();tx.oncomplete=()=>resolve(req.result);tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error||new Error('Lectura cancelada'))})}}finally{db.close()}}catch(e){checks.indexedDB={status:'error',error:e.message}}
   let registration;
@@ -1098,9 +1108,9 @@ async function syncPublishedDocuments(){
  if(!manifestResponse.ok)throw new Error(`Manifiesto documental HTTP ${manifestResponse.status}`);
  const manifest=await manifestResponse.json();
  const files=(Array.isArray(manifest?.documents)?manifest.documents:[]).filter(entry=>entry&&typeof entry.path==='string'&&/\.(pdf|docx|xlsx|xls)$/i.test(entry.path));
- if(files.length!==6||new Set(files.map(x=>x.path)).size!==6)throw new Error('Manifiesto canónico inválido: se requieren 6 rutas únicas.');
+ if(new Set(files.map(x=>x.path)).size!==files.length)throw new Error('Manifiesto documental inválido: rutas duplicadas.');
  let ok=0;const failed=[];
- if(status)status.textContent=`${files.length} documentos publicados · comprobando…`;
+ if(status)status.textContent=files.length?`${files.length} documentos publicados · comprobando…`:'Instalación limpia · sin documentos publicados';
  for(const entry of files){try{
   const path=String(entry.path||'').replace(/^\.?\//,'');
   if(!path||/[:\\?#]/.test(path)||path.startsWith('/')||path.split('/').includes('..'))throw new Error('Ruta documental inválida');
@@ -1119,7 +1129,7 @@ async function syncPublishedDocuments(){
   await indexDocument({name:file.name,path,type,size:blob.size,text,source:'Repositorio publicado',url,mime:blob.type,blob,revision});ok++;
  }catch(e){failed.push(`${entry.path}: ${e.message||e}`)}}
  renderDocuments();renderDashboard();
- if(status){status.textContent=`${ok}/${files.length} documentos disponibles${failed.length?` · ${failed.length} con error`:''}`;status.title=failed.join('\n')}
+ if(status){status.textContent=files.length?`${ok}/${files.length} documentos disponibles${failed.length?` · ${failed.length} con error`:''}`:'Sin documentos publicados · podés cargar los de tu escuela';status.title=failed.join('\n')}
  saveActivity(`Documentos publicados: ${ok}/${files.length} disponibles`);
  return {ok:failed.length===0,files:files.length,indexed:ok,failed,source:'published-manifest'};
 }
@@ -2612,13 +2622,13 @@ async function requestMicrophonePermission({silent=false}={}){
   }catch(e){const map={NotAllowedError:'Micrófono bloqueado. Permitilo para este sitio en Chrome.',PermissionDeniedError:'Permiso de micrófono denegado.',NotFoundError:'No se encontró un micrófono.',NotReadableError:'El micrófono está ocupado por otra aplicación.'};const msg=map[e.name]||`No se pudo acceder al micrófono: ${e.message||e}`;$('#voiceStatusText').textContent=msg;if(!silent)toast(msg);return false}
 }
 function handleStorageChange(event){
- if(event.key===DB_KEY&&event.newValue!==state.inventoryRaw){
+ if(event.key===STORE_PREFIX+DB_KEY&&event.newValue!==state.inventoryRaw){
   if($('#itemModal').classList.contains('open')){state.inventoryError='El inventario cambió en otra pestaña. Conservá el formulario y recargá antes de guardar.';renderDashboard();toast(state.inventoryError);return}
   try{if(event.newValue===null)throw new Error('Se retiró el inventario del almacenamiento.');const rows=JSON.parse(event.newValue);validateInventory(rows,null);state.inventory=rows;state.inventoryRaw=event.newValue;state.inventoryReadOnly=false;state.inventoryError='';renderAll()}
   catch(e){state.inventoryReadOnly=true;state.inventoryError='Cambio externo no válido; se conserva la vista local. '+e.message;renderDashboard();toast(state.inventoryError)}
  }
- if(event.key===CAL_KEY){renderMiniCalendar();if($('#calendarModal').classList.contains('open'))renderCalendar()}
- if(event.key==='nexus_x_favorites_v1'){const rows=readJsonStorage(event.key,[]);if(Array.isArray(rows)){state.favorites=new Set(rows);renderInventory()}}
+ if(event.key===STORE_PREFIX+CAL_KEY){renderMiniCalendar();if($('#calendarModal').classList.contains('open'))renderCalendar()}
+ if(event.key===STORE_PREFIX+'nexus_x_favorites_v1'){const rows=readJsonStorage('nexus_x_favorites_v1',[]);if(Array.isArray(rows)){state.favorites=new Set(rows);renderInventory()}}
 }
 let bound=false;
 function bind(){

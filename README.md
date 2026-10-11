@@ -1,90 +1,30 @@
-# NEXUS-X v1.0
+# NEXUS-X — Edición Institucional Limpia
 
-Estado: candidato Stable / Local-First; pendiente validación física Android.
+Versión Local-First/Offline-First para distribuir a escuelas técnicas y laboratorios sin entregar datos de la institución que desarrolló el proyecto.
 
-Inventario NEXUS-X (111 registros), QR y OCR local, NEXUS Lens, documentos
-indexados, búsquedas semánticas locales, agente NEXUS, voz y PWA offline.
-Gemini y búsqueda web son complementarios: el núcleo local funciona sin ellos.
-Sin QR o etiqueta local legible, la visión sólo propone categorías; no identifica
-el contenido químico de un recipiente. Brillo/contraste sólo evalúan calidad.
+## Estado inicial
 
-Gemini consulta `/models` y aplica failover limitado ante errores temporales o modelo
-retirado. `NEXUS_CONFIG.geminiModelChain` permite configurar preferencias; sólo se
-usan modelos disponibles. Sin proveedor operativo se conserva el funcionamiento local.
-Voz local es opcional según soporte de es-AR; su instalación requiere pulsar el botón
-correspondiente en Ajustes. Se conserva SpeechRecognition del navegador como alternativa.
+**0 registros, 0 sustancias, 0 documentos, 0 ubicaciones precargadas.** Ninguna escuela recibe archivos, inventario ni índices de otra institución. Se conservan la interfaz, la mascota, NEXUS IA, Lens local, voz, QR, PWA, informes, calendario y herramientas de inventario y documentación. Los motores de reconocimiento conservan solo categorías técnicas generales, no registros escolares.
 
-Pruebas: `npm ci` y `npm test` (Node LTS). No hay build ni backend obligatorio.
-Validación manual pendiente: cámara, micrófono y servicios externos reales.
+## Instalación
 
-## Lectores locales
+1. Descargá el ZIP de esta rama **sin incluir el historial .git**. Extraelo en una carpeta nueva.
+2. Publicalo en un hosting estático HTTPS (por ejemplo, GitHub Pages). No requiere backend para el núcleo.
+3. Cada escuela debe tener **su propia ruta o dominio HTTPS**. Las claves localStorage e IndexedDB de inventario, documentos y referencias visuales se separan por ruta. Los datos nuevos se guardan en el navegador local del operador, no se trasladan con el ZIP.
+4. Verificá que el dashboard muestre 0 registros y Documentos esté vacío. Creá un primer registro con el formulario, importá un Excel/Word compatible o cargá archivos PDF/Word/Excel para indexarlos.
+5. Prepará los motores de voz y Lens offline desde la aplicación si hace falta; requieren espacio libre. QR e inventario local no necesitan Internet.
+6. `config.js` permite configurar una URL HTTPS propia para el gateway opcional de xKiro. No incrustes contraseñas, tokens ni otras credenciales en el frontend público. Sin gateway, el núcleo local continúa operativo.
 
-Se conservan las bibliotecas utilizadas por la aplicación, servidas ahora
-desde el mismo repositorio. No son dependencias del arranque del inventario.
+No añadas documentos de la escuela ni inventarios al paquete universal: esos datos corresponden a cada institución. Un cambio de URL o ruta puede separar los datos del operador anterior; realizá respaldos.
 
-| Biblioteca | Versión | Fuente |
-|---|---|---|
-| PDF.js (legacy build) | 4.10.38 | paquete oficial npm `pdfjs-dist@4.10.38` |
-| JSZip | 3.10.1 | paquete oficial npm `jszip@3.10.1` |
-| jsQR | 1.4.0 | paquete oficial npm `jsqr@1.4.0` |
-| SheetJS | 0.20.3 | https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js |
+## Pruebas
 
-Licencias adjuntas; `checksums.json` fija SHA-256 de archivos recibidos.
-PDF.js 3.11.174 se reemplaza por una versión posterior al parche de
-GHSA-wgrm-67xf-hhpq. Además se usa `isEvalSupported:false` en cada apertura.
-Referencia: https://github.com/mozilla/pdf.js/security/advisories/GHSA-wgrm-67xf-hhpq
+Ejecutá `npm test` con Node.js (sin instalar dependencias) para comprobar que no se empacan contenidos institucionales. Verificá manualmente en navegador/Android el arranque, creación y edición, importación, persistencia tras recarga, QR, voz, Lens, modo avión y PWA.
 
-NEXUS LENS no carga Tesseract. PP-OCRv6 Tiny y MobileCLIP-S0 se ejecutan localmente
-con ONNX Runtime Web y sus modelos se incluyen en «Preparar visión offline».
-Lens prioriza QR exacto, código y etiqueta legibles localmente; sólo el QR puede
-confirmar un registro. La visión propone categorías y nunca determina el contenido
-químico de un recipiente. Si no existe evidencia local suficiente y el usuario
-habilitó Internet, una única captura puede contrastarse con el proveedor visual
-multimodal configurado.
+## Advertencia sobre historial
 
-## Proveedor visual de NEXUS LENS
+**Este trabajo derivó de un repositorio cuyo historial Git ya contenía archivos escolares.** La rama tiene un árbol limpio y su ZIP descargado desde GitHub no contiene archivos del historial, pero **clonar el repositorio completo con .git sí puede recuperar versiones anteriores**. Para distribución pública con historial realmente limpio, copiá el contenido del ZIP en un repositorio nuevo e inicializá ahí su primer commit.
 
-Lens procesa la cámara localmente y envía una única captura sólo cuando no hay
-una identificación local exacta, Internet está habilitado y existe un proveedor
-configurado. La opción actual `gemini-byok` reutiliza exclusivamente la clave
-personal ingresada por el usuario en Ajustes; el repositorio no contiene claves.
+## Derechos
 
-Para una instalación institucional con una clave privada del servidor debe
-configurarse en tiempo de ejecución `window.NEXUS_CONFIG.lensVisionProxy` con
-la URL HTTPS de un proxy autenticado. Ese proxy conserva el secreto fuera de
-GitHub Pages y debe aceptar `{task, image, context}` y devolver
-`{analysis, model}`. No se admite incluir credenciales en la URL. Las imágenes
-no se guardan en caché: sólo se cachea durante 30 minutos el resultado derivado
-asociado a su huella.
-
-## Checklist físico Android pendiente
-
-ONLINE
-
-1. Abrir app.
-2. Comprobar 111 registros.
-3. Buscar ácido nítrico.
-4. QR impreso.
-5. Seleccionar cámara.
-6. Lens + QR.
-7. Lens + objeto sin QR.
-8. Activar Internet.
-9. Reconocer objeto con Gemini.
-10. Abrir coincidencia local.
-11. Buscar evidencia web.
-12. Probar voz.
-13. Abrir documento.
-14. Probar Gemini.
-15. Comprobar diagnóstico.
-
-OFFLINE
-
-1. Activar modo avión.
-2. Cerrar/reabrir PWA.
-3. Comprobar inventario.
-4. Buscar sustancia.
-5. QR.
-6. Lens con código local.
-7. Documentos cacheados.
-8. Comandos NEXUS locales.
-9. Comprobar que Gemini/web fallan sin afectar el sistema.
+La licencia actual del software (`LICENSE`) reserva los derechos al titular. El titular debe autorizar su utilización o redistribución a otras instituciones. Se conservan las atribuciones y licencias de componentes de terceros.
