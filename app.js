@@ -20,7 +20,7 @@ const XKIRO_GATEWAY_HOST=(()=>{try{return new URL(XKIRO_API).hostname}catch{retu
 // Eliminar credenciales heredadas; el secreto sólo pertenece al Worker.
 try{installationStore.removeItem('nexus_xkiro_api_key_v1')}catch{}
 const XKIRO_MODEL_CACHE_MS=10*60*1000;
-const REPO_OWNER='miqueas80';
+const REPO_OWNER='';
 const REPO_NAME='';
 const REPO_BRANCH='';
 const DOC_MAX_BYTES=16*1024*1024;
