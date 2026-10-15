@@ -1,0 +1,39 @@
+name: NEXUS web quality gate
+
+on:
+  push:
+    branches:
+      - feature/nexus-web-quality-20261015
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nexus-web-quality-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install locked test dependencies
+        run: npm ci --ignore-scripts
+      - name: Run full existing regression suite and new web gates
+        run: npm test
+      - name: Validate app, service worker and engine syntax
+        run: |
+          node --check app.js
+          node --check sw.js
+          node --check offline/core.js
+          node --check offline/knowledge.js
+          node --check offline/vision-worker.js
+          node --check offline/ocr-worker.js
