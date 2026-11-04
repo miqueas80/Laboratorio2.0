@@ -80,7 +80,7 @@
    'hoy','mañana','pasado mañana','lunes','martes','miércoles','jueves','viernes','sábado','domingo',
    'preparar','revisar','revisá','revisa','apagá','apaga','apagar',
    'encendé','encende','encender','encendé','prender','foco','focos','led','luz',
-   'prendeme','encendeme','apagame','eniendas','enciendas','lamparita','lucecita','numero','número','primer','primera','segundo','segunda',
+   'prendeme','encendeme','apagame','enciendas','lamparita','lucecita','numero','número','primer','primera','segundo','segunda',
    'grados','hectopascales','relativa','atmosférica','atmosferica','cuántos','cuantos','podés','podes','podrías','podrias','quisiera','me decís',
    'uno','dos','temperatura','presión','presion','humedad','ambiental','expo','ácido nítrico','ácido clorhídrico','ácido sulfúrico',
    'hidróxido','sodio','potasio','reactivo','probeta','pipeta','bureta','matraz',
