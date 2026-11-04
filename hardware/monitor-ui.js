@@ -156,7 +156,7 @@ function init(){
    try{
      const result=await monitor.recordOnce({automation:true});
      const count=result.alerts?.length||0;
-     feedback(count?'Se activaron '+count+' regla'+(count===1?'':'s')+'. Revisá las alertas y el estado del foco.':
+     feedback(count?(count===1?'Se activó 1 regla.':'Se activaron '+count+' reglas.')+' Revisá las alertas y el estado del foco.':
        monitor.rules.length?'Reglas evaluadas: no se detectaron condiciones nuevas.':'No hay reglas para evaluar.');
    }catch(error){feedback('No se pudieron evaluar las reglas: '+(error.message||error));}
  };
