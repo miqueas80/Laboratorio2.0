@@ -117,6 +117,6 @@ test('stop prevents future polling or automatic actions',async()=>{
   h.monitor.stop();
   assert.equal(h.monitor.running,false);
   h.values.temperature=32;
-  await h.monitor.recordOnce();
+  await h.monitor.recordOnce({automation:true});
   assert.equal(h.leds.length,0);
 });
