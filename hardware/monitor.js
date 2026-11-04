@@ -181,18 +181,22 @@ class NexusHardwareMonitor {
     const triggered=[];
     if(!this.bridge?.connected)return triggered;
     for(const rule of this.rules){
+      // A stopped or disconnected monitor must never actuate another rule.
+      if(!this.running||!this.bridge.connected)break;
       const value=sample[rule.metric];
       if(value===null||!Number.isFinite(value))continue;
       const crossing=rule.comparison==='above'?value>rule.threshold:value<rule.threshold;
       const previous=this.states.get(rule.id);
       this.states.set(rule.id,crossing);
-      // Initial observation establishes baseline; never switch hardware when reopening a page.
-      if(previous!==false||!crossing)continue;
+      // An explicitly started monitoring session evaluates the very first reading.
+      // If the condition is already met, notify/actuate ONCE; keep silent until
+      // the condition clears and is met again. Never run on page load or manual reads.
+      if(!crossing||previous===true)continue;
       const message='Alerta local: '+METRICS[rule.metric].label+' '+String(value).replace('.',',')+
         (rule.comparison==='above'?' supera ':' está por debajo de ')+String(rule.threshold).replace('.',',');
       const alert={at:sample.at,ruleId:rule.id,message,action:rule.action,confirmed:false};
       if(rule.action==='alert'){alert.confirmed=true;}
-      else if(rule.armed&&this.bridge.connected){
+      else if(rule.armed&&this.running&&this.bridge.connected){
         const m=/^led([12])_(on|off)$/.exec(rule.action);
         if(m){
           try{
