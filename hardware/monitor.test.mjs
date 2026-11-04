@@ -36,7 +36,7 @@ test('monitoring saves actual samples to scoped IndexedDB; CSV export and histor
   await h.monitor.recordOnce();
   const history=await h.monitor.getHistory({limit:10});
   assert.equal(history.length,2);
-  assert.deepEqual(history.map(x=>x.temperature),[24,25.2]);
+  assert.deepEqual(plain(history.map(x=>x.temperature)),[24,25.2]);
   assert.match(h.monitor.toCSV(history),/2026-11-03T12:01:00.000Z,25.2,1000,55/);
   assert.equal(h.monitor.dbName.includes('Laboratorio2.0'),true);
   h.monitor.stop();
@@ -85,9 +85,9 @@ test('disconnected BLE stops monitoring and cannot fabricate samples or actuatio
   const h=rig();
   h.monitor.addRule({metric:'temperature',comparison:'above',threshold:27,action:'led1_on',armed:true});
   h.bridge.connected=false;
-  await assert.rejects(h.monitor.start(),/conectad/i);
+  await assert.rejects(h.monitor.start(),/conect/i);
   assert.equal(h.monitor.running,false);
-  await assert.rejects(h.monitor.recordOnce({automation:true}),/conectad/i);
+  await assert.rejects(h.monitor.recordOnce({automation:true}),/conect/i);
   assert.equal(h.leds.length,0);
   assert.equal((await h.monitor.getHistory()).length,0);
 });
