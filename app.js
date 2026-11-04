@@ -16,12 +16,13 @@ const REPO_OWNER='miqueas80';
 const REPO_NAME='';
 const REPO_BRANCH='';
 const DOC_MAX_BYTES=16*1024*1024;
-const APP_VERSION='2026.11.04-hardware-monitor-v2-r2';
+const APP_VERSION='2026.11.04-voice-reliability-v3-r1';
 const INVENTORY_RECOVERY_KEY='nexus_x_inventory_recovery_v1';
 const health={storage:'sin comprobar',documents:'sin comprobar',errors:[],boot:'BOOT'};
 const LENS_EXTERNAL_CACHE_TTL=30*60*1000;
 const LENS_EXTERNAL_CACHE_LIMIT=20;
-const VOICE_WAKE=/\bnexus(?:[- ]?x)?\b/i;
+// Wake word must lead the utterance: don't execute incidental mentions of 'Nexus'.
+const VOICE_WAKE=/^\s*(?:(?:hola|che|oye|ey)\s+)?(?:nexus(?:[- ]?x)?|nexos?)\b/i;
 let voiceRecognition=null;let voiceListening=false;let voiceMonitoring=false;let voiceSpeaking=false;let voiceAwaitingCommand=false;let voiceWakeTimer=null;let voiceRestartTimer=null;let voicePendingIntent=null;let voicePendingTimer=null;let voiceCommandQueue=Promise.resolve();
 // El motor ASR es intercambiable; intenciones y Action Registry siguen siendo únicos.
 let voiceEngineMode='none',voiceSessionEpoch=0,voiceSwitchTimer=null,voiceCommandBusy=false,voiceLastInputAt=0,voiceLastCommand='',voiceLastCommandAt=0,voiceASRConfidence=null;
@@ -2419,6 +2420,7 @@ async function executeVoiceCommand(q){
  return failed.length===0;
 }
 function stopVoiceRecognition({manual=true}={}){
+  voiceCalibrationActive=false;showVoiceCalibrationPrompt();
   ++voiceSessionEpoch;clearTimeout(voiceSwitchTimer);voiceSwitchTimer=null;voiceEngineMode='none';voiceASRConfidence=null;
   voiceMonitoring=false;voiceListening=false;voiceAwaitingCommand=false;voiceSpeaking=false;
   clearTimeout(voiceWakeTimer);clearTimeout(voiceRestartTimer);clearTimeout(voicePendingTimer);voicePendingTimer=null;voicePendingIntent=null;
@@ -2460,23 +2462,90 @@ async function prepareOfflineEngine(group){
 }
 let voiceLastSpoken='',voiceUtteranceId=0,voicePartialInterrupted=false,voiceEchoUntil=0;
 function voiceTextIsEcho(text){const n=norm(text).replace(/[^a-z0-9 ]/g,'').trim();return (voiceSpeaking||Date.now()<voiceEchoUntil)&&n.length>8&&norm(voiceLastSpoken).replace(/[^a-z0-9 ]/g,'').includes(n);}
+const VOICE_CALIBRATION_PHRASES=['nexus abre inventario','nexus revisa temperatura','nexus prende foco uno','nexus apaga foco dos','nexus abre documentos'];
+let voiceCalibrationActive=false,voiceCalibrationIndex=0,voiceCalibrationErrors=0,voiceCalibrationWords=0;
+function voiceWordErrors(expected,heard){
+ const tokens=s=>norm(s).replace(/[^a-z0-9\s]/g,' ').replace(/\s+/g,' ').trim().split(' ').filter(Boolean);
+ const a=tokens(expected),b=tokens(heard),d=Array.from({length:a.length+1},()=>Array(b.length+1).fill(0));
+ for(let i=0;i<=a.length;i++)d[i][0]=i;
+ for(let j=0;j<=b.length;j++)d[0][j]=j;
+ for(let i=1;i<=a.length;i++)for(let j=1;j<=b.length;j++)
+  d[i][j]=Math.min(d[i-1][j]+1,d[i][j-1]+1,d[i-1][j-1]+(a[i-1]===b[j-1]?0:1));
+ return {errors:d[a.length][b.length],words:a.length};
+}
+function showVoiceCalibrationPrompt(){
+ const prompt=$('#voiceCalibrationPrompt'),button=$('#voiceCalibrationButton');
+ if(button)button.textContent=voiceCalibrationActive?'Cancelar prueba guiada':'Iniciar prueba de reconocimiento';
+ if(prompt)prompt.textContent=voiceCalibrationActive?
+  'Frase '+(voiceCalibrationIndex+1)+'/'+VOICE_CALIBRATION_PHRASES.length+': «'+VOICE_CALIBRATION_PHRASES[voiceCalibrationIndex]+'»':
+  'La prueba no está activa. No se ejecutan acciones durante la prueba.';
+}
+function receiveVoiceCalibrationTranscript(transcript){
+ const score=voiceWordErrors(VOICE_CALIBRATION_PHRASES[voiceCalibrationIndex],transcript);
+ voiceCalibrationErrors+=score.errors;voiceCalibrationWords+=score.words;voiceCalibrationIndex++;
+ const summary=$('#voiceCalibrationSummary');
+ const report='Prueba: '+voiceCalibrationIndex+'/'+VOICE_CALIBRATION_PHRASES.length+' frases · errores de palabras: '+
+  voiceCalibrationErrors+'/'+voiceCalibrationWords+' ('+Math.round(100*voiceCalibrationErrors/Math.max(1,voiceCalibrationWords))+
+  ' %) · última frase: «'+transcript.slice(0,100)+'»';
+ if(voiceCalibrationIndex>=VOICE_CALIBRATION_PHRASES.length){
+  stopVoiceRecognition();
+  if(summary)summary.textContent=report+' · Prueba terminada. Cambiá de modo y repetila para comparar.';
+ }else{
+  if(summary)summary.textContent=report;
+  showVoiceCalibrationPrompt();
+ }
+}
+async function toggleVoiceCalibration(){
+ const summary=$('#voiceCalibrationSummary');
+ if(voiceCalibrationActive){
+  stopVoiceRecognition();
+  if(summary)summary.textContent='Prueba cancelada. Ninguna orden fue ejecutada.';
+  return;
+ }
+ if(voiceMonitoring)stopVoiceRecognition();
+ voiceCalibrationIndex=0;voiceCalibrationErrors=0;voiceCalibrationWords=0;voiceCalibrationActive=true;
+ if(summary)summary.textContent='Prueba iniciada · pronunciá cada frase. Los focos no se accionarán.';
+ showVoiceCalibrationPrompt();
+ const started=await startVoiceRecognition();
+ if(!started){voiceCalibrationActive=false;showVoiceCalibrationPrompt();if(summary)summary.textContent='No se pudo iniciar la prueba. Prepará Vosk y permití el micrófono.';}
+}
+
 function receiveVoicePartial(text){
  voiceLastInputAt=Date.now();
+ if(!voiceMonitoring)return;
+ const label=$('#voicePartialText');
+ if(label)label.textContent='Escuchando: '+String(text||'').slice(0,160);
  if(voiceMonitoring&&voiceSpeaking&&VOICE_WAKE.test(text)&&!voiceTextIsEcho(text)){
   ++voiceUtteranceId;globalThis.speechSynthesis?.cancel();voiceSpeaking=false;voicePartialInterrupted=true;voiceAwaitingCommand=true;
   $('#voiceStatusText').textContent='Nexus interrumpido · te escucho';
  }
 }
-function receiveVoiceTranscript(text){
+function receiveVoiceTranscript(text,meta={}){
  voiceLastInputAt=Date.now();
- if(!voiceMonitoring)return;const transcript=String(text||'').trim().replace(/^nexos?\b/i,'Nexus').replace(/\b(abrir|abre|abrí|abri)\s+(?:el\s+)?inventario\s+(busca|buscar|buscá)\b/i,'$1 inventario y $2');if(!transcript||voiceTextIsEcho(transcript))return;
+ if(!voiceMonitoring)return;
+ const confidence=Number(meta?.confidence);
+ voiceASRConfidence=Number.isFinite(confidence)&&confidence>=0&&confidence<=1&&meta?.confidence!=null?confidence:null;
+ const quality=$('#voiceQualityText');
+ if(quality)quality.textContent='Vosk '+(getVoiceRecognitionMode()==='free'?'libre':'comandos')+
+   ' · confianza acústica: '+(voiceASRConfidence===null?'no disponible':Math.round(voiceASRConfidence*100)+' %');
+ const partial=$('#voicePartialText');
+ if(partial)partial.textContent='Transcripción final recibida';const transcript=String(text||'').trim().replace(/^nexos?\b/i,'Nexus').replace(/\b(abrir|abre|abrí|abri)\s+(?:el\s+)?inventario\s+(busca|buscar|buscá)\b/i,'$1 inventario y $2');if(!transcript)return;
+ if(voiceCalibrationActive){
+  $('#voiceTranscript').textContent=transcript;
+  receiveVoiceCalibrationTranscript(transcript);return;
+ }
+ if(voiceTextIsEcho(transcript))return;
  $('#voiceTranscript').textContent=transcript;const wake=VOICE_WAKE.exec(transcript);let command='';
  if(voiceSpeaking){if(!wake)return;++voiceUtteranceId;globalThis.speechSynthesis?.cancel();voiceSpeaking=false;}
  if(wake){
   command=transcript.slice(wake.index+wake[0].length).replace(/^[\s,:;-]+/,'').trim();voiceAwaitingCommand=false;clearTimeout(voiceWakeTimer);
   if(!command){voiceAwaitingCommand=true;voiceWakeTimer=setTimeout(()=>{voiceAwaitingCommand=false;if(voiceMonitoring)$('#voiceStatusText').textContent='Dormido · esperando “Nexus”'},12000);if(!voicePartialInterrupted)speakText('Te escucho.');voicePartialInterrupted=false;return;}
  }else if(voiceAwaitingCommand){command=transcript;voiceAwaitingCommand=false;clearTimeout(voiceWakeTimer);}
- voicePartialInterrupted=false;if(!command)return;
+ voicePartialInterrupted=false;
+ if(!command){
+   if(quality)quality.textContent+=' · ignorado: falta «Nexus» al inicio';
+   return;
+ }
  const normalizedCommand=norm(command),now=Date.now();
  if(normalizedCommand===voiceLastCommand&&now-voiceLastCommandAt<2500)return;
  voiceLastCommand=normalizedCommand;voiceLastCommandAt=now;
@@ -2494,6 +2563,10 @@ function receiveVoiceTranscript(text){
  });
  return voiceCommandQueue;
 }
+const VOICE_RECOGNITION_MODE_KEY='nexus_voice_recognition_mode_v3';
+function getVoiceRecognitionMode(){
+ return readStorage(VOICE_RECOGNITION_MODE_KEY)==='free'?'free':'commands';
+}
 function voiceVocabulary(){
  // Prioriza datos canónicos; el diccionario extendido se integra en grammar() sin
  // desplazar sustancias del límite de candidatos de Vosk.
@@ -2502,8 +2575,8 @@ function voiceVocabulary(){
 function setVoiceActiveUi(label){voiceListening=true;writeStorage('nexus_voice_wake_enabled_v2','1');$('#voiceStatus')?.classList.add('active');$('#voiceStatusText').textContent=label;$('#voiceToggleBtn').textContent='■ Detener vigilancia';const pill=$('#agentStatePill');if(pill)pill.textContent='● Agente activo · esperando Nexus'}
 async function startOfflineVoice(engine,{forceWasm=false}={}){
  const session=voiceSessionEpoch;
- voiceRecognition=engine.createVoice({vocabulary:voiceVocabulary(),
-  onTranscript:text=>session===voiceSessionEpoch?receiveVoiceTranscript(text):undefined,
+ voiceRecognition=engine.createVoice({vocabulary:voiceVocabulary(),mode:getVoiceRecognitionMode(),
+  onTranscript:(text,meta)=>session===voiceSessionEpoch?receiveVoiceTranscript(text,meta):undefined,
   onPartial:text=>session===voiceSessionEpoch?receiveVoicePartial(text):undefined,
   onStatus:patch=>{if(session!==voiceSessionEpoch)return;if(patch.error){voiceListening=false;$('#voiceStatusText').textContent='Voz local: error recuperable.';}else $('#voiceStatusText').textContent=patch.state;}});
  const current=voiceRecognition;await current.start({forceWasm});if(!voiceMonitoring||current!==voiceRecognition||session!==voiceSessionEpoch)return false;
@@ -2543,7 +2616,7 @@ function chooseVoiceTranscript(result){
 }
 // Reconocimiento siempre local: Internet cambia el proveedor de RESPUESTAS, nunca el oído.
 function desiredVoiceEngine(){return 'offline';}
-function voiceRuntimeStatus(){return {active:voiceMonitoring,engine:voiceEngineMode,recognizer:'Vosk WASM',externalResponses:'text-only',textExternalAvailable:Boolean(state.web&&navigator.onLine!==false),preferred:desiredVoiceEngine(),busy:voiceCommandBusy,confidence:voiceASRConfidence,lastTranscriptAt:voiceLastInputAt};}
+function voiceRuntimeStatus(){return {active:voiceMonitoring,engine:voiceEngineMode,recognitionMode:getVoiceRecognitionMode(),recognizer:'Vosk WASM',externalResponses:'text-only',textExternalAvailable:Boolean(state.web&&navigator.onLine!==false),preferred:desiredVoiceEngine(),busy:voiceCommandBusy,confidence:voiceASRConfidence,lastTranscriptAt:voiceLastInputAt};}
 function scheduleVoiceEngineAlignment(){
  // Nunca reiniciar el micrófono ni reemplazar Vosk por Chrome al cambiar conectividad.
  if(!voiceMonitoring||voiceEngineMode!=='offline'||voiceSpeaking||voiceAwaitingCommand||voiceCommandBusy)return;
@@ -2655,9 +2728,22 @@ function initHardwarePanel(){
 }
 
 function initVoice(){
+ const modeSelector=$('#voiceRecognitionMode');
+ if(modeSelector){
+   modeSelector.value=getVoiceRecognitionMode();
+   modeSelector.onchange=()=>{
+     const mode=modeSelector.value==='free'?'free':'commands';
+     try{writeStorage(VOICE_RECOGNITION_MODE_KEY,mode);}catch(error){toast(error.message);modeSelector.value=getVoiceRecognitionMode();return;}
+     if(voiceMonitoring)stopVoiceRecognition();
+     const label=$('#voiceStatusText');
+     if(label)label.textContent='Modo '+(mode==='free'?'libre':'comandos')+' seleccionado. Tocá «Activar» para iniciar Vosk.';
+   };
+ }
  refreshLocalVoiceStatus().catch(()=>{});$('#installVoiceLanguage').onclick=installLocalVoiceLanguage;
  $('#prepareVoiceBtn').onclick=()=>prepareOfflineEngine('voice');$('#prepareVisionBtn').onclick=()=>prepareOfflineEngine('vision');
  const btn=$('#voiceToggleBtn');if(!btn)return;btn.onclick=()=>voiceMonitoring?stopVoiceRecognition():startVoiceRecognition();
+ const calibration=$('#voiceCalibrationButton');if(calibration)calibration.onclick=toggleVoiceCalibration;
+ showVoiceCalibrationPrompt();
  $('#voicePermissionBtn').onclick=()=>startVoiceRecognition();$('#voiceSpeakBtn').onclick=()=>speakText('El sistema está listo. Decime una orden.');
  $('#lensSaveReferenceBtn').onclick=saveLensVisualReference;
  globalThis.addEventListener('nexus-offline-status',event=>{if(event.detail.part==='lens'){const d=event.detail;$('#lensEngineStatus').textContent=`OCR: PP-OCRv6 Tiny · detector ${d.ocrDetector} · recognizer ${d.ocrRecognizer} · ${d.ocrBackend} · cached ${d.ocrCached?'sí':'no'} · ${d.ocrDurationMs||0} ms · lines ${d.ocrLines||0} | Vision: MobileCLIP-S0 · ${d.runtime||'WASM/WebGPU'}`;}});

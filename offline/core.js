@@ -137,7 +137,11 @@
    model.worker?.addEventListener('error',()=>finish(new Error('Error del worker de voz.')),{once:true});
   });return model;} catch(error){destroyModel(model);throw error;}finally{voiceModelPending=false;}
  }
- function createVoice({onTranscript=()=>{},onPartial=()=>{},onStatus=()=>{},vocabulary=[]}={}) {
+ function createVoice({onTranscript=()=>{},onPartial=()=>{},onStatus=()=>{},vocabulary=[],mode='commands'}={}) {
+  // Both modes use the SAME offline Vosk WASM engine and cached Spanish weights.
+  // 'commands' keeps the existing grammar; 'free' is full-vocabulary dictation
+  // for users whose pronunciation is not well covered by the fixed phrase list.
+  const recognitionMode=mode==='free'?'free':'commands';
   let active=false,epoch=0,native,model,recognizer,stream,context,source,node,gain,restart,starting=false;
   const status=patch=>{notify('voice',patch);onStatus(patch);};
   async function disposeAudio() {
@@ -158,8 +162,19 @@
    stream=await navigator.mediaDevices.getUserMedia({audio:{channelCount:1,echoCancellation:true,noiseSuppression:true,autoGainControl:true},video:false});
    if(!active||token!==epoch){await disposeAudio();return;}
    context=new Ctx({sampleRate:16000});await context.resume();
-   recognizer=new model.KaldiRecognizer(context.sampleRate,grammar(vocabulary));
-   recognizer.on('result',m=>{if(active&&token===epoch&&m.result?.text)onTranscript(m.result.text);});
+   recognizer=recognitionMode==='free'
+     ?new model.KaldiRecognizer(context.sampleRate)
+     :new model.KaldiRecognizer(context.sampleRate,grammar(vocabulary));
+   // Expose acoustic evidence if supported. Confidence is diagnostic only:
+   // do not gate legitimate commands with an arbitrary uncalibrated threshold.
+   if(typeof recognizer.setWords==='function')recognizer.setWords(true);
+   recognizer.on('result',m=>{
+     if(!active||token!==epoch||!m.result?.text)return;
+     const words=Array.isArray(m.result.result)?m.result.result:[];
+     const scores=words.map(w=>Number(w.conf)).filter(v=>Number.isFinite(v)&&v>=0&&v<=1);
+     const confidence=scores.length?scores.reduce((a,b)=>a+b,0)/scores.length:null;
+     onTranscript(m.result.text,{confidence,words:scores.length,mode:recognitionMode});
+   });
    recognizer.on('partialresult',m=>{if(active&&token===epoch&&m.result?.partial)onPartial(m.result.partial);});
    recognizer.on('error',m=>{if(active){stop();status({state:'Error recuperable',error:m.error||'Error del reconocedor'});}});
    source=context.createMediaStreamSource(stream);gain=context.createGain();gain.gain.value=0;
@@ -171,7 +186,7 @@
    if(!node){node=context.createScriptProcessor(4096,1,1);node.onaudioprocess=e=>send(e.inputBuffer.getChannelData(0));}
    source.connect(node);node.connect(gain);gain.connect(context.destination);
    for(const track of stream.getTracks())track.addEventListener?.('ended',()=>{if(active){stop();status({state:'Error recuperable',error:'Micrófono interrumpido. Tocá Activar.'});}});
-   status({engine:'VOSK · WASM',state:'Fallback local activo',language:'es',microphone:'permitido',local:true});
+   status({engine:'VOSK · WASM',state:'Fallback local activo',language:'es',microphone:'permitido',local:true,recognitionMode});
   }
   async function start({forceWasm=false}={}) {
    if(active||starting)return;starting=true;active=true;const token=++epoch;
