@@ -193,6 +193,12 @@ button:focus-visible,a:focus-visible{outline:3px solid #157d93;outline-offset:3p
     <div class="card"><h2>🧠 Conversación inteligente</h2><p class="muted">NEXUS controla acciones locales sin API. xkiro recibe sólo la consulta externa y, en consultas híbridas, los nombres y fórmulas relevantes.</p><div class="chat" id="aiChat"></div><div class="search-row section"><input id="aiInput" placeholder="Decile a NEXUS-X qué necesitás…"><button class="btn teal" id="aiBtn">Enviar</button></div><div class="footer-note">Ejemplos: “¿Qué tenemos de ácido sulfúrico?”, “buscá el archivo de formulación”, “analizá lo que está frente a la cámara”.</div></div>
     <div class="card"><h2>🎙 Control por voz</h2><p class="muted">Una vez concedido el micrófono, NEXUS-X puede permanecer dormido y despertar con <strong>“Nexus”</strong>. Mientras habla, decir nuevamente <strong>“Nexus”</strong> lo interrumpe y vuelve a escuchar.</p><div id="voiceStatus" class="voice-status"><span class="pulse"></span><span id="voiceStatusText">Vigilancia dormida · esperando “Nexus”</span></div><div id="voiceTranscript" class="voice-transcript">Sin comando de voz todavía.</div><div id="voicePartialText" class="voice-transcript" aria-live="off">Sin audio procesado en esta sesión.</div>
       <div id="voiceQualityText" class="footer-note" aria-live="polite">Vosk · confianza acústica no disponible hasta escuchar una orden.</div>
+      <div class="notice section" id="voiceCalibrationPanel">
+        <strong>Diagnóstico de reconocimiento · sin ejecutar acciones</strong>
+        <p id="voiceCalibrationPrompt">La prueba no está activa. No se ejecutan acciones durante la prueba.</p>
+        <p id="voiceCalibrationSummary" role="status" aria-live="polite">Leé cinco frases en voz alta para medir cuántas palabras entendió Vosk. No se guarda audio ni transcripciones.</p>
+        <button class="btn" id="voiceCalibrationButton" type="button">Iniciar prueba de reconocimiento</button>
+      </div>
       <div class="toolbar section"><label for="voiceRecognitionMode">Modo de reconocimiento:</label>
         <select id="voiceRecognitionMode" aria-label="Modo de reconocimiento de voz offline">
           <option value="commands">Comandos precisos (actual)</option>
