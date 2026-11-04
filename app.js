@@ -16,7 +16,7 @@ const REPO_OWNER='miqueas80';
 const REPO_NAME='';
 const REPO_BRANCH='';
 const DOC_MAX_BYTES=16*1024*1024;
-const APP_VERSION='2026.11.04-voice-reliability-v3-r1';
+const APP_VERSION='2026.11.04-voice-language-max-v4-r1';
 const INVENTORY_RECOVERY_KEY='nexus_x_inventory_recovery_v1';
 const health={storage:'sin comprobar',documents:'sin comprobar',errors:[],boot:'BOOT'};
 const LENS_EXTERNAL_CACHE_TTL=30*60*1000;
@@ -2343,6 +2343,9 @@ function parseLocalAssistantAction(q){
   n=n.replace(/^(por favor|porfa|porfavor)\s+/,'')
      .replace(/^(quiero que|necesito que|podrias|podes|podes por favor|podés|podrías)\s+/,'')
      .replace(/^(nexus(?:[- ]?x)?)[,;:\s]+/,'').trim();
+  // Local es-AR natural-language layer; conservative physical commands only.
+  const naturalPlan=globalThis.NexusVoiceLanguage?.plan(n);
+  if(naturalPlan)return naturalPlan;
   const hardwarePlan=globalThis.NexusHardware?.parseCommand(n);
   if(hardwarePlan)return hardwarePlan;
   let docMatch=n.match(/^(?:muestra|mostrame|muestrame|mostrar|busca|buscar|encontra|consulta)\s+(?:los?\s+)?(?:documentos?|archivos?|ficheros?)\s+(?:(?:sobre|de|acerca de|relacionados con)\s+)?(.+)$/);
@@ -2565,7 +2568,7 @@ function receiveVoiceTranscript(text,meta={}){
 }
 const VOICE_RECOGNITION_MODE_KEY='nexus_voice_recognition_mode_v3';
 function getVoiceRecognitionMode(){
- return readStorage(VOICE_RECOGNITION_MODE_KEY)==='free'?'free':'commands';
+ return readStorage(VOICE_RECOGNITION_MODE_KEY)==='commands'?'commands':'free';
 }
 function voiceVocabulary(){
  // Prioriza datos canónicos; el diccionario extendido se integra en grammar() sin
