@@ -4,7 +4,7 @@
 (function(root){
 'use strict';
 const SENSOR={temperatura:'temperature',grados:'temperature',humedad:'humidity',presion:'pressure',hectopascales:'pressure'};
-const ON=/^(?:prende(?:me)?|prender|prendi|enciende(?:me|s)?|encende(?:me|s)?|encender|encendi|activa(?:me)?|activar|pone(?:me)? en marcha|poner en marcha)\b/;
+const ON=/^(?:prende(?:me)?|prender|prendi|enciende(?:me|s)?|enciendas|encende(?:me|s)?|encender|encendi|activa(?:me)?|activar|pone(?:me)? en marcha|poner en marcha)\b/;
 const OFF=/^(?:apaga(?:me|s)?|apagar|apague|desactiva(?:me)?|desactivar|apagalo|apagalas)\b/;
 const PLURAL=/\b(?:focos|leds|luces|lamparitas|lucecitas)\b/;
 const MULTIPLE=/\b(?:todos|todas|ambos|ambas|los dos|las dos)\b/;
@@ -44,7 +44,7 @@ function sensorPlan(input){
  const found=[...new Set([...input.matchAll(/\b(temperatura|grados|humedad|presion|hectopascales)\b/g)].map(x=>SENSOR[x[1]]))];
  if(found.length!==1)return null;
  const explicit=/^(?:temperatura|humedad|presion|grados|hectopascales)(?:\s+(?:actual|del laboratorio))?$/.test(input);
- const request=/\b(?:cuanto|cuantos|cual|que|como|mide|medime|medir|revisa|revisar|consultar|consulta|decime|decir|dime|decis|informa|informes|mostrame|mostrar|mostras|muestre|muestres|marca|tenemos|hay|esta|saber|indica|indicame|informar|dame|revises|quiero|quisiera|necesito)\b/.test(input);
+ const request=/\b(?:cuanto|cuantos|cual|que|como|mide|medime|medir|revisa|revisar|consultar|consulta|decime|decir|dime|decis|informa|informes|mostrame|mostrar|mostrarme|mostras|muestre|muestres|marca|tenemos|hay|esta|saber|indica|indicame|informar|dame|revises|quiero|quisiera|necesito)\b/.test(input);
  if(!explicit&&!request)return null;
  return {action:'read_hardware_sensor',metric:found[0]};
 }
