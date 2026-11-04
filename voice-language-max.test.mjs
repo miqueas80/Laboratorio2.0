@@ -97,7 +97,10 @@ test('Seguridad: negaciones, preguntas metalingüísticas y acciones ambiguas no
    'Apagá todas las luces',
    'No sé dónde está el inventario',
    'Prendé el foco',
-   'Encender algún foco'
+   'Encender algún foco',
+   '¿Qué es la temperatura?',
+   'Explicame cómo funciona el sensor de humedad',
+   '¿Qué significa la presión atmosférica?'
   ]){
    const plan=h.api.parseLocalAssistantAction(utterance);
    assert.ok(!plan||!['set_hardware_led','read_hardware_sensor'].includes(plan.action),
