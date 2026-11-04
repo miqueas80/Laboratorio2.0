@@ -1,0 +1,26 @@
+name: NEXUS Hardware 2 regression
+on:
+  push:
+    branches: [feat/nexus-hardware-monitor-v2]
+  pull_request:
+    branches: [main]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - name: Verify hardware and app syntax
+        run: |
+          node --check hardware/monitor.js
+          node --check hardware/bridge.js
+          node --check app.js
+          node --check sw.js
