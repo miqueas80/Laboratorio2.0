@@ -2,7 +2,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --test *.test.mjs lens-regression.mjs && node agent-regression.mjs",
+    "test": "node --test *.test.mjs hardware/*.test.mjs lens-regression.mjs && node agent-regression.mjs",
     "test:offline-browser": "node scripts/offline-browser-check.cjs"
   },
   "devDependencies": {

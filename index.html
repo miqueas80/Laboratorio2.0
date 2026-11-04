@@ -193,6 +193,32 @@ button:focus-visible,a:focus-visible{outline:3px solid #157d93;outline-offset:3p
     <div class="card"><h2>🧠 Conversación inteligente</h2><p class="muted">NEXUS controla acciones locales sin API. xkiro recibe sólo la consulta externa y, en consultas híbridas, los nombres y fórmulas relevantes.</p><div class="chat" id="aiChat"></div><div class="search-row section"><input id="aiInput" placeholder="Decile a NEXUS-X qué necesitás…"><button class="btn teal" id="aiBtn">Enviar</button></div><div class="footer-note">Ejemplos: “¿Qué tenemos de ácido sulfúrico?”, “buscá el archivo de formulación”, “analizá lo que está frente a la cámara”.</div></div>
     <div class="card"><h2>🎙 Control por voz</h2><p class="muted">Una vez concedido el micrófono, NEXUS-X puede permanecer dormido y despertar con <strong>“Nexus”</strong>. Mientras habla, decir nuevamente <strong>“Nexus”</strong> lo interrumpe y vuelve a escuchar.</p><div id="voiceStatus" class="voice-status"><span class="pulse"></span><span id="voiceStatusText">Vigilancia dormida · esperando “Nexus”</span></div><div id="voiceTranscript" class="voice-transcript">Sin comando de voz todavía.</div><div id="voiceResponse" class="voice-transcript" role="status" aria-live="polite">Respuesta de NEXUS: todavía no hay una orden ejecutada.</div><div class="toolbar section"><button class="btn primary" id="voiceToggleBtn">🎙 Activar una vez</button><button class="btn" id="voicePermissionBtn">🔐 Permitir micrófono</button><button class="btn" id="voiceSpeakBtn">🔊 Probar voz</button><button class="btn" id="prepareVoiceBtn">Preparar voz offline</button></div><div class="notice section"><strong>Agente global:</strong> la voz puede abrir módulos, consultar inventario, fórmulas y documentos, controlar NEXUS Lens, calendario y exportaciones. Borrados y sincronizaciones requieren confirmación por pantalla. No necesita estar dentro de Investigación ni de Internet.</div></div>
   </div>
+
+  <div class="card section" id="hardwarePanel" aria-label="NEXUS Hardware">
+    <h2>◈ NEXUS Hardware · ESP32</h2>
+    <p>Temperatura, presión, humedad y dos focos LED independientes. Solo Bluetooth local, sin conexión a Internet. Para conectar, usá Chrome para Android y tocá el botón.</p>
+    <div class="notice section" id="hardwareStatus" role="status">ESP32 desconectada</div>
+    <div class="toolbar section">
+      <button class="btn primary" id="hardwareConnectBtn" type="button">Conectar ESP32</button>
+      <button class="btn" id="hardwareReadBtn" type="button" disabled>Actualizar mediciones</button>
+    </div>
+    <div class="grid three section">
+      <div class="task"><strong>Temperatura</strong><p id="hardwareTemp">— °C</p></div>
+      <div class="task"><strong>Presión atmosférica</strong><p id="hardwarePressure">— hPa</p></div>
+      <div class="task"><strong>Humedad relativa</strong><p id="hardwareHumidity">— %</p></div>
+    </div>
+    <div class="grid two section">
+      <div class="task"><strong>Foco 1 · GPIO 18</strong><p id="hardwareLed1State">Estado desconocido</p>
+        <button class="btn" id="hardwareLed1On" type="button" disabled>Encender 1</button>
+        <button class="btn" id="hardwareLed1Off" type="button" disabled>Apagar 1</button>
+      </div>
+      <div class="task"><strong>Foco 2 · GPIO 19</strong><p id="hardwareLed2State">Estado desconocido</p>
+        <button class="btn" id="hardwareLed2On" type="button" disabled>Encender 2</button>
+        <button class="btn" id="hardwareLed2Off" type="button" disabled>Apagar 2</button>
+      </div>
+    </div>
+    <p class="notice section" id="hardwareFeedback" role="status">Al conectarte, decí «Nexus, revisá temperatura» o «Nexus, prendé foco dos».</p>
+  </div>
   <div class="card section"><h2>⚙ Herramientas disponibles</h2><div class="grid two"><div><div class="task"><span>Navegación completa</span><span class="ok">✓</span></div><div class="task"><span>Inventario, fórmulas y fichas</span><span class="ok">✓</span></div><div class="task"><span>Documentos y archivos indexados</span><span class="ok">✓</span></div><div class="task"><span>Investigación local-first</span><span class="ok">✓</span></div><div class="task"><span>Búsqueda web bajo demanda</span><span class="ok">✓</span></div></div><div><div class="task"><span>QR, cámara y NEXUS LENS</span><span class="ok">✓</span></div><div class="task"><span>Calendario: crear / eliminar</span><span class="ok">✓</span></div><div class="task"><span>Repositorio y exportaciones</span><span class="ok">✓</span></div><div class="task"><span>Voz global y estado del sistema</span><span class="ok">✓</span></div><div class="task"><span>Planificación multiacción</span><span class="ok">✓</span></div></div></div></div>
 </section>
 <section id="view-qr" class="view">
@@ -363,6 +389,7 @@ button:focus-visible,a:focus-visible{outline:3px solid #157d93;outline-offset:3p
 <script src="offline/assets.js" defer></script>
 <script src="offline/core.js" defer></script>
 <script src="offline/knowledge.js" defer></script>
+<script src="hardware/bridge.js" defer></script>
 <script src="app.js" defer></script>
 <!-- Mascota experimental: autónoma; no cambia el núcleo NEXUS -->
 <script src="./mascot/nexus-mascot.js" defer></script>

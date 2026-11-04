@@ -16,7 +16,7 @@ const REPO_OWNER='miqueas80';
 const REPO_NAME='';
 const REPO_BRANCH='';
 const DOC_MAX_BYTES=16*1024*1024;
-const APP_VERSION='2026.10.08-nexus-sweep-reveal-v6';
+const APP_VERSION='2026.11.03-hardware-ble-voice-r1';
 const INVENTORY_RECOVERY_KEY='nexus_x_inventory_recovery_v1';
 const health={storage:'sin comprobar',documents:'sin comprobar',errors:[],boot:'BOOT'};
 const LENS_EXTERNAL_CACHE_TTL=30*60*1000;
@@ -2022,6 +2022,13 @@ function fastAgentPlan(q){
 function fastAgentAnswer(action,result){
   if(!result)return 'No se recibió un resultado de la operación.';
   if(!result.ok)return result.error||'No pude completar la orden.';
+  if(action.action==='read_hardware_sensor'){
+    const {metric,value,unit}=result.data;
+    const label={temperature:'La temperatura',pressure:'La presión atmosférica',humidity:'La humedad relativa'}[metric];
+    const spokenUnit={temperature:'grados Celsius',pressure:'hectopascales',humidity:'por ciento'}[metric];
+    return label+' actual es de '+String(value).replace('.',',')+' '+spokenUnit+'.';
+  }
+  if(action.action==='set_hardware_led')return 'Foco '+(result.data.id===1?'uno':'dos')+' '+(result.data.on?'encendido':'apagado')+' correctamente.';
   if(['status','diagnostics'].includes(action.action))return `El sistema está ${result.data.integrity.ok?'correcto':'para revisar'}. Hay ${result.data.integrity.recordCount} registros y ${state.docs.length} documentos locales.`;
   if(action.action==='search_inventory'){const rows=result.data?.results||[];if(!rows.length)return 'No encontré coincidencias en el inventario local.';const top=rows[0];let a=`Encontré ${rows.length} coincidencia${rows.length===1?'':'s'}. La mejor es ${top.name}`;if(top.formula)a+=`, fórmula ${top.formula}`;if(top.location)a+=`, ubicada en ${top.location}`;return a+'.';}
   if(action.action==='search_documents'){const rows=result.data?.results||[];if(!rows.length)return 'No encontré documentos relacionados en el índice local.';return `Encontré ${rows.length} documento${rows.length===1?'':'s'} relacionado${rows.length===1?'':'s'}. ${rows.slice(0,3).map(r=>r.name).join(', ')}.`;}
@@ -2039,8 +2046,10 @@ function fastAgentAnswer(action,result){
   if(action.action==='sequence')return result.ok?'Listo. Ejecuté toda la secuencia.':'No pude completar toda la secuencia.';
   return result.ok?'Listo.':'No pude completar la orden.';
 }
-const NEXUS_AGENT_ACTIONS=new Set(['open_view','search_inventory','open_item','search_documents','open_document','research','open_qr','start_camera','stop_camera','analyze_camera','open_lens','start_lens_camera','stop_lens_camera','analyze_lens_camera','identify_lens_code','get_lens_context','open_calendar','create_calendar_event','delete_calendar_event','sync_repository','export_inventory','export_report','toggle_web','status','diagnostics','clear_chat','start_voice','stop_voice','web_search','get_inventory','create_inventory_item','update_inventory_item','delete_inventory_item','get_documents','get_activity','get_state','sequence']);
+const NEXUS_AGENT_ACTIONS=new Set(['open_view','search_inventory','open_item','search_documents','open_document','research','open_qr','start_camera','stop_camera','analyze_camera','open_lens','start_lens_camera','stop_lens_camera','analyze_lens_camera','identify_lens_code','get_lens_context','open_calendar','create_calendar_event','delete_calendar_event','sync_repository','export_inventory','export_report','toggle_web','status','diagnostics','clear_chat','start_voice','stop_voice','web_search','get_inventory','create_inventory_item','update_inventory_item','delete_inventory_item','get_documents','get_activity','get_state','read_hardware_sensor','set_hardware_led','sequence']);
 const NEXUS_AGENT_TOOL_DEFS=[
+{name:'read_hardware_sensor',description:'Leer temperatura, presión o humedad de la ESP32 conectada.',parameters:{type:'object',properties:{metric:{type:'string',enum:['temperature','pressure','humidity']}},required:['metric']}},
+{name:'set_hardware_led',description:'Encender o apagar uno de los dos LED de baja tensión.',parameters:{type:'object',properties:{id:{type:'number',enum:[1,2]},state:{type:'string',enum:['on','off']}},required:['id','state']}},
 {name:'open_view',description:'Abrir cualquier módulo de NEXUS-X.',parameters:{type:'object',properties:{view:{type:'string',enum:['dashboard','inventory','research','ai','qr','lens','documents','reports','settings']}},required:['view']}},
 {name:'search_inventory',description:'Buscar sustancias, materiales, fórmulas, IDs o ubicaciones en el inventario local.',parameters:{type:'object',properties:{query:{type:'string'}},required:['query']}},
 {name:'open_item',description:'Buscar y abrir una ficha del inventario.',parameters:{type:'object',properties:{query:{type:'string'}},required:['query']}},
@@ -2076,7 +2085,7 @@ const NEXUS_AGENT_TOOL_DEFS=[
 const ACTION_PERMISSIONS={
  write:new Set(['create_inventory_item','update_inventory_item','delete_inventory_item','create_calendar_event','delete_calendar_event']),
  destructive:new Set(['delete_inventory_item','delete_calendar_event']),
- hardware:new Set(['start_camera','start_lens_camera','start_voice']),
+ hardware:new Set(['start_camera','start_lens_camera','start_voice','read_hardware_sensor','set_hardware_led']),
  external:new Set(['web_search','sync_repository']),
  conditionalExternal:new Set(['analyze_camera','analyze_lens_camera'])
 };
@@ -2189,6 +2198,16 @@ async function executeRegisteredAction(action,{speak=true}={}){
   }
   if(!NEXUS_AGENT_ACTIONS.has(type))return agentActionResult(action,{ok:false,error:`Acción no disponible: ${type}`},startedAt);
   const q=String(action.query||action.target||'').trim();
+  if(type==='read_hardware_sensor'||type==='set_hardware_led'){
+    try{
+      const bridge=globalThis.NexusHardware;
+      if(!bridge)throw new Error('El módulo de hardware no está disponible.');
+      const data=type==='read_hardware_sensor'?await bridge.readMetric(action.metric):await bridge.setLed(action.id,action.state==='on');
+      const result={ok:true,data};
+      if(speak)speakText(fastAgentAnswer(action,result));
+      return agentActionResult(action,result,startedAt);
+    }catch(error){const result={ok:false,error:error?.message||'Error al consultar la ESP32'};if(speak)speakText(result.error);return agentActionResult(action,result,startedAt);}
+  }
   if(['get_inventory','get_documents','get_lens_context','get_activity','get_state','status','diagnostics'].includes(type))return agentActionResult(action,{ok:true,data:nexusAgentToolResult(action)},startedAt);
   if(type==='open_view'){
     const v=norm(action.view||q);
@@ -2323,6 +2342,8 @@ function parseLocalAssistantAction(q){
   n=n.replace(/^(por favor|porfa|porfavor)\s+/,'')
      .replace(/^(quiero que|necesito que|podrias|podes|podes por favor|podés|podrías)\s+/,'')
      .replace(/^(nexus(?:[- ]?x)?)[,;:\s]+/,'').trim();
+  const hardwarePlan=globalThis.NexusHardware?.parseCommand(n);
+  if(hardwarePlan)return hardwarePlan;
   let docMatch=n.match(/^(?:muestra|mostrame|muestrame|mostrar|busca|buscar|encontra|consulta)\s+(?:los?\s+)?(?:documentos?|archivos?|ficheros?)\s+(?:(?:sobre|de|acerca de|relacionados con)\s+)?(.+)$/);
   if(docMatch)return {action:'search_documents',query:docMatch[1].trim()};
   docMatch=n.match(/^(?:que|cuales)\s+documentos?\s+(?:tenemos|hay)\s+(?:sobre|de)\s+(.+)$/);
@@ -2593,6 +2614,46 @@ function speakText(text){
   return false;
  }
 }
+function initHardwarePanel(){
+ const bridge=globalThis.NexusHardware;
+ const status=$('#hardwareStatus'),connect=$('#hardwareConnectBtn');
+ if(!status||!connect)return;
+ const buttons=['hardwareReadBtn','hardwareLed1On','hardwareLed1Off','hardwareLed2On','hardwareLed2Off'];
+ const render=()=>{
+  const ready=Boolean(bridge?.connected);
+  status.textContent=ready?'ESP32 conectada por Bluetooth':'ESP32 desconectada · las mediciones y focos no están disponibles';
+  connect.textContent=ready?'Desconectar ESP32':'Conectar ESP32';
+  for(const id of buttons)$('#'+id).disabled=!ready;
+ };
+ const message=text=>{const el=$('#hardwareFeedback');if(el)el.textContent=text;};
+ connect.onclick=async()=>{
+  if(!bridge){message('El módulo BLE no se pudo cargar.');return;}
+  if(bridge.connected){bridge.disconnect();render();return;}
+  // requestDevice must be called without intervening await from the click handler.
+  try{await bridge.connect();message('Dispositivo conectado.');}
+  catch(error){message(error.message||String(error));}
+  render();
+ };
+ $('#hardwareReadBtn').onclick=async()=>{
+  for(const [metric,id] of [['temperature','hardwareTemp'],['pressure','hardwarePressure'],['humidity','hardwareHumidity']]){
+   try{const reading=await bridge.readMetric(metric);$('#'+id).textContent=String(reading.value).replace('.',',')+' '+reading.unit;}
+   catch(error){$('#'+id).textContent='No disponible';message(error.message||String(error));}
+  }
+ };
+ for(const id of [1,2])for(const mode of ['On','Off']){
+  $('#hardwareLed'+id+mode).onclick=async()=>{
+   try{
+    const result=await bridge.setLed(id,mode==='On');
+    $('#hardwareLed'+id+'State').textContent=result.on?'Encendido':'Apagado';
+    message('La ESP32 confirmó el foco '+id+'.');
+   }catch(error){message('Orden no confirmada: '+(error.message||error));$('#hardwareLed'+id+'State').textContent='Estado desconocido';}
+   render();
+  };
+ }
+ if(bridge)bridge.subscribe(render);
+ render();
+}
+
 function initVoice(){
  refreshLocalVoiceStatus().catch(()=>{});$('#installVoiceLanguage').onclick=installLocalVoiceLanguage;
  $('#prepareVoiceBtn').onclick=()=>prepareOfflineEngine('voice');$('#prepareVisionBtn').onclick=()=>prepareOfflineEngine('vision');
@@ -2635,7 +2696,7 @@ function bind(){
  $('#startQrBtn').onclick=startQr;$('#stopQrBtn').onclick=stopQr;$('#qrCameraSelect').onchange=e=>{if(e.target.value)switchQrCamera(e.target.value)};$('#qrImage').onchange=e=>{const f=e.target.files[0];if(f)decodeQrImage(f);e.target.value=''};$('#manualQrBtn').onclick=()=>{if($('#manualQr').value.trim())processQr($('#manualQr').value)};
  $('#loadWordBtn').onclick=()=>$('#wordInput').click();$('#wordInput').onchange=e=>{const f=e.target.files[0];if(f)importWord(f);e.target.value=''};$('#loadPdfBtn').onclick=()=>$('#pdfInput').click();$('#pdfInput').onchange=e=>{const f=e.target.files[0];if(f)importPdf(f);e.target.value=''};$('#loadDocumentBtn').onclick=()=>$('#documentInput').click();$('#documentInput').onchange=e=>{const f=e.target.files[0];if(f)importDocumentFile(f);e.target.value=''};$('#resetMasterBtn').onclick=restoreMaster;
 $('#exportReportBtn').onclick=exportReport;$('#settingsBtn').onclick=()=>setView('settings');$('#clearLocalBtn').onclick=restoreMaster;
- $$('[data-close]').forEach(b=>b.onclick=()=>hideModal(b.dataset.close));$('#calendarBtn').onclick=openCalendar;$('#calPrev').onclick=()=>{calCursor.setMonth(calCursor.getMonth()-1);renderCalendar()};$('#calNext').onclick=()=>{calCursor.setMonth(calCursor.getMonth()+1);renderCalendar()};$('#calToday').onclick=()=>{calCursor=new Date();renderCalendar()};$('#calAdd').onclick=addCalendarEvent;$('#calEvent').addEventListener('keydown',e=>{if(e.key==='Enter')addCalendarEvent()});$('#downloadDocumentBtn').onclick=()=>{if(activeDocument?.blob)download(activeDocument.name,activeDocument.blob)};$('#documentViewerClose').onclick=closeDocumentViewer;$('#documentViewerAIButton').onclick=()=>$('#documentViewerAI').classList.toggle('open');$('#documentAIAsk').onclick=askDocumentAI;$('#documentAIInput').addEventListener('keydown',e=>{if(e.key==='Enter')askDocumentAI()});$('#lensImageBtn').onclick=()=>$('#lensImageInput').click();$('#lensImageInput').onchange=async e=>{const f=e.target.files[0];if(f)await analyzeLensImageFile(f);e.target.value=''};$('#lensPermissionBtn').onclick=async()=>{const ok=await requestLensCameraPermission();if(ok)await startLensCamera()};$('#lensStartBtn').onclick=async()=>{const ok=await requestLensCameraPermission();if(ok)await startLensCamera()};$('#lensCameraSelect').onchange=()=>{if(state.lensStream)startLensCamera()};$('#lensStopBtn').onclick=stopLensCamera;$('#lensAnalyzeBtn').onclick=()=>analyzeCurrentLensCamera();$('#lensSearchBtn').onclick=lensSearchInNexus;$('#lensInventoryBtn').onclick=()=>lensOpenInventory();$('#lensDocumentsBtn').onclick=()=>lensOpenDocuments();$('#lensInternetBtn').onclick=()=>lensInvestigateInternet();$('#lensFichaBtn').onclick=lensOpenFicha;lensSetContextActions(state.lensLastContext);initVoice();window.addEventListener('beforeunload',()=>{stopQr();stopLensCamera();stopVoiceRecognition();globalThis.NexusOffline?.releaseVision();if(globalThis.speechSynthesis)globalThis.speechSynthesis.cancel()});
+ $$('[data-close]').forEach(b=>b.onclick=()=>hideModal(b.dataset.close));$('#calendarBtn').onclick=openCalendar;$('#calPrev').onclick=()=>{calCursor.setMonth(calCursor.getMonth()-1);renderCalendar()};$('#calNext').onclick=()=>{calCursor.setMonth(calCursor.getMonth()+1);renderCalendar()};$('#calToday').onclick=()=>{calCursor=new Date();renderCalendar()};$('#calAdd').onclick=addCalendarEvent;$('#calEvent').addEventListener('keydown',e=>{if(e.key==='Enter')addCalendarEvent()});$('#downloadDocumentBtn').onclick=()=>{if(activeDocument?.blob)download(activeDocument.name,activeDocument.blob)};$('#documentViewerClose').onclick=closeDocumentViewer;$('#documentViewerAIButton').onclick=()=>$('#documentViewerAI').classList.toggle('open');$('#documentAIAsk').onclick=askDocumentAI;$('#documentAIInput').addEventListener('keydown',e=>{if(e.key==='Enter')askDocumentAI()});$('#lensImageBtn').onclick=()=>$('#lensImageInput').click();$('#lensImageInput').onchange=async e=>{const f=e.target.files[0];if(f)await analyzeLensImageFile(f);e.target.value=''};$('#lensPermissionBtn').onclick=async()=>{const ok=await requestLensCameraPermission();if(ok)await startLensCamera()};$('#lensStartBtn').onclick=async()=>{const ok=await requestLensCameraPermission();if(ok)await startLensCamera()};$('#lensCameraSelect').onchange=()=>{if(state.lensStream)startLensCamera()};$('#lensStopBtn').onclick=stopLensCamera;$('#lensAnalyzeBtn').onclick=()=>analyzeCurrentLensCamera();$('#lensSearchBtn').onclick=lensSearchInNexus;$('#lensInventoryBtn').onclick=()=>lensOpenInventory();$('#lensDocumentsBtn').onclick=()=>lensOpenDocuments();$('#lensInternetBtn').onclick=()=>lensInvestigateInternet();$('#lensFichaBtn').onclick=lensOpenFicha;lensSetContextActions(state.lensLastContext);initVoice();initHardwarePanel();window.addEventListener('beforeunload',()=>{globalThis.NexusHardware?.disconnect();stopQr();stopLensCamera();stopVoiceRecognition();globalThis.NexusOffline?.releaseVision();if(globalThis.speechSynthesis)globalThis.speechSynthesis.cancel()});
 }
 let bootPromise=null;
 function boot(){if(bootPromise)return bootPromise;bootPromise=(async()=>{
