@@ -1,37 +1,31 @@
-# NEXUS Voice V3 — reconocimiento local medible
+# NEXUS Voice V4 — español natural, offline y medible
 
-## Qué cambia
+## Qué se implementó
 
-Se conserva el motor Vosk WASM instalado (sin servicios de reconocimiento remotos). Se puede elegir en el panel **NEXUS IA → Control por voz**:
+El perfil inicial de reconocimiento en instalaciones nuevas es **Español completo (reconocimiento libre)**. Se mantiene la selección manual **Comandos precisos (compatible)** para casos donde la gramática restringida de Vosk reconozca mejor términos concretos. Si el usuario ya eligió y guardó `commands`, esa preferencia se respeta.
 
-- **Comandos precisos**: el modo anterior y predeterminado. Utiliza la gramática española de comandos e inventario, con un indicador `[unk]` para palabras ajenas.
-- **Español libre (experimental)**: utiliza los mismos pesos de Vosk pero sin restringir la gramática al listado de frases. Puede resultar mejor para pronunciaciones y órdenes espontáneas, o peor para comandos específicos. Se necesita comparar en un Android real.
+**Importante:** ambos perfiles usan el mismo modelo de Vosk de ~40 MB y la misma implementación WASM local. `free` elimina la restricción del vocabulario de comandos, pero **NO es otro modelo acústico** ni se puede garantizar que reconozca mejor palabras raras, ruido, acentos o una conversación general.
 
-Al cambiar el modo, se detiene la escucha activa para evitar mezclar decodificadores o ejecutar órdenes a medio reconocer. Debe volver a pulsarse **Activar**.
+Se agregó `offline/voice-language.js` (capa lingüística local en español argentino), que amplía las expresiones aceptadas mediante reglas deterministas que se convierten en acciones del Action Registry existente:
 
-## Diagnóstico de sesión
+- Consultas de temperatura, humedad y presión con formulaciones naturales.
+- Encendido y apagado de **un LED claramente identificado** (GPIO 18 o GPIO 19) con verbos y numerales habituales. Las negaciones, interrogantes sobre cómo funciona algo, acciones sobre múltiples LED e ID ambiguos no se ejecutan como comandos físicos.
+- Navegación por inventario, documentos, calendario, ajustes, inicio y Lens.
+- Búsquedas de sustancias y documentos, preservando la consulta reconocida.
+- Las preguntas de definición científica («qué es la temperatura») no se confunden con lecturas del sensor.
 
-- **Escuchando**: última hipótesis parcial (puede cambiar).
-- **Transcripción final**: resultado de Vosk cuando detecta fin de expresión.
-- **Confianza acústica**: promedio de las puntuaciones por palabra que devuelve Vosk cuando se admiten `setWords` y datos `conf`. No es una probabilidad calibrada de que la intención sea correcta, por lo que **no se utiliza como umbral automático para ejecutar acciones**.
-- Los textos no se guardan en localStorage, IndexedDB ni se envían a ningún servicio.
+El motor sigue Local-First: no sube audio o transcripciones, no solicita servicios de reconocimiento externos y no toca la ESP32 ni su firmware.
 
-La detección de «Nexus» está anclada al comienzo de la expresión, con opcionales «hola», «che», «oye» y «ey»; se admiten transcripciones «nexo(s)». Las menciones incidentales dentro de una frase no activan el sistema.
+## Diagnóstico y evaluación en Android
 
-## Prueba guiada de precisión (sin acciones)
+En **NEXUS IA → Control por voz** se muestran la hipótesis parcial, la transcripción final y la confianza acústica cuando Vosk la entrega. Esa cifra NO es una probabilidad calibrada de que la intención esté bien interpretada ni habilita acciones por sí sola.
 
-1. Con un teléfono Android compatible, abrí NEXUS IA y elegí **Comandos precisos**.
-2. Tocá **Iniciar prueba de reconocimiento** y pronunciá las cinco frases que aparecen, cada una en una sola emisión.
-3. No se ejecuta ninguna orden ni se acciona ningún LED durante esta prueba. El micrófono se detiene al finalizar o cancelar.
-4. Anotá el porcentaje de **errores de palabras** (sustituciones, omisiones e inserciones, dividido por palabras esperadas).
-5. Cambiá a **Español libre** y repetí las mismas frases en condiciones comparables.
+La **prueba guiada** de cinco frases mide el porcentaje de errores de palabra sin ejecutar comandos de laboratorio. Elegí «Español completo», realizá la prueba, anotá el porcentaje y repetila en «Comandos precisos» bajo condiciones semejantes. No se conserva historial ni audio de la prueba.
 
-Para evaluar objetivamente, usá el mismo teléfono, distancia al micrófono y ruido ambiental. Un resultado mejor en cinco frases es solo una primera indicación: deben repetirse pruebas con más pronunciaciones y ruido real. La prueba no asegura una mejora de reconocimiento, únicamente proporciona una medida inicial.
+## Alcance pendiente
 
-## Limitaciones y seguridad
+Esta entrega mejora la comprensión de lenguaje natural a partir de texto reconocido, y amplía el decodificador de voz predeterminado. No reemplaza el modelo acústico ni certifica una mejora en la tasa de reconocimiento real. Para superar el techo de Vosk en español espontáneo sería necesario integrar y probar un modelo ASR mayor (por ejemplo Whisper multilingüe ONNX), verificar los recursos de memoria/WebGPU en el teléfono y preparar/cachear TODOS sus archivos para modo avión. No se ha incorporado ni validado ese modelo adicional; la PWA original debe seguir ligera y arrancar offline.
 
-- PWA y reconocimiento continuo requieren la app en primer plano: Android puede suspender pestañas o audio en segundo plano.
-- `free` no requiere otro modelo ni conexiones externas, pero puede aumentar errores o tardar más.
-- La síntesis de voz y el reconocimiento de voz son subsistemas distintos; escuchá la respuesta TTS del teléfono de forma independiente.
-- Los comandos físicos siguen requiriendo wake word y confirmación de la ESP32 por BLE en funcionamiento normal.
-- No se incorpora MQ-5, ni se altera firmware ESP32 v5, registros de inventario o documentos.
+## Garantías de compatibilidad
+
+La selección del modo se guarda en el navegador; cambiarla detiene la escucha activa para evitar sesiones mezcladas. La palabra «Nexus» sigue siendo necesaria al principio, salvo una segunda intervención dentro de una ventana de espera. Las acciones físicas exigen identificador exacto y confirmación BLE de la ESP32, igual que antes. El MQ-5 permanece excluido.
