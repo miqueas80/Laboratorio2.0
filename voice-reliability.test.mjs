@@ -66,6 +66,7 @@ test('settings: natural Spanish recognition mode is opt-in, persists, and safely
  const h=harness({online:false});
  try{
    const mic=microphone(h);
+   h.api.bind(); // production wires selector through initVoice(); harness skips boot by design
    assert.equal(await h.api.startVoiceRecognition(),true);
    assert.equal(mic.options.mode,'commands','Existing command recognition remains default');
    const selector=h.document.querySelector('#voiceRecognitionMode');
@@ -84,6 +85,7 @@ test('settings: unrecognized stored mode is ignored, and commands mode can be re
  try{
    h.window.localStorage.setItem('nexus_voice_recognition_mode_v3','cloud');
    const mic=microphone(h);
+   h.api.bind();
    await h.api.startVoiceRecognition();
    assert.equal(mic.options.mode,'commands');
    const selector=h.document.querySelector('#voiceRecognitionMode');
