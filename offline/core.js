@@ -78,7 +78,9 @@
    'estado','diagnóstico','diagnostico','calendario','agenda','agendá','agendar',
    'agregá','agrega','recordame','recuérdame','recordatorio','tarea','evento',
    'hoy','mañana','pasado mañana','lunes','martes','miércoles','jueves','viernes','sábado','domingo',
-   'preparar','revisar','expo','ácido nítrico','ácido clorhídrico','ácido sulfúrico',
+   'preparar','revisar','revisá','revisa','apagá','apaga','apagar',
+   'encendé','encende','encender','encendé','prender','foco','focos','led','luz',
+   'uno','dos','temperatura','presión','presion','humedad','ambiental','expo','ácido nítrico','ácido clorhídrico','ácido sulfúrico',
    'hidróxido','sodio','potasio','reactivo','probeta','pipeta','bureta','matraz',
    'erlenmeyer','vaso','microscopio','balanza','agitador','mechero','y','el','la',
    'los','las','de','en','para','con','que','quiero','necesito','ver','sobre','su','las','nuestro','haceme'];
@@ -101,7 +103,13 @@
     'nexus agregá una tarea','nexus analizá esto','nexus analizá la cámara',
     'nexus decime el estado del sistema','nexus quiero saber la ubicación',
     'nexus cuántos registros tenemos','nexus abrir inventario',
-    'nexus cerrar la cámara','nexus mostrámelo','nexus abrí la ficha'
+    'nexus cerrar la cámara','nexus mostrámelo','nexus abrí la ficha',
+    'nexus revisá temperatura','nexus revisa la temperatura',
+    'nexus revisá presión','nexus revisa la presión',
+    'nexus revisá humedad','nexus decime la humedad',
+    'nexus prendé foco uno','nexus prendé foco dos',
+    'nexus prender foco uno','nexus prender foco dos',
+    'nexus apagá foco uno','nexus apagá foco dos'
   ];
   // Conservar el límite histórico del diccionario dinámico para evitar
   // modelos enormes, y no inventar clases de sustancias ajenas al inventario.
