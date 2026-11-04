@@ -2420,6 +2420,7 @@ async function executeVoiceCommand(q){
  return failed.length===0;
 }
 function stopVoiceRecognition({manual=true}={}){
+  voiceCalibrationActive=false;showVoiceCalibrationPrompt();
   ++voiceSessionEpoch;clearTimeout(voiceSwitchTimer);voiceSwitchTimer=null;voiceEngineMode='none';voiceASRConfidence=null;
   voiceMonitoring=false;voiceListening=false;voiceAwaitingCommand=false;voiceSpeaking=false;
   clearTimeout(voiceWakeTimer);clearTimeout(voiceRestartTimer);clearTimeout(voicePendingTimer);voicePendingTimer=null;voicePendingIntent=null;
@@ -2461,6 +2462,54 @@ async function prepareOfflineEngine(group){
 }
 let voiceLastSpoken='',voiceUtteranceId=0,voicePartialInterrupted=false,voiceEchoUntil=0;
 function voiceTextIsEcho(text){const n=norm(text).replace(/[^a-z0-9 ]/g,'').trim();return (voiceSpeaking||Date.now()<voiceEchoUntil)&&n.length>8&&norm(voiceLastSpoken).replace(/[^a-z0-9 ]/g,'').includes(n);}
+const VOICE_CALIBRATION_PHRASES=['nexus abre inventario','nexus revisa temperatura','nexus prende foco uno','nexus apaga foco dos','nexus abre documentos'];
+let voiceCalibrationActive=false,voiceCalibrationIndex=0,voiceCalibrationErrors=0,voiceCalibrationWords=0;
+function voiceWordErrors(expected,heard){
+ const tokens=s=>norm(s).replace(/[^a-z0-9\s]/g,' ').replace(/\s+/g,' ').trim().split(' ').filter(Boolean);
+ const a=tokens(expected),b=tokens(heard),d=Array.from({length:a.length+1},()=>Array(b.length+1).fill(0));
+ for(let i=0;i<=a.length;i++)d[i][0]=i;
+ for(let j=0;j<=b.length;j++)d[0][j]=j;
+ for(let i=1;i<=a.length;i++)for(let j=1;j<=b.length;j++)
+  d[i][j]=Math.min(d[i-1][j]+1,d[i][j-1]+1,d[i-1][j-1]+(a[i-1]===b[j-1]?0:1));
+ return {errors:d[a.length][b.length],words:a.length};
+}
+function showVoiceCalibrationPrompt(){
+ const prompt=$('#voiceCalibrationPrompt'),button=$('#voiceCalibrationButton');
+ if(button)button.textContent=voiceCalibrationActive?'Cancelar prueba guiada':'Iniciar prueba de reconocimiento';
+ if(prompt)prompt.textContent=voiceCalibrationActive?
+  'Frase '+(voiceCalibrationIndex+1)+'/'+VOICE_CALIBRATION_PHRASES.length+': «'+VOICE_CALIBRATION_PHRASES[voiceCalibrationIndex]+'»':
+  'La prueba no está activa. No se ejecutan acciones durante la prueba.';
+}
+function receiveVoiceCalibrationTranscript(transcript){
+ const score=voiceWordErrors(VOICE_CALIBRATION_PHRASES[voiceCalibrationIndex],transcript);
+ voiceCalibrationErrors+=score.errors;voiceCalibrationWords+=score.words;voiceCalibrationIndex++;
+ const summary=$('#voiceCalibrationSummary');
+ const report='Prueba: '+voiceCalibrationIndex+'/'+VOICE_CALIBRATION_PHRASES.length+' frases · errores de palabras: '+
+  voiceCalibrationErrors+'/'+voiceCalibrationWords+' ('+Math.round(100*voiceCalibrationErrors/Math.max(1,voiceCalibrationWords))+
+  ' %) · última frase: «'+transcript.slice(0,100)+'»';
+ if(voiceCalibrationIndex>=VOICE_CALIBRATION_PHRASES.length){
+  stopVoiceRecognition();
+  if(summary)summary.textContent=report+' · Prueba terminada. Cambiá de modo y repetila para comparar.';
+ }else{
+  if(summary)summary.textContent=report;
+  showVoiceCalibrationPrompt();
+ }
+}
+async function toggleVoiceCalibration(){
+ const summary=$('#voiceCalibrationSummary');
+ if(voiceCalibrationActive){
+  stopVoiceRecognition();
+  if(summary)summary.textContent='Prueba cancelada. Ninguna orden fue ejecutada.';
+  return;
+ }
+ if(voiceMonitoring)stopVoiceRecognition();
+ voiceCalibrationIndex=0;voiceCalibrationErrors=0;voiceCalibrationWords=0;voiceCalibrationActive=true;
+ if(summary)summary.textContent='Prueba iniciada · pronunciá cada frase. Los focos no se accionarán.';
+ showVoiceCalibrationPrompt();
+ const started=await startVoiceRecognition();
+ if(!started){voiceCalibrationActive=false;showVoiceCalibrationPrompt();if(summary)summary.textContent='No se pudo iniciar la prueba. Prepará Vosk y permití el micrófono.';}
+}
+
 function receiveVoicePartial(text){
  voiceLastInputAt=Date.now();
  if(!voiceMonitoring)return;
@@ -2480,7 +2529,12 @@ function receiveVoiceTranscript(text,meta={}){
  if(quality)quality.textContent='Vosk '+(getVoiceRecognitionMode()==='free'?'libre':'comandos')+
    ' · confianza acústica: '+(voiceASRConfidence===null?'no disponible':Math.round(voiceASRConfidence*100)+' %');
  const partial=$('#voicePartialText');
- if(partial)partial.textContent='Transcripción final recibida';const transcript=String(text||'').trim().replace(/^nexos?\b/i,'Nexus').replace(/\b(abrir|abre|abrí|abri)\s+(?:el\s+)?inventario\s+(busca|buscar|buscá)\b/i,'$1 inventario y $2');if(!transcript||voiceTextIsEcho(transcript))return;
+ if(partial)partial.textContent='Transcripción final recibida';const transcript=String(text||'').trim().replace(/^nexos?\b/i,'Nexus').replace(/\b(abrir|abre|abrí|abri)\s+(?:el\s+)?inventario\s+(busca|buscar|buscá)\b/i,'$1 inventario y $2');if(!transcript)return;
+ if(voiceCalibrationActive){
+  $('#voiceTranscript').textContent=transcript;
+  receiveVoiceCalibrationTranscript(transcript);return;
+ }
+ if(voiceTextIsEcho(transcript))return;
  $('#voiceTranscript').textContent=transcript;const wake=VOICE_WAKE.exec(transcript);let command='';
  if(voiceSpeaking){if(!wake)return;++voiceUtteranceId;globalThis.speechSynthesis?.cancel();voiceSpeaking=false;}
  if(wake){
@@ -2688,6 +2742,8 @@ function initVoice(){
  refreshLocalVoiceStatus().catch(()=>{});$('#installVoiceLanguage').onclick=installLocalVoiceLanguage;
  $('#prepareVoiceBtn').onclick=()=>prepareOfflineEngine('voice');$('#prepareVisionBtn').onclick=()=>prepareOfflineEngine('vision');
  const btn=$('#voiceToggleBtn');if(!btn)return;btn.onclick=()=>voiceMonitoring?stopVoiceRecognition():startVoiceRecognition();
+ const calibration=$('#voiceCalibrationButton');if(calibration)calibration.onclick=toggleVoiceCalibration;
+ showVoiceCalibrationPrompt();
  $('#voicePermissionBtn').onclick=()=>startVoiceRecognition();$('#voiceSpeakBtn').onclick=()=>speakText('El sistema está listo. Decime una orden.');
  $('#lensSaveReferenceBtn').onclick=saveLensVisualReference;
  globalThis.addEventListener('nexus-offline-status',event=>{if(event.detail.part==='lens'){const d=event.detail;$('#lensEngineStatus').textContent=`OCR: PP-OCRv6 Tiny · detector ${d.ocrDetector} · recognizer ${d.ocrRecognizer} · ${d.ocrBackend} · cached ${d.ocrCached?'sí':'no'} · ${d.ocrDurationMs||0} ms · lines ${d.ocrLines||0} | Vision: MobileCLIP-S0 · ${d.runtime||'WASM/WebGPU'}`;}});
