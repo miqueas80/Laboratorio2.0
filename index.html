@@ -201,11 +201,11 @@ button:focus-visible,a:focus-visible{outline:3px solid #157d93;outline-offset:3p
       </div>
       <div class="toolbar section"><label for="voiceRecognitionMode">Modo de reconocimiento:</label>
         <select id="voiceRecognitionMode" aria-label="Modo de reconocimiento de voz offline">
-          <option value="commands">Comandos precisos (actual)</option>
-          <option value="free">Español libre (experimental)</option>
+          <option value="commands">Comandos precisos (compatible)</option>
+          <option value="free">Español completo (reconocimiento libre)</option>
         </select>
       </div>
-      <p class="footer-note">Ambos modos procesan voz localmente con Vosk, sin servicio externo. Si pronunciás órdenes distintas al vocabulario fijo, probá «Español libre». Cambiar de modo detiene el micrófono hasta que vuelvas a tocar Activar. Las transcripciones solo aparecen en pantalla y no se guardan.</p><div id="voiceResponse" class="voice-transcript" role="status" aria-live="polite">Respuesta de NEXUS: todavía no hay una orden ejecutada.</div><div class="toolbar section"><button class="btn primary" id="voiceToggleBtn">🎙 Activar una vez</button><button class="btn" id="voicePermissionBtn">🔐 Permitir micrófono</button><button class="btn" id="voiceSpeakBtn">🔊 Probar voz</button><button class="btn" id="prepareVoiceBtn">Preparar voz offline</button></div><div class="notice section"><strong>Agente global:</strong> la voz puede abrir módulos, consultar inventario, fórmulas y documentos, controlar NEXUS Lens, calendario y exportaciones. Borrados y sincronizaciones requieren confirmación por pantalla. No necesita estar dentro de Investigación ni de Internet.</div></div>
+      <p class="footer-note">Español completo reconoce sin restringir la gramática a comandos predefinidos, pero usa el modelo local Vosk actual. La precisión depende de la pronunciación, el ruido y el dispositivo. Comandos precisos sigue disponible como alternativa. Todo el audio se procesa en este dispositivo, sin nube; cambiar de modo detiene el micrófono hasta que vuelvas a tocar Activar.</p><div id="voiceResponse" class="voice-transcript" role="status" aria-live="polite">Respuesta de NEXUS: todavía no hay una orden ejecutada.</div><div class="toolbar section"><button class="btn primary" id="voiceToggleBtn">🎙 Activar una vez</button><button class="btn" id="voicePermissionBtn">🔐 Permitir micrófono</button><button class="btn" id="voiceSpeakBtn">🔊 Probar voz</button><button class="btn" id="prepareVoiceBtn">Preparar voz offline</button></div><div class="notice section"><strong>Agente global:</strong> la voz puede abrir módulos, consultar inventario, fórmulas y documentos, controlar NEXUS Lens, calendario y exportaciones. Borrados y sincronizaciones requieren confirmación por pantalla. No necesita estar dentro de Investigación ni de Internet.</div></div>
   </div>
 
   <div class="card section" id="hardwarePanel" aria-label="NEXUS Hardware">
@@ -461,6 +461,7 @@ button:focus-visible,a:focus-visible{outline:3px solid #157d93;outline-offset:3p
 <script src="offline/assets.js" defer></script>
 <script src="offline/core.js" defer></script>
 <script src="offline/knowledge.js" defer></script>
+<script src="offline/voice-language.js" defer></script>
 <script src="hardware/bridge.js" defer></script>
 <script src="hardware/monitor.js" defer></script>
 <script src="hardware/monitor-ui.js" defer></script>
