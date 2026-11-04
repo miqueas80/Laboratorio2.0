@@ -14,7 +14,11 @@ test('Vosk local grammar contains all environmental and LED command words',()=>{
   for(const phrase of [
     'nexus revisá temperatura','nexus revisá presión','nexus revisá humedad',
     'nexus prendé foco uno','nexus prendé foco dos',
-    'nexus apagá foco uno','nexus apagá foco dos'
+    'nexus apagá foco uno','nexus apagá foco dos',
+    'nexus prendeme la luz número uno','nexus apagá la segunda lamparita',
+    'nexus decime cuántos grados hace','nexus cuál es la humedad relativa',
+    'nexus abrime la sección del inventario','nexus llevame a documentos',
+    'nexus me buscás ácido nítrico en el inventario'
   ])assert.ok(vocabulary.includes(phrase),'Missing voice phrase: '+phrase);
   assert.ok(vocabulary.includes('[unk]'));
 });

@@ -80,6 +80,8 @@
    'hoy','mañana','pasado mañana','lunes','martes','miércoles','jueves','viernes','sábado','domingo',
    'preparar','revisar','revisá','revisa','apagá','apaga','apagar',
    'encendé','encende','encender','encendé','prender','foco','focos','led','luz',
+   'prendeme','encendeme','apagame','enciendas','lamparita','lucecita','numero','número','primer','primera','segundo','segunda',
+   'grados','hectopascales','relativa','atmosférica','atmosferica','cuántos','cuantos','podés','podes','podrías','podrias','quisiera','me decís',
    'uno','dos','temperatura','presión','presion','humedad','ambiental','expo','ácido nítrico','ácido clorhídrico','ácido sulfúrico',
    'hidróxido','sodio','potasio','reactivo','probeta','pipeta','bureta','matraz',
    'erlenmeyer','vaso','microscopio','balanza','agitador','mechero','y','el','la',
@@ -109,7 +111,11 @@
     'nexus revisá humedad','nexus decime la humedad',
     'nexus prendé foco uno','nexus prendé foco dos',
     'nexus prender foco uno','nexus prender foco dos',
-    'nexus apagá foco uno','nexus apagá foco dos'
+    'nexus apagá foco uno','nexus apagá foco dos',
+    'nexus prendeme la luz número uno','nexus apagá la segunda lamparita',
+    'nexus decime cuántos grados hace','nexus cuál es la humedad relativa',
+    'nexus abrime la sección del inventario','nexus llevame a documentos',
+    'nexus me buscás ácido nítrico en el inventario'
   ];
   // Conservar el límite histórico del diccionario dinámico para evitar
   // modelos enormes, y no inventar clases de sustancias ajenas al inventario.

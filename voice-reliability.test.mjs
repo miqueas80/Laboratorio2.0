@@ -68,14 +68,14 @@ test('settings: natural Spanish recognition mode is opt-in, persists, and safely
    const mic=microphone(h);
    h.api.bind(); // production wires selector through initVoice(); harness skips boot by design
    assert.equal(await h.api.startVoiceRecognition(),true);
-   assert.equal(mic.options.mode,'commands','Existing command recognition remains default');
+   assert.equal(mic.options.mode,'free','Full Spanish recognition is the new default');
    const selector=h.document.querySelector('#voiceRecognitionMode');
-   selector.value='free';selector.dispatchEvent(new h.window.Event('change'));
+   selector.value='commands';selector.dispatchEvent(new h.window.Event('change'));
    assert.equal(mic.stops,1,'Recognizer must stop rather than switch underneath an active session');
-   assert.equal(h.window.localStorage.getItem('nexus_voice_recognition_mode_v3'),'free');
+   assert.equal(h.window.localStorage.getItem('nexus_voice_recognition_mode_v3'),'commands');
    assert.equal(await h.api.startVoiceRecognition(),true);
-   assert.equal(mic.options.mode,'free');
-   assert.equal(h.api.voiceRuntimeStatus().recognitionMode,'free');
+   assert.equal(mic.options.mode,'commands');
+   assert.equal(h.api.voiceRuntimeStatus().recognitionMode,'commands');
    assert.equal(h.calls.length,0,'ASR never accesses a cloud service');
  }finally{h.api.stopVoiceRecognition();h.close();}
 });
@@ -87,7 +87,7 @@ test('settings: unrecognized stored mode is ignored, and commands mode can be re
    const mic=microphone(h);
    h.api.bind();
    await h.api.startVoiceRecognition();
-   assert.equal(mic.options.mode,'commands');
+   assert.equal(mic.options.mode,'free');
    const selector=h.document.querySelector('#voiceRecognitionMode');
    selector.value='commands';selector.dispatchEvent(new h.window.Event('change'));
    assert.equal(h.window.localStorage.getItem('nexus_voice_recognition_mode_v3'),'commands');
