@@ -56,7 +56,7 @@ test('local alert fires only on upward threshold crossing; no unsolicited LED ac
   const h=rig();
   const rule=h.monitor.addRule({metric:'temperature',comparison:'above',threshold:28,action:'alert'});
   assert.equal(rule.action,'alert');
-  await h.monitor.recordOnce({automation:true}); // establishes baseline
+  await h.monitor.start(); // establishes baseline while explicitly running
   h.values.temperature=29;h.advance(60000);
   const result=await h.monitor.recordOnce({automation:true});
   assert.equal(result.alerts.length,1);
@@ -71,7 +71,7 @@ test('LED rules require explicit arming, fire on crossing and never run by defau
   const h=rig();
   assert.throws(()=>h.monitor.addRule({metric:'humidity',comparison:'below',threshold:35,action:'led2_on'}),/habilit/i);
   h.monitor.addRule({metric:'humidity',comparison:'below',threshold:35,action:'led2_on',armed:true});
-  await h.monitor.recordOnce({automation:true}); // baseline humidity 55
+  await h.monitor.start(); // baseline humidity 55, automation explicitly running
   h.values.humidity=30;h.advance(60000);
   await h.monitor.recordOnce({automation:true});
   assert.deepEqual(plain(h.leds),[{id:2,on:true}]);
