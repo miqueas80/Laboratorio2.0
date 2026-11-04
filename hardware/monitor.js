@@ -231,7 +231,7 @@ class NexusHardwareMonitor {
       this.last=sample;
       this.error='';
       // Monitoring never actuates outside an explicit armed rule and an ongoing connected session.
-      const alerts=automation&&this.bridge.connected?await this.evaluateRules(sample):[];
+      const alerts=automation&&this.running&&this.bridge.connected?await this.evaluateRules(sample):[];
       return {...sample,alerts};
     }catch(error){
       this.error=String(error?.message||error);
