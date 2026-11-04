@@ -6,7 +6,7 @@ const flush=()=>new Promise(resolve=>setTimeout(resolve,40));
 
 function setHardware(h){
   let connected=true;
-  const listeners=[];
+  const listeners=[],leds=[];
   let value=24;
   h.window.NexusHardware={
     get connected(){return connected;},
@@ -15,9 +15,9 @@ function setHardware(h){
       metric,value:metric==='temperature'?value:metric==='pressure'?1000:55,
       unit:metric==='temperature'?'°C':metric==='pressure'?'hPa':'%'
     };},
-    async setLed(id,on){return {id,on};}
+    async setLed(id,on){leds.push({id,on});return {id,on};}
   };
-  return {setValue:v=>{value=v;},disconnect(){
+  return {leds,setValue:v=>{value=v;},disconnect(){
     connected=false;
     listeners.forEach(fn=>fn({connected:false}));
   }};
@@ -65,5 +65,53 @@ test('Hardware 2 UI only arms LED rule after explicit confirmation and stops on 
     hw.disconnect();
     assert.equal(monitor.running,false);
     assert.match(h.document.getElementById('hardwareMonitorStatus').textContent,/desconectad/i);
+  }finally{h.window.NexusHardwareMonitoring?.stop();h.close();}
+});
+
+
+test('regression UI: saved LED rule must be confirmed again on startup, then acts at active threshold',async()=>{
+  const h=harness({online:false});
+  try{
+    const hw=setHardware(h);
+    h.loadVendor('hardware/monitor.js');
+    h.loadVendor('hardware/monitor-ui.js');
+    h.document.dispatchEvent(new h.window.Event('DOMContentLoaded'));
+    await flush();
+    const monitor=h.window.NexusHardwareMonitoring;
+    monitor.addRule({metric:'temperature',comparison:'above',threshold:20,action:'led1_on',armed:true});
+    h.document.getElementById('hardwareMonitorStart').click();
+    await flush();
+    assert.equal(monitor.running,false,'Declining the session authorization must not activate monitoring');
+    assert.equal(hw.leds.length,0);
+    h.window.confirm=()=>true;
+    h.document.getElementById('hardwareMonitorStart').click();
+    await flush();
+    assert.equal(monitor.running,true);
+    assert.equal(hw.leds.length,1);
+    assert.equal(hw.leds[0].id,1);
+    assert.match(h.document.getElementById('hardwareMonitorAlerts').textContent,/Foco confirmado/i);
+    assert.match(h.document.getElementById('hardwareRulesList').textContent,/Condición cumplida/i);
+  }finally{h.window.NexusHardwareMonitoring?.stop();h.close();}
+});
+
+test('regression UI: Evaluate now detects a rule added during monitoring without waiting 60 seconds',async()=>{
+  const h=harness({online:false});
+  try{
+    setHardware(h);
+    h.loadVendor('hardware/monitor.js');
+    h.loadVendor('hardware/monitor-ui.js');
+    h.document.dispatchEvent(new h.window.Event('DOMContentLoaded'));
+    await flush();
+    const monitor=h.window.NexusHardwareMonitoring;
+    h.document.getElementById('hardwareMonitorStart').click();
+    await flush();
+    monitor.addRule({metric:'temperature',comparison:'above',threshold:20,action:'alert'});
+    const button=h.document.getElementById('hardwareMonitorEvaluate');
+    assert.equal(button.disabled,false);
+    button.click();
+    await flush();
+    assert.equal(monitor.alerts.length,1);
+    assert.match(h.document.getElementById('hardwareMonitorAlerts').textContent,/temperatura/i);
+    assert.match(h.document.getElementById('hardwareMonitorStatus').textContent,/Se activó/i);
   }finally{h.window.NexusHardwareMonitoring?.stop();h.close();}
 });

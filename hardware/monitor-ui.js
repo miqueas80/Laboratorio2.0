@@ -88,6 +88,9 @@ function init(){
      const description=LABELS[rule.metric]+' '+comparison+' '+fmtNumber(rule.threshold)+' '+UNITS[rule.metric]+
        ' → '+ACTION_LABELS[rule.action]+(rule.armed?' · autorizada':'');
      line.append(text('span',description));
+     const current=monitor.states.get(rule.id);
+     const ruleStatus=current===undefined?'Pendiente de evaluación':current?'Condición cumplida':'Esperando el umbral';
+     line.append(text('span',ruleStatus,{'aria-label':'Estado de regla: '+ruleStatus}));
      const remove=text('button','Quitar',{'class':'btn','type':'button','aria-label':'Quitar regla: '+description});
      remove.onclick=()=>{
        try{monitor.removeRule(rule.id);}catch(error){feedback('No se pudo quitar la regla: '+(error.message||error));}
@@ -109,6 +112,7 @@ function init(){
    $('hardwareMonitorStart').disabled=!connected||s.running||s.busy;
    $('hardwareMonitorStop').disabled=!s.running;
    $('hardwareMonitorRecord').disabled=!connected||s.busy;
+   $('hardwareMonitorEvaluate').disabled=!connected||!s.running||s.busy;
    $('hardwareMonitorInterval').value=String(s.intervalMs);
    if(s.error)status.textContent=s.error;
    else status.textContent=s.running?'Monitoreo activo · muestras cada '+s.intervalMs/1000+' s · solo con app en primer plano':
@@ -131,11 +135,30 @@ function init(){
  monitor.subscribe(render);
  bridge.subscribe(render);
  $('hardwareMonitorStart').onclick=async()=>{
+   // Saved rules may already have an active threshold; explicitly reconfirm
+   // any previously authorized physical action on each new monitoring session.
+   const armed=monitor.rules.filter(rule=>rule.armed&&rule.action!=='alert');
+   if(armed.length){
+     const names=armed.map(rule=>ACTION_LABELS[rule.action]).join(', ');
+     if(!root.confirm('Atención: al iniciar, '+names+' puede ejecutarse inmediatamente si el sensor ya cumple la condición. ¿Autorizás estas acciones automáticas durante esta sesión?')){
+       feedback('Inicio cancelado. Ningún foco se accionó.');
+       return;
+     }
+   }
    try{await monitor.start();}catch(error){feedback('No se pudo iniciar: '+(error.message||error));}
  };
  $('hardwareMonitorStop').onclick=()=>monitor.stop();
  $('hardwareMonitorRecord').onclick=async()=>{
    try{await monitor.recordOnce();}catch(error){feedback('No se pudo registrar: '+(error.message||error));}
+ };
+ $('hardwareMonitorEvaluate').onclick=async()=>{
+   if(!monitor.running){feedback('Primero iniciá el monitoreo para evaluar reglas.');return;}
+   try{
+     const result=await monitor.recordOnce({automation:true});
+     const count=result.alerts?.length||0;
+     feedback(count?(count===1?'Se activó 1 regla.':'Se activaron '+count+' reglas.')+' Revisá las alertas y el estado del foco.':
+       monitor.rules.length?'Reglas evaluadas: no se detectaron condiciones nuevas.':'No hay reglas para evaluar.');
+   }catch(error){feedback('No se pudieron evaluar las reglas: '+(error.message||error));}
  };
  $('hardwareMonitorInterval').onchange=event=>{
    try{monitor.setIntervalMs(Number(event.target.value));}
@@ -170,7 +193,8 @@ function init(){
        threshold:input===''?NaN:Number(input),
        action,armed
      });
-     feedback('Regla registrada. Solo se evaluará al iniciar el monitoreo.');
+     feedback(monitor.running?'Regla registrada. Tocá «Evaluar reglas ahora» o esperá la próxima lectura.':
+       'Regla registrada. Se evaluará en la primera lectura cuando inicies el monitoreo.');
    }catch(error){feedback('No se pudo crear la regla: '+(error.message||error));}
  };
  document.addEventListener('visibilitychange',()=>{

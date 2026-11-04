@@ -234,6 +234,7 @@ button:focus-visible,a:focus-visible{outline:3px solid #157d93;outline-offset:3p
       <button class="btn primary" type="button" id="hardwareMonitorStart">Iniciar monitoreo</button>
       <button class="btn" type="button" id="hardwareMonitorStop" disabled>Detener</button>
       <button class="btn" type="button" id="hardwareMonitorRecord">Registrar ahora</button>
+      <button class="btn" type="button" id="hardwareMonitorEvaluate" disabled>Evaluar reglas ahora</button>
     </div>
     <div class="notice section" role="status" aria-live="polite" id="hardwareMonitorStatus">Detenido · conectá la ESP32 para comenzar.</div>
     <div class="toolbar section">
@@ -256,7 +257,7 @@ button:focus-visible,a:focus-visible{outline:3px solid #157d93;outline-offset:3p
       <p id="hardwareMonitorChartSummary">Todavía no hay mediciones registradas.</p>
     </div>
     <h3 class="section">Reglas de alerta y automatización</h3>
-    <p>Las alertas no realizan acciones físicas. Si elegís un foco, se solicitará confirmación explícita. Nunca se ejecutan reglas al abrir la página, ni sin conexión BLE.</p>
+    <p>Las alertas no realizan acciones físicas. Cuando iniciás el monitoreo o tocás «Evaluar reglas ahora», se comprueba la lectura actual: si ya cumple una condición, la regla responde una vez. Las acciones sobre focos requieren autorización al crearlas y confirmación al iniciar una sesión. Nada se ejecuta al abrir la página ni sin Bluetooth.</p>
     <div class="form-grid section">
       <div class="field"><label for="hardwareRuleMetric">Medición</label><select id="hardwareRuleMetric">
         <option value="temperature">Temperatura</option><option value="pressure">Presión</option><option value="humidity">Humedad</option>
