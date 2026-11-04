@@ -16,7 +16,9 @@ Integrado sobre el firmware ESP32 BLE v5, sin modificar la placa ni el módulo d
 - Se usa **IndexedDB del navegador** para las mediciones y `localStorage` para reglas e intervalo. Las claves están aisladas por la ruta de la aplicación. No se envían datos a servidores.
 - Se conservan hasta **5.000 muestras** y hasta **14 días**; la depuración se realiza periódicamente. Exportá el CSV para archivarlas durante más tiempo.
 - Las reglas se evalúan **solamente durante una sesión de monitoreo iniciada manualmente**, con Bluetooth conectado y la página en primer plano.
-- Las acciones se disparan al cruzar el umbral, **no al cargar la página** ni cuando el valor permanece del mismo lado del umbral.
+- Las reglas se evalúan al **iniciar manualmente el monitoreo**, y también con «Evaluar reglas ahora». Si el valor ya cumple el umbral en la primera lectura, se activan **una sola vez**; no se repiten mientras la condición siga cumplida. Se reactivan al normalizarse y volver a cruzar el umbral. No se ejecutan al cargar la página.
+- Las reglas para LED requieren confirmación al crearse **y otra confirmación al comenzar cada sesión** de monitoreo; una acción física puede ocurrir inmediatamente si el umbral ya está cumplido.
+- «Registrar ahora» solo almacena mediciones; «Evaluar reglas ahora» requiere monitoreo activo y puede ejecutar reglas previamente autorizadas.
 - Las acciones de LED deshabilitadas por defecto requieren autorización al crear la regla. La respuesta del firmware debe confirmar el cambio; no se inventan confirmaciones.
 - Desconectar la ESP32, cerrar la pestaña o enviar la aplicación a segundo plano detiene el monitoreo. Una PWA web **no garantiza supervisión permanente en segundo plano**.
 - Con BMP280, que no mide humedad, el valor se almacena como ausente; no se inventa un porcentaje.
