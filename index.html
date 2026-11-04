@@ -219,6 +219,63 @@ button:focus-visible,a:focus-visible{outline:3px solid #157d93;outline-offset:3p
     </div>
     <p class="notice section" id="hardwareFeedback" role="status">Al conectarte, decí «Nexus, revisá temperatura» o «Nexus, prendé foco dos».</p>
   </div>
+
+  <div class="card section" id="hardwareMonitorPanel" aria-label="NEXUS Hardware 2.0">
+    <h2>◈ NEXUS Hardware 2.0 · Monitoreo local</h2>
+    <p>Mediciones reales guardadas en este dispositivo, gráficos históricos y reglas opcionales. Funciona sin Internet mientras esta pestaña esté abierta y la ESP32 siga conectada.</p>
+    <div class="toolbar section">
+      <label for="hardwareMonitorInterval">Frecuencia</label>
+      <select id="hardwareMonitorInterval" aria-label="Intervalo de muestreo">
+        <option value="30000">Cada 30 segundos</option>
+        <option value="60000" selected>Cada minuto</option>
+        <option value="120000">Cada 2 minutos</option>
+        <option value="300000">Cada 5 minutos</option>
+      </select>
+      <button class="btn primary" type="button" id="hardwareMonitorStart">Iniciar monitoreo</button>
+      <button class="btn" type="button" id="hardwareMonitorStop" disabled>Detener</button>
+      <button class="btn" type="button" id="hardwareMonitorRecord">Registrar ahora</button>
+    </div>
+    <div class="notice section" role="status" aria-live="polite" id="hardwareMonitorStatus">Detenido · conectá la ESP32 para comenzar.</div>
+    <div class="toolbar section">
+      <label for="hardwareMonitorMetric">Gráfico</label>
+      <select id="hardwareMonitorMetric">
+        <option value="temperature">Temperatura (°C)</option>
+        <option value="pressure">Presión (hPa)</option>
+        <option value="humidity">Humedad (%)</option>
+      </select>
+      <label for="hardwareMonitorRange">Período</label>
+      <select id="hardwareMonitorRange">
+        <option value="86400000" selected>Últimas 24 horas</option>
+        <option value="604800000">Últimos 7 días</option>
+        <option value="1209600000">Últimos 14 días</option>
+      </select>
+      <button class="btn" type="button" id="hardwareMonitorCSV">Exportar CSV</button>
+    </div>
+    <div class="notice section">
+      <svg id="hardwareMonitorChart" viewBox="0 0 640 210" width="100%" height="210" role="img" aria-label="Gráfico histórico de sensores"></svg>
+      <p id="hardwareMonitorChartSummary">Todavía no hay mediciones registradas.</p>
+    </div>
+    <h3 class="section">Reglas de alerta y automatización</h3>
+    <p>Las alertas no realizan acciones físicas. Si elegís un foco, se solicitará confirmación explícita. Nunca se ejecutan reglas al abrir la página, ni sin conexión BLE.</p>
+    <div class="form-grid section">
+      <div class="field"><label for="hardwareRuleMetric">Medición</label><select id="hardwareRuleMetric">
+        <option value="temperature">Temperatura</option><option value="pressure">Presión</option><option value="humidity">Humedad</option>
+      </select></div>
+      <div class="field"><label for="hardwareRuleComparison">Condición</label><select id="hardwareRuleComparison">
+        <option value="above">Mayor que</option><option value="below">Menor que</option>
+      </select></div>
+      <div class="field"><label for="hardwareRuleThreshold">Umbral</label><input id="hardwareRuleThreshold" type="number" step="0.1" value="30" inputmode="decimal"></div>
+      <div class="field"><label for="hardwareRuleAction">Acción</label><select id="hardwareRuleAction">
+        <option value="alert">Solo mostrar alerta</option>
+        <option value="led1_on">Encender foco 1</option><option value="led1_off">Apagar foco 1</option>
+        <option value="led2_on">Encender foco 2</option><option value="led2_off">Apagar foco 2</option>
+      </select></div>
+    </div>
+    <div class="toolbar section"><button class="btn" id="hardwareRuleAdd" type="button">Agregar regla</button></div>
+    <div id="hardwareRulesList" class="section" aria-live="polite">Sin reglas configuradas.</div>
+    <div class="notice section" id="hardwareMonitorAlerts" role="status" aria-live="polite">Sin alertas.</div>
+    <p class="footer-note">No es un sistema certificado de seguridad. El monitoreo se detiene al desconectar la ESP32 o al salir de la aplicación. Historial local limitado a 14 días y 5.000 mediciones; no usa servidores externos.</p>
+  </div>
   <div class="card section"><h2>⚙ Herramientas disponibles</h2><div class="grid two"><div><div class="task"><span>Navegación completa</span><span class="ok">✓</span></div><div class="task"><span>Inventario, fórmulas y fichas</span><span class="ok">✓</span></div><div class="task"><span>Documentos y archivos indexados</span><span class="ok">✓</span></div><div class="task"><span>Investigación local-first</span><span class="ok">✓</span></div><div class="task"><span>Búsqueda web bajo demanda</span><span class="ok">✓</span></div></div><div><div class="task"><span>QR, cámara y NEXUS LENS</span><span class="ok">✓</span></div><div class="task"><span>Calendario: crear / eliminar</span><span class="ok">✓</span></div><div class="task"><span>Repositorio y exportaciones</span><span class="ok">✓</span></div><div class="task"><span>Voz global y estado del sistema</span><span class="ok">✓</span></div><div class="task"><span>Planificación multiacción</span><span class="ok">✓</span></div></div></div></div>
 </section>
 <section id="view-qr" class="view">
@@ -390,6 +447,8 @@ button:focus-visible,a:focus-visible{outline:3px solid #157d93;outline-offset:3p
 <script src="offline/core.js" defer></script>
 <script src="offline/knowledge.js" defer></script>
 <script src="hardware/bridge.js" defer></script>
+<script src="hardware/monitor.js" defer></script>
+<script src="hardware/monitor-ui.js" defer></script>
 <script src="app.js" defer></script>
 <!-- Mascota experimental: autónoma; no cambia el núcleo NEXUS -->
 <script src="./mascot/nexus-mascot.js" defer></script>
