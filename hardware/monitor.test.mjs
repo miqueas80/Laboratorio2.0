@@ -120,3 +120,53 @@ test('stop prevents future polling or automatic actions',async()=>{
   await h.monitor.recordOnce({automation:true});
   assert.equal(h.leds.length,0);
 });
+
+
+test('regression: alert above threshold on first explicitly started sample responds once',async()=>{
+  const h=rig({initial:{temperature:31,pressure:1000,humidity:55}});
+  try{
+    h.monitor.addRule({metric:'temperature',comparison:'above',threshold:28,action:'alert'});
+    await h.monitor.start();
+    assert.equal(h.monitor.alerts.length,1,'The initial 31 °C reading must trigger a 28 °C alert');
+    assert.match(h.monitor.alerts[0].message,/temperatura.*31/);
+    h.advance(60000);
+    const duplicate=await h.monitor.recordOnce({automation:true});
+    assert.equal(duplicate.alerts.length,0,'The same sustained condition must not repeat alerts');
+  }finally{h.monitor.stop();}
+});
+
+test('regression: armed LED rule is evaluated at monitoring start, never from manual sampling',async()=>{
+  const h=rig({initial:{temperature:25,pressure:1000,humidity:25}});
+  try{
+    h.monitor.addRule({metric:'humidity',comparison:'below',threshold:40,action:'led2_on',armed:true});
+    await h.monitor.recordOnce({automation:true});
+    assert.equal(h.leds.length,0,'A read outside monitoring must not actuate');
+    await h.monitor.start();
+    assert.deepEqual(plain(h.leds),[{id:2,on:true}]);
+    assert.equal(h.monitor.alerts[0].confirmed,true);
+    h.advance(60000);
+    await h.monitor.recordOnce({automation:true});
+    assert.equal(h.leds.length,1,'No repeated LED writes for a sustained condition');
+  }finally{h.monitor.stop();}
+});
+
+test('regression: adding a rule during active monitoring evaluates the current value on next cycle',async()=>{
+  const h=rig({initial:{temperature:29,pressure:1000,humidity:55}});
+  try{
+    await h.monitor.start();
+    h.monitor.addRule({metric:'temperature',comparison:'above',threshold:27,action:'alert'});
+    h.advance(60000);
+    const sample=await h.monitor.recordOnce({automation:true});
+    assert.equal(sample.alerts.length,1);
+    assert.equal(sample.alerts[0].action,'alert');
+  }finally{h.monitor.stop();}
+});
+
+test('regression: a below threshold already breached at start also triggers an alert',async()=>{
+  const h=rig({initial:{temperature:24,pressure:945,humidity:55}});
+  try{
+    h.monitor.addRule({metric:'pressure',comparison:'below',threshold:950,action:'alert'});
+    await h.monitor.start();
+    assert.equal(h.monitor.alerts.length,1);
+  }finally{h.monitor.stop();}
+});
