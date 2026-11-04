@@ -41,6 +41,8 @@ function rejected(input){
  /(?:^|\s)(?:no (?:prendas?|enciendas?|apagues?|actives?|desactives?)|nunca (?:prendas?|apagues?))\b/.test(input);
 }
 function sensorPlan(input){
+ // Distinguish live measurements from science questions, which are not sensor commands.
+ if(/\b(?:que es|que significa|definicion|explica|explicame|como funciona|para que sirve|como se mide|como se calcula)\b/.test(input))return null;
  const found=[...new Set([...input.matchAll(/\b(temperatura|grados|humedad|presion|hectopascales)\b/g)].map(x=>SENSOR[x[1]]))];
  if(found.length!==1)return null;
  const explicit=/^(?:temperatura|humedad|presion|grados|hectopascales)(?:\s+(?:actual|del laboratorio))?$/.test(input);
