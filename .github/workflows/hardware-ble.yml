@@ -1,0 +1,26 @@
+name: NEXUS Hardware BLE tests
+on:
+  push:
+    branches: [feat/esp32-voice-v5]
+  pull_request:
+    branches: [main]
+jobs:
+  node-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - name: Verify JavaScript syntax
+        run: |
+          node --check app.js
+          node --check hardware/bridge.js
+          node --check offline/core.js
+          node --check sw.js
